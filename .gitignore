@@ -1,0 +1,101 @@
+# ==========================
+# Python
+# ==========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+*.whl
+
+# ==========================
+# Virtual Environments
+# ==========================
+.venv/
+venv/
+ENV/
+
+# ==========================
+# IDE
+# ==========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ==========================
+# Environment & Secrets
+# ==========================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ==========================
+# Docker Volumes (local data)
+# ==========================
+minio_data/
+postgres_data/
+kafka_data/
+spark_data/
+
+# ==========================
+# Airflow
+# ==========================
+logs/
+airflow.cfg
+webserver_config.py
+airflow.db
+airflow-webserver.pid
+
+# ==========================
+# dbt
+# ==========================
+dbt_project/target/
+dbt_project/dbt_packages/
+dbt_project/logs/
+dbt_project/profiles.yml
+
+# ==========================
+# Great Expectations
+# ==========================
+great_expectations/uncommitted/
+docs/gx_reports/
+
+# ==========================
+# Testing & Coverage
+# ==========================
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.cover
+
+# ==========================
+# Linting & Formatting
+# ==========================
+.ruff_cache/
+.mypy_cache/
+
+# ==========================
+# OS Files
+# ==========================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# ==========================
+# CV Files (not project code)
+# ==========================
+*.docx
