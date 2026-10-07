@@ -1,0 +1,388 @@
+# =============================================================================
+# TheLook Lakehouse Platform — Docker Compose
+# =============================================================================
+# Services:
+#   postgres          — PostgreSQL 15 (airflow_metadata + thelook_dwh)
+#   seaweedfs         — SeaweedFS S3-compatible object storage (replaces MinIO)
+#   seaweedfs-init    — One-shot: create lakehouse bucket + folder structure
+#   kafka             — Apache Kafka 3.7 in KRaft mode (no ZooKeeper!)
+#   spark-master      — Apache Spark 3.5 Master
+#   spark-worker      — Apache Spark 3.5 Worker
+#   airflow-init      — One-shot: DB migrate + admin user creation
+#   airflow-webserver — Airflow Webserver
+#   airflow-scheduler — Airflow Scheduler (LocalExecutor)
+#
+# NOTE: MinIO Community Edition was officially archived in 2025/2026.
+#       SeaweedFS is the drop-in S3-compatible replacement used here.
+#       All boto3/S3 code remains unchanged — only endpoint URL differs.
+#
+# Usage:
+#   cp .env.example .env
+#   docker compose up -d --build
+#   docker compose ps          # All should show "healthy"
+#
+# UIs:
+#   SeaweedFS Filer: http://localhost:9001  (no auth in dev mode)
+#   Airflow:         http://localhost:8080  (airflow / airflow)
+#   Spark Master:    http://localhost:8181
+# =============================================================================
+
+name: thelook_lakehouse
+
+x-airflow-common: &airflow-common
+  image: thelook/airflow:2.9.3
+  build:
+    context: ./docker/airflow
+    dockerfile: Dockerfile
+    args:
+      AIRFLOW_VERSION: "2.9.3"
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:-ZmDfcTF7_60GrrY167zsiPd67pEvs0aGOv2oasOM1Pg=}
+    AIRFLOW__CORE__SECRET_KEY: ${AIRFLOW__CORE__SECRET_KEY:-thelook_airflow_secret_key_change_in_prod}
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER:-airflow}:${AIRFLOW_DB_PASSWORD:-airflow_secret_2024}@postgres:5432/${AIRFLOW_DB_NAME:-airflow_metadata}
+    AIRFLOW__WEBSERVER__BASE_URL: http://localhost:8080
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    # S3 / SeaweedFS (S3-compatible)
+    AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+    AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    AWS_ENDPOINT_URL: http://seaweedfs:9000
+    # DWH connection
+    DWH_DB_HOST: postgres
+    DWH_DB_PORT: "5432"
+    DWH_DB_NAME: ${DWH_DB_NAME:-thelook_dwh}
+    DWH_DB_USER: ${DWH_DB_USER:-thelook_dwh}
+    DWH_DB_PASSWORD: ${DWH_DB_PASSWORD:-dwh_secret_2024}
+    # Kafka
+    KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    # Python
+    PYTHONPATH: /opt/airflow
+    PYTHONUNBUFFERED: "1"
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./src:/opt/airflow/src
+    - ./dbt_project:/opt/airflow/dbt_project
+    - airflow_logs:/opt/airflow/logs
+    - airflow_plugins:/opt/airflow/plugins
+  depends_on:
+    postgres:
+      condition: service_healthy
+    seaweedfs:
+      condition: service_healthy
+  networks:
+    - lakehouse_net
+  restart: unless-stopped
+
+
+services:
+
+  # ===========================================================================
+  # POSTGRESQL — Metadata store (Airflow) + DWH
+  # ===========================================================================
+  postgres:
+    image: postgres:15.7-alpine
+    container_name: thelook_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-thelook_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-thelook_secret_2024}
+      POSTGRES_DB: ${POSTGRES_ROOT_DB:-postgres}
+      # These are used by the init script
+      AIRFLOW_DB_NAME: ${AIRFLOW_DB_NAME:-airflow_metadata}
+      AIRFLOW_DB_USER: ${AIRFLOW_DB_USER:-airflow}
+      AIRFLOW_DB_PASSWORD: ${AIRFLOW_DB_PASSWORD:-airflow_secret_2024}
+      DWH_DB_NAME: ${DWH_DB_NAME:-thelook_dwh}
+      DWH_DB_USER: ${DWH_DB_USER:-thelook_dwh}
+      DWH_DB_PASSWORD: ${DWH_DB_PASSWORD:-dwh_secret_2024}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_postgres.sh:/docker-entrypoint-initdb.d/init_postgres.sh:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - lakehouse_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-thelook_admin} -d ${POSTGRES_ROOT_DB:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ===========================================================================
+  # SEAWEEDFS — S3-compatible object storage (replaces deprecated MinIO)
+  # Bronze / Silver / Gold lakehouse layers
+  # S3 API:   http://localhost:9000  (AWS_ACCESS_KEY_ID/SECRET work as-is)
+  # Filer UI: http://localhost:9001
+  # ===========================================================================
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: thelook_seaweedfs
+    # Run all-in-one: master + volume server + filer + S3 gateway
+    command: >
+      server
+      -dir=/data
+      -master.defaultReplication=000
+      -master.port=9333
+      -volume.port=8080
+      -filer
+      -filer.port=9001
+      -s3
+      -s3.port=9000
+      -s3.config=/config/s3.json
+      -s3.allowEmptyFolder=true
+      -s3.domainName=''
+    volumes:
+      - seaweedfs_data:/data
+      - ./docker/seaweedfs/s3.json:/config/s3.json:ro
+    ports:
+      - "9000:9000"   # S3 API  (boto3 endpoint)
+      - "9001:9001"   # Filer Web UI
+      - "9333:9333"   # Master API
+    networks:
+      - lakehouse_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:9333/cluster/status || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    restart: unless-stopped
+
+  # SeaweedFS bucket initialization — creates lakehouse bucket + folder structure
+  seaweedfs-init:
+    image: amazon/aws-cli:latest
+    container_name: thelook_seaweedfs_init
+    entrypoint: ["/bin/sh", "/scripts/init_minio.sh"]
+    environment:
+      MINIO_HOST: seaweedfs
+      MINIO_PORT: "9000"
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      LAKEHOUSE_BUCKET: ${LAKEHOUSE_BUCKET:-lakehouse}
+      # AWS CLI config for SeaweedFS S3 endpoint
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      AWS_DEFAULT_REGION: us-east-1
+    volumes:
+      - ./scripts/init_minio.sh:/scripts/init_minio.sh:ro
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    networks:
+      - lakehouse_net
+    restart: on-failure
+
+  # ===========================================================================
+  # KAFKA — KRaft mode (no ZooKeeper)
+  # ===========================================================================
+  kafka:
+    image: apache/kafka:3.7.1
+    container_name: thelook_kafka
+    environment:
+      KAFKA_NODE_ID: ${KAFKA_NODE_ID:-1}
+      KAFKA_PROCESS_ROLES: ${KAFKA_PROCESS_ROLES:-broker,controller}
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CLUSTER_ID: ${KAFKA_CLUSTER_ID:-MkU3OEVBNTcwNTJENDM2Qk}
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_NUM_PARTITIONS: ${CLICKSTREAM_PARTITIONS:-3}
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_LOG_RETENTION_MS: ${CLICKSTREAM_RETENTION_MS:-604800000}
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    ports:
+      - "9094:9094"   # External (host machine)
+    networks:
+      - lakehouse_net
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+  # Kafka topic initialization
+  kafka-init:
+    image: apache/kafka:3.7.1
+    container_name: thelook_kafka_init
+    entrypoint: ["/bin/sh", "/scripts/init_kafka.sh"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      CLICKSTREAM_TOPIC: ${CLICKSTREAM_TOPIC:-clickstream_events}
+      CLICKSTREAM_PARTITIONS: ${CLICKSTREAM_PARTITIONS:-3}
+      CLICKSTREAM_REPLICATION_FACTOR: ${CLICKSTREAM_REPLICATION_FACTOR:-1}
+      CLICKSTREAM_RETENTION_MS: ${CLICKSTREAM_RETENTION_MS:-604800000}
+    volumes:
+      - ./scripts/init_kafka.sh:/scripts/init_kafka.sh:ro
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - lakehouse_net
+    restart: on-failure
+
+  # ===========================================================================
+  # SPARK — Master + Worker
+  # ===========================================================================
+  spark-master:
+    image: thelook/spark:3.5.1
+    build:
+      context: ./docker/spark
+      dockerfile: Dockerfile
+      args:
+        SPARK_VERSION: "3.5.1"
+    container_name: thelook_spark_master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    environment:
+      SPARK_MASTER_HOST: spark-master
+      SPARK_MASTER_PORT: "7077"
+      SPARK_MASTER_WEBUI_PORT: "8181"
+      SPARK_MODE: master
+      # S3A / MinIO
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    volumes:
+      - ./src:/opt/spark-apps/src:ro
+      - spark_logs:/opt/spark/logs
+    ports:
+      - "8181:8181"   # Master Web UI
+      - "7077:7077"   # Master port (Spark protocol)
+    networks:
+      - lakehouse_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  spark-worker:
+    image: thelook/spark:3.5.1
+    build:
+      context: ./docker/spark
+      dockerfile: Dockerfile
+      args:
+        SPARK_VERSION: "3.5.1"
+    container_name: thelook_spark_worker
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    environment:
+      SPARK_WORKER_CORES: ${SPARK_WORKER_CORES:-2}
+      SPARK_WORKER_MEMORY: ${SPARK_WORKER_MEMORY:-2g}
+      SPARK_WORKER_WEBUI_PORT: "8182"
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      # S3A / MinIO
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    volumes:
+      - ./src:/opt/spark-apps/src:ro
+      - spark_logs:/opt/spark/logs
+    ports:
+      - "8182:8182"   # Worker Web UI
+    networks:
+      - lakehouse_net
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8182"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ===========================================================================
+  # AIRFLOW — Webserver + Scheduler (LocalExecutor)
+  # ===========================================================================
+  airflow-init:
+    <<: *airflow-common
+    container_name: thelook_airflow_init
+    command:
+      - bash
+      - -c
+      - |
+        airflow db migrate &&
+        airflow users create \
+          --username "${AIRFLOW_ADMIN_USER:-airflow}" \
+          --password "${AIRFLOW_ADMIN_PASSWORD:-airflow}" \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email "${AIRFLOW_ADMIN_EMAIL:-admin@thelook-lakehouse.local}" &&
+        echo 'Airflow initialized successfully'
+    restart: on-failure
+
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: thelook_airflow_webserver
+    command: airflow webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: thelook_airflow_scheduler
+    command: airflow scheduler
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname $(hostname)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  postgres_data:
+    name: thelook_postgres_data
+  seaweedfs_data:
+    name: thelook_seaweedfs_data
+  kafka_data:
+    name: thelook_kafka_data
+  airflow_logs:
+    name: thelook_airflow_logs
+  airflow_plugins:
+    name: thelook_airflow_plugins
+  spark_logs:
+    name: thelook_spark_logs
+
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  lakehouse_net:
+    name: thelook_lakehouse_net
+    driver: bridge

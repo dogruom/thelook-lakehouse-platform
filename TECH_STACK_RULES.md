@@ -1,7 +1,7 @@
 # Tech Stack Rules & Coding Standards
 
-> **Version**: 2.0  
-> **Last Updated**: 2026-10-06  
+> **Version**: 2.1  
+> **Last Updated**: 2026-10-07  
 > **Purpose**: Enforceable engineering standards for every contributor (human or agentic).
 
 ---
@@ -87,8 +87,8 @@
 ## 3. Apache Spark (PySpark) Rules
 
 ### 3.1 Deployment
-- **Image**: `bitnami/spark:3.5` (Master + 1 Worker)
-- **Jars**: `spark-sql-kafka`, `hadoop-aws`, `aws-java-sdk-bundle` (for MinIO S3A)
+- **Image**: `thelook/spark:3.5.1` (custom image based on Apache Spark, see `docker/spark/Dockerfile`)
+- **Jars**: `spark-sql-kafka`, `hadoop-aws`, `aws-java-sdk-bundle` (for SeaweedFS S3A)
 
 ### 3.2 Structured Streaming Mandates
 ```python
@@ -121,11 +121,13 @@ event_schema = StructType([
 - **No `collect()`** on large DataFrames (use `take()` or `show()` for debugging)
 - **Coalesce before write**: Reduce output file count: `.coalesce(1)` for small batches
 
-### 3.4 S3A (MinIO) Configuration
+### 3.4 S3A (SeaweedFS) Configuration
 ```python
-spark.conf.set("spark.hadoop.fs.s3a.endpoint", "http://minio:9000")
-spark.conf.set("spark.hadoop.fs.s3a.access.key", "${MINIO_ACCESS_KEY}")
-spark.conf.set("spark.hadoop.fs.s3a.secret.key", "${MINIO_SECRET_KEY}")
+# SeaweedFS is a drop-in S3-compatible replacement for MinIO.
+# All boto3/S3A code remains unchanged — only the endpoint URL differs.
+spark.conf.set("spark.hadoop.fs.s3a.endpoint", "http://seaweedfs:9000")
+spark.conf.set("spark.hadoop.fs.s3a.access.key", os.environ["AWS_ACCESS_KEY_ID"])
+spark.conf.set("spark.hadoop.fs.s3a.secret.key", os.environ["AWS_SECRET_ACCESS_KEY"])
 spark.conf.set("spark.hadoop.fs.s3a.path.style.access", "true")
 spark.conf.set("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
 ```
@@ -284,20 +286,20 @@ default_args = {
 ## 6. Docker & Infrastructure Rules
 
 ### 6.1 Container Naming
-- `thelook-postgres`
-- `thelook-minio`
-- `thelook-kafka`
-- `thelook-spark-master`
-- `thelook-spark-worker`
-- `thelook-airflow-webserver`
-- `thelook-airflow-scheduler`
+- `thelook_postgres`
+- `thelook_seaweedfs`   *(S3-compatible object storage, replaces MinIO)*
+- `thelook_kafka`
+- `thelook_spark_master`
+- `thelook_spark_worker`
+- `thelook_airflow_webserver`
+- `thelook_airflow_scheduler`
 
 ### 6.2 Network
-- Single Docker network: `thelook-network` (bridge mode)
+- Single Docker network: `thelook_lakehouse_net` (bridge mode)
 - All services communicate via container names (DNS resolution)
 
 ### 6.3 Volume Strategy
-- **Named volumes** for persistent data: `postgres_data`, `minio_data`, `kafka_data`
+- **Named volumes** for persistent data: `thelook_postgres_data`, `thelook_seaweedfs_data`, `thelook_kafka_data`
 - **Bind mounts** for code: `./dags`, `./src`, `./dbt_project`
 - **No anonymous volumes** (makes cleanup unpredictable)
 
@@ -353,7 +355,7 @@ dbt_project/dbt_packages/
 dbt_project/logs/
 *.egg-info/
 .ruff_cache/
-minio_data/
+seaweedfs_data/
 postgres_data/
 logs/
 ```

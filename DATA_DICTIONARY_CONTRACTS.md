@@ -1,7 +1,7 @@
-# Data Dictionary & Contracts
+﻿# Data Dictionary & Contracts
 
-> **Version**: 2.0  
-> **Last Updated**: 2026-10-06  
+> **Version**: 2.1  
+> **Last Updated**: 2026-10-07  
 > **Purpose**: Single source of truth for all data entities, their schemas, quality rules, and lineage.
 
 ---
@@ -15,7 +15,7 @@ graph LR
         B["Clickstream Producer<br/>(Streaming)"]
     end
 
-    subgraph Bronze["Bronze Layer (MinIO/S3)"]
+    subgraph Bronze["Bronze Layer (SeaweedFS S3 / s3a://lakehouse)"]
         C[raw_users]
         D[raw_orders]
         E[raw_order_items]
@@ -207,6 +207,8 @@ graph LR
 - Schema: original record + `_rejection_reason` + `_rejected_at`
 - Retention: 30 days
 
+> **Storage**: Bucket `lakehouse` on SeaweedFS S3-compatible API (endpoint: `http://seaweedfs:9000`).
+
 ---
 
 ## 5. Gold Layer Schemas (dbt Marts)
@@ -314,9 +316,9 @@ graph LR
 ## 6. Data Lineage Summary
 
 ```
-TheLook CSV → Bronze (MinIO) → GX Validation → Silver (stg_*) → Gold (dim_*, fct_*)
+TheLook CSV → Bronze (SeaweedFS/S3) → GX Validation → Silver (stg_*) → Gold (dim_*, fct_*)
                                                                        ↓
-Kafka Producer → Bronze (MinIO) → Spark Streaming → Silver (stg_*) → fct_clickstream_sessions
+Kafka Producer → Bronze (SeaweedFS/S3) → Spark Streaming → Silver (stg_*) → fct_clickstream_sessions
                                                                        ↓
                                                               KPI Aggregates (kpi_*)
 ```

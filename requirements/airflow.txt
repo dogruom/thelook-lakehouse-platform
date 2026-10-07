@@ -1,0 +1,13 @@
+# Airflow and providers
+# Install via: pip install -r requirements/airflow.txt
+# Or use the custom Airflow Docker image: docker/airflow/Dockerfile
+-r base.txt
+
+apache-airflow==2.9.3
+apache-airflow-providers-amazon==8.22.0
+apache-airflow-providers-apache-spark==4.9.0
+apache-airflow-providers-postgres==5.11.1
+apache-airflow-providers-common-sql==1.14.1
+
+# Airflow extras (installed via constraints)
+# celery, postgres, amazon, apache.spark
