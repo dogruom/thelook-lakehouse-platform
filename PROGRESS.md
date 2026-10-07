@@ -1,4 +1,4 @@
-﻿# Build & Implementation Progress
+# Build & Implementation Progress
 
 > **Version**: 2.2  
 > **Last Updated**: 2026-10-07  
@@ -45,7 +45,7 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 2.1 | TheLook dataset downloader (`src/ingestion/download_thelook.py`) | ⏳ Not Started | — |
+| 2.1 | TheLook dataset downloader (`src/ingestion/download_thelook.py`) | ✅ Done | Disk-aware multi-source: Kaggle API (full dataset, `daichiuchigashima/thelook-ecommerce`) → synthetic fallback. Streaming ZIP extraction, SHA-256 checksums, disk guard. **Kaggle download verified**: 135.5 MB total (inventory_items=87.7, order_items=18.0, users=15.8, orders=9.9, products=4.1). `src/utils/logging.py` (structlog) also completed. |
 | 2.2 | SeaweedFS Bronze layer uploader (`src/ingestion/load_to_bronze.py`) | ⏳ Not Started | — |
 | 2.3 | Pydantic data contracts (`src/contracts/`) | ⏳ Not Started | — |
 | 2.4 | Great Expectations expectation suites (`src/quality/`) | ⏳ Not Started | — |
@@ -117,3 +117,6 @@
 | 2026-10-07 | Sprint 1 | Airflow admin credentials confirmed: `airflow` / `airflow` | 🤖 Agent |
 | 2026-10-07 | Sprint 1 | smoke_test.py updated & executed — **15/15 checks PASSED** ✅ | 🤖 Agent |
 | 2026-10-07 | Sprint 1 | All .md documentation updated to reflect SeaweedFS + actual credentials | 🤖 Agent |
+| 2026-10-07 | Sprint 2 | `src/ingestion/download_thelook.py` — disk-aware downloader (Kaggle→synthetic), SHA-256 checksums, disk guard | 🤖 Agent |
+| 2026-10-07 | Sprint 2 | `src/utils/logging.py` — structlog setup (JSON prod / colored dev), stdlib bridge | 🤖 Agent |
+| 2026-10-07 | Sprint 2 | `docker builder prune` executed — 1.24 GB freed; disk strategy documented | 🤖 Agent |

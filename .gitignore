@@ -48,6 +48,16 @@ kafka_data/
 spark_data/
 
 # ==========================
+# TheLook Dataset (raw data)
+# ==========================
+# Generated locally via src/ingestion/download_thelook.py
+# Use --source synthetic for zero-dependency generation
+data/raw/
+data/raw/*.csv
+data/raw/*.sha256
+data/raw/download_metadata.json
+
+# ==========================
 # Airflow
 # ==========================
 logs/
