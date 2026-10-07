@@ -1,0 +1,3 @@
+# SeaweedFS S3 configuration
+# Provides S3-compatible API on port 8333 (mapped to 9000 externally)
+# No auth by default for local dev — AWS_ACCESS_KEY_ID / SECRET still work via env

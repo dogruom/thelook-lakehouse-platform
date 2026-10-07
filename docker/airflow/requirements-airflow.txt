@@ -1,0 +1,37 @@
+# Pinned requirements for Airflow Docker image
+# These are installed ON TOP of what apache/airflow:2.9.3 already has.
+# DO NOT include apache-airflow itself — it is already in the base image.
+
+# --- Core project deps ---
+pydantic==2.7.1
+pydantic-settings==2.3.4
+structlog==24.2.0
+python-dotenv==1.0.1
+tenacity==8.3.0
+click==8.1.7
+
+# --- AWS / MinIO ---
+boto3==1.34.127
+
+# --- Kafka ---
+confluent-kafka==2.4.0
+
+# --- Data ---
+pandas==2.2.2
+pyarrow==16.1.0
+
+# --- HTTP ---
+requests==2.32.3
+
+# --- Airflow Providers (pinned for stability) ---
+apache-airflow-providers-amazon==8.22.0
+apache-airflow-providers-apache-spark==4.9.0
+apache-airflow-providers-postgres==5.11.1
+apache-airflow-providers-common-sql==1.14.1
+
+# --- dbt (run via BashOperator in DAGs) ---
+dbt-core==1.8.4
+dbt-postgres==1.8.2
+
+# --- Great Expectations ---
+great-expectations==0.18.15

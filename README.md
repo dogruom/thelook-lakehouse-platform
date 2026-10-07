@@ -1,4 +1,4 @@
-# 🏗️ TheLook E-Commerce Hybrid Lakehouse Platform
+﻿# 🏗️ TheLook E-Commerce Hybrid Lakehouse Platform
 
 > **Production-grade data platform combining batch and real-time streaming pipelines under a unified Medallion Architecture.**
 
@@ -24,7 +24,7 @@ graph TB
         SPARK["PySpark<br/>Structured Streaming"]
     end
 
-    subgraph Storage["💾 Lakehouse Storage (MinIO/S3)"]
+    subgraph Storage["💾 Lakehouse Storage (SeaweedFS/S3)"]
         BRONZE["🥉 Bronze<br/>Raw, Immutable"]
         SILVER_S3["🥈 Silver<br/>Cleaned Parquet"]
     end
@@ -84,7 +84,7 @@ graph TB
 | Layer | Technology | Version |
 |-------|-----------|---------|
 | **Containerization** | Docker Compose | v2.20+ |
-| **Object Storage** | MinIO (S3-compatible) | Latest |
+| **Object Storage** | SeaweedFS (S3-compatible) | Latest |
 | **Streaming** | Apache Kafka (KRaft) | 3.7 |
 | **Stream Processing** | Apache Spark (PySpark) | 3.5+ |
 | **Transformation** | dbt-core (dbt-postgres) | 1.7+ |
@@ -125,8 +125,10 @@ docker compose ps
 | Service | URL | Credentials |
 |---------|-----|-------------|
 | **Airflow** | http://localhost:8080 | `airflow` / `airflow` |
-| **MinIO Console** | http://localhost:9001 | `minioadmin` / `minioadmin` |
+| **SeaweedFS Filer UI** | http://localhost:9001 | *(no auth in dev mode)* |
 | **Spark Master** | http://localhost:8181 | — |
+| **SeaweedFS S3 API** | http://localhost:9000 | `minioadmin` / `minioadmin123` |
+| **SeaweedFS Master** | http://localhost:9333 | — |
 
 ### 4. Run the Pipeline
 ```bash
@@ -167,7 +169,7 @@ thelook-lakehouse-platform/
 ├── src/
 │   ├── ingestion/                 # Batch data loading
 │   │   ├── download_thelook.py    # Dataset downloader
-│   │   └── load_to_bronze.py      # MinIO Bronze uploader
+│   │   └── load_to_bronze.py      # SeaweedFS/S3 Bronze uploader
 │   ├── streaming/                 # Real-time pipeline
 │   │   ├── clickstream_producer.py # Kafka event generator
 │   │   ├── spark_streaming_job.py  # PySpark Structured Streaming
@@ -180,7 +182,7 @@ thelook-lakehouse-platform/
 │   │   ├── gx_runner.py           # GX validation runner
 │   │   └── expectations/          # GX expectation suites
 │   └── utils/                     # Shared utilities
-│       ├── s3_client.py           # MinIO/S3 wrapper
+│       ├── s3_client.py           # SeaweedFS/S3 client wrapper
 │       └── logging.py            # Structured logging
 │
 ├── dags/                          # Airflow DAGs
@@ -240,7 +242,7 @@ thelook-lakehouse-platform/
 ## 🏛️ Medallion Architecture
 
 ### Bronze Layer (Raw)
-- Immutable, append-only storage on MinIO (S3-compatible)
+- Immutable, append-only storage on **SeaweedFS** (S3-compatible, drop-in MinIO replacement)
 - Technical metadata columns: `_ingested_at`, `_source_file`, `_batch_id`
 - Format: Parquet (columnar, compressed)
 - Retention: 90 days
@@ -268,7 +270,7 @@ thelook-lakehouse-platform/
 | DWH target | PostgreSQL | DuckDB, Redshift | Docker-friendly, dbt adapter maturity, SQL standard |
 | Incremental strategy | dbt `merge` | `delete+insert`, `append` | Handles late arrivals, upsert semantics, idempotent |
 | Data quality | Great Expectations | Soda, dbt tests only | Richer expectation library, HTML reports, GX ecosystem |
-| Object storage | MinIO | LocalStack S3 | Native S3 API, built-in console UI, lighter weight |
+| Object storage | **SeaweedFS** | MinIO (archived in 2025/2026) | Active community, S3-compatible, same boto3 API, lighter weight |
 | Executor | Airflow LocalExecutor | CeleryExecutor | Sufficient for our DAG count, avoids Redis overhead |
 
 ---

@@ -1,7 +1,7 @@
-# Sprint Plan & Timeline
+﻿# Sprint Plan & Timeline
 
-> **Version**: 2.0  
-> **Last Updated**: 2026-10-06  
+> **Version**: 2.1  
+> **Last Updated**: 2026-10-07  
 > **Methodology**: Modified Agile — 7-day sprints, continuous delivery  
 > **Total Estimated Duration**: ~6 weeks (42 days)  
 > **Work Mode**: Agentic Coding (Antigravity) + Manual Tasks (marked with 🧑‍💻)
@@ -82,7 +82,7 @@ docker info | Select-String "Total Memory"  # Check RAM allocation
 
 | # | Task | Effort | Owner | Description |
 |---|------|--------|-------|-------------|
-| 1.1 | `docker-compose.yml` | 3h | 🤖 Agent | PostgreSQL (2 DBs), MinIO, Kafka KRaft, Spark (master + worker), Airflow (webserver + scheduler) |
+| 1.1 | `docker-compose.yml` | 3h | 🤖 Agent | PostgreSQL (2 DBs), **SeaweedFS** (S3-compatible, replaces archived MinIO), Kafka KRaft, Spark (master + worker), Airflow (webserver + scheduler) |
 | 1.2 | `.env.example` | 0.5h | 🤖 Agent | All environment variables with safe defaults |
 | 1.3 | `requirements/base.txt` | 0.5h | 🤖 Agent | Core Python deps (pydantic, structlog, boto3, etc.) |
 | 1.4 | `requirements/dev.txt` | 0.5h | 🤖 Agent | Dev deps (pytest, ruff, sqlfluff, pre-commit) |
@@ -91,18 +91,18 @@ docker info | Select-String "Total Memory"  # Check RAM allocation
 | 1.7 | `pyproject.toml` | 0.5h | 🤖 Agent | Project metadata, ruff config, pytest config |
 | 1.8 | `docker/airflow/Dockerfile` | 1h | 🤖 Agent | Custom Airflow image with Python deps |
 | 1.9 | `docker/spark/Dockerfile` | 1h | 🤖 Agent | Custom Spark image with S3A + Kafka JARs |
-| 1.10 | `scripts/init_minio.sh` | 0.5h | 🤖 Agent | Create buckets: `lakehouse` (bronze, silver, gold prefixes) |
+| 1.10 | `scripts/init_minio.sh` | 0.5h | 🤖 Agent | Create bucket: `lakehouse` with bronze/silver/gold folder structure (uses aws-cli against SeaweedFS S3 API) |
 | 1.11 | `scripts/init_kafka.sh` | 0.5h | 🤖 Agent | Create topic: `clickstream_events` with config |
 | 1.12 | `scripts/init_postgres.sh` | 0.5h | 🤖 Agent | Create databases: `airflow_metadata`, `thelook_dwh` |
 | 1.13 | Docker health checks | 1h | 🤖 Agent | Health check for each service container |
 | 1.14 | Smoke test | 1h | 🤖 Agent | Verify all services are up and can communicate |
 | 1.15 | 🧑‍💻 First `docker compose up` | 1h | 🧑‍💻 **YOU** | Run locally, verify all services, troubleshoot resource issues |
-| 1.16 | 🧑‍💻 Verify MinIO Console | 0.5h | 🧑‍💻 **YOU** | Open `localhost:9001`, login, verify buckets |
+| 1.16 | 🧑‍💻 Verify SeaweedFS Filer UI | 0.5h | 🧑‍💻 **YOU** | Open `localhost:9001`, login, verify buckets |
 | 1.17 | 🧑‍💻 Verify Airflow UI | 0.5h | 🧑‍💻 **YOU** | Open `localhost:8080`, login, check no import errors |
 | 1.18 | 🧑‍💻 Verify Spark UI | 0.5h | 🧑‍💻 **YOU** | Open `localhost:8181`, check worker connected |
 | 1.19 | 🧑‍💻 PR: feature/docker-infrastructure | 0.5h | 🧑‍💻 **YOU** | Create PR from `feature/docker-infrastructure` → `develop`, review, merge |
 
-**Sprint 1 Deliverable**: ✅ `docker compose up` → 7 healthy containers, all UIs accessible.
+**Sprint 1 Deliverable**: ✅ `docker compose up` → 7 healthy containers, all UIs accessible. **Smoke test: 15/15 passed.**
 
 ### 🧑‍💻 YOUR Manual Tasks for Sprint 1:
 ```bash
@@ -115,9 +115,10 @@ docker compose up -d
 docker compose ps  # All services should show "healthy"
 
 # 3. Access UIs
-# MinIO Console:  http://localhost:9001 (minioadmin/minioadmin)
-# Airflow:        http://localhost:8080 (airflow/airflow)
-# Spark Master:   http://localhost:8181
+# SeaweedFS Filer UI: http://localhost:9001 (no auth in dev)
+# SeaweedFS S3 API:   http://localhost:9000 (minioadmin / minioadmin123)
+# Airflow:            http://localhost:8080 (airflow / airflow)
+# Spark Master:       http://localhost:8181
 
 # 4. Create PR and merge
 git add .
@@ -130,14 +131,14 @@ git push -u origin feature/docker-infrastructure
 
 ## Sprint 2 — Batch Ingestion & Data Quality
 **Duration**: 5–7 days (2026-10-16 → 2026-10-22)  
-**Goal**: TheLook data flows from source → Bronze (MinIO) with quality gates.
+**Goal**: TheLook data flows from source → Bronze (SeaweedFS/S3) with quality gates.
 
 | # | Task | Effort | Owner | Description |
 |---|------|--------|-------|-------------|
-| 2.1 | `src/utils/s3_client.py` | 1h | 🤖 Agent | Reusable MinIO/S3 client wrapper (boto3) |
+| 2.1 | `src/utils/s3_client.py` | 1h | 🤖 Agent | Reusable SeaweedFS/S3 client wrapper (boto3, endpoint: `http://seaweedfs:9000`) |
 | 2.2 | `src/utils/logging.py` | 0.5h | 🤖 Agent | Structured logging setup with structlog |
 | 2.3 | `src/ingestion/download_thelook.py` | 2h | 🤖 Agent | Download TheLook CSV from BigQuery public dataset or GitHub mirror, validate checksums |
-| 2.4 | `src/ingestion/load_to_bronze.py` | 2h | 🤖 Agent | Upload CSVs to MinIO Bronze with partitioning by ingestion date, add technical metadata columns |
+| 2.4 | `src/ingestion/load_to_bronze.py` | 2h | 🤖 Agent | Upload CSVs to **SeaweedFS** Bronze with partitioning by ingestion date, add technical metadata columns |
 | 2.5 | `src/contracts/batch_schemas.py` | 2h | 🤖 Agent | Pydantic v2 models for all 6 batch entities with field-level validation |
 | 2.6 | `src/contracts/validators.py` | 1h | 🤖 Agent | Validation orchestrator: validate DataFrame against contract, route failures to dead letter |
 | 2.7 | `src/quality/expectations/orders_suite.json` | 1h | 🤖 Agent | Great Expectations suite for orders |
@@ -146,11 +147,11 @@ git push -u origin feature/docker-infrastructure
 | 2.10 | `tests/unit/test_batch_schemas.py` | 1.5h | 🤖 Agent | Pydantic schema tests (valid + invalid + edge cases) |
 | 2.11 | `tests/unit/test_load_to_bronze.py` | 1.5h | 🤖 Agent | Mocked S3 upload tests |
 | 2.12 | `tests/fixtures/sample_orders.csv` | 0.5h | 🤖 Agent | Sample test data files |
-| 2.13 | 🧑‍💻 Run ingestion manually | 1h | 🧑‍💻 **YOU** | Execute scripts, verify data lands in MinIO, inspect Parquet files |
+| 2.13 | 🧑‍💻 Run ingestion manually | 1h | 🧑‍💻 **YOU** | Execute scripts, verify data lands in SeaweedFS (S3), inspect Parquet files |
 | 2.14 | 🧑‍💻 Review GX validation reports | 0.5h | 🧑‍💻 **YOU** | Open HTML reports, understand pass/fail patterns |
 | 2.15 | 🧑‍💻 PR: feature/batch-ingestion | 0.5h | 🧑‍💻 **YOU** | Create PR, review code, merge |
 
-**Sprint 2 Deliverable**: ✅ 6 TheLook tables in MinIO Bronze, validated, with test coverage.
+**Sprint 2 Deliverable**: ✅ 6 TheLook tables in SeaweedFS Bronze, validated, with test coverage.
 
 ### 🧑‍💻 YOUR Manual Tasks for Sprint 2:
 ```bash
@@ -161,7 +162,8 @@ git checkout -b feature/batch-ingestion
 docker compose exec airflow-scheduler python /opt/airflow/src/ingestion/download_thelook.py
 docker compose exec airflow-scheduler python /opt/airflow/src/ingestion/load_to_bronze.py
 
-# Verify in MinIO Console: s3://lakehouse/bronze/orders/... etc.
+# Verify in SeaweedFS: s3://lakehouse/bronze/orders/... etc.
+# (Use aws-cli: aws s3 ls s3://lakehouse/ --endpoint-url http://localhost:9000)
 # Run tests locally:
 pytest tests/unit/test_batch_schemas.py -v
 
@@ -174,23 +176,23 @@ git push -u origin feature/batch-ingestion
 
 ## Sprint 3 — Streaming Engine (Kafka + PySpark)
 **Duration**: 7–10 days (2026-10-23 → 2026-11-01)  
-**Goal**: Clickstream events flow from Producer → Kafka → Spark → MinIO Silver in real-time.
+**Goal**: Clickstream events flow from Producer → Kafka → Spark → SeaweedFS Silver in real-time.
 
 | # | Task | Effort | Owner | Description |
 |---|------|--------|-------|-------------|
 | 3.1 | `src/streaming/clickstream_producer.py` | 3h | 🤖 Agent | Realistic clickstream generator: sessions, user journeys, product interactions, late-arriving events |
 | 3.2 | `src/streaming/schemas.py` | 1h | 🤖 Agent | PySpark StructType schema matching Kafka payload |
-| 3.3 | `src/streaming/spark_streaming_job.py` | 4h | 🤖 Agent | Full Structured Streaming job: Kafka source → JSON parse → watermark → session windowing → Parquet sink to MinIO |
+| 3.3 | `src/streaming/spark_streaming_job.py` | 4h | 🤖 Agent | Full Structured Streaming job: Kafka source → JSON parse → watermark → session windowing → Parquet sink to SeaweedFS S3 |
 | 3.4 | `src/streaming/spark_config.py` | 1h | 🤖 Agent | Spark session builder with S3A + Kafka config |
 | 3.5 | `tests/unit/test_clickstream_producer.py` | 1.5h | 🤖 Agent | Producer output validation, schema conformance |
 | 3.6 | `tests/unit/test_spark_schemas.py` | 1h | 🤖 Agent | Schema parsing tests |
 | 3.7 | `tests/integration/test_kafka_roundtrip.py` | 2h | 🤖 Agent | End-to-end: produce → consume → validate (requires Docker) |
 | 3.8 | 🧑‍💻 Run producer + streaming job | 1.5h | 🧑‍💻 **YOU** | Start producer, submit Spark job, watch data flow in Spark UI |
-| 3.9 | 🧑‍💻 Verify MinIO output | 0.5h | 🧑‍💻 **YOU** | Check Parquet files in `s3://lakehouse/silver/clickstream/` |
+| 3.9 | 🧑‍💻 Verify SeaweedFS output | 0.5h | 🧑‍💻 **YOU** | Check Parquet files in `s3://lakehouse/silver/clickstream/` |
 | 3.10 | 🧑‍💻 Monitor Spark UI | 0.5h | 🧑‍💻 **YOU** | Observe batches, processing times, watermark progression |
 | 3.11 | 🧑‍💻 PR: feature/streaming-engine | 0.5h | 🧑‍💻 **YOU** | Create PR, review, merge |
 
-**Sprint 3 Deliverable**: ✅ Live streaming pipeline: Kafka → Spark → MinIO, with watermarking and checkpointing.
+**Sprint 3 Deliverable**: ✅ Live streaming pipeline: Kafka → Spark → SeaweedFS/S3, with watermarking and checkpointing.
 
 ### 🧑‍💻 YOUR Manual Tasks for Sprint 3:
 ```bash
@@ -209,7 +211,7 @@ docker compose exec spark-master spark-submit \
 
 # Observe:
 # - Spark UI: http://localhost:8181 → Running Applications
-# - MinIO Console: s3://lakehouse/silver/clickstream/ → Parquet files appearing
+# - SeaweedFS: s3://lakehouse/silver/clickstream/ → Parquet files appearing
 
 # LEARNING MOMENT 📚: Watch how watermarking works:
 # - Late events within 10min window → processed
@@ -279,7 +281,7 @@ dbt docs serve            # Open browser → lineage graph!
 | # | Task | Effort | Owner | Description |
 |---|------|--------|-------|-------------|
 | 5.1 | `dags/thelook_batch_pipeline.py` | 3h | 🤖 Agent | Full batch DAG: download → validate → load Bronze → dbt run → dbt test |
-| 5.2 | `dags/streaming_health_check.py` | 2h | 🤖 Agent | Periodic check: Kafka topic lag, Spark job status, MinIO output freshness |
+| 5.2 | `dags/streaming_health_check.py` | 2h | 🤖 Agent | Periodic check: Kafka topic lag, Spark job status, SeaweedFS/S3 output freshness |
 | 5.3 | `dags/dbt_transformation.py` | 2h | 🤖 Agent | Standalone dbt DAG: `dbt run --select tag:daily` → `dbt test` |
 | 5.4 | `src/utils/airflow_callbacks.py` | 1h | 🤖 Agent | Failure notification callbacks (log-based, extensible to Slack/email) |
 | 5.5 | `tests/unit/test_dag_integrity.py` | 1h | 🤖 Agent | DAG import test, no import errors, correct task dependencies |
@@ -384,7 +386,7 @@ These tasks **cannot** be performed by the agent and require your direct action:
 | 0 | Docker Desktop verification | Local system check |
 | 0 | GitHub branch protection setup | Requires repo admin access |
 | 1 | First `docker compose up` | Local execution + troubleshooting |
-| 1 | Verify UIs (MinIO, Airflow, Spark) | Visual verification |
+| 1 | Verify UIs (SeaweedFS, Airflow, Spark) | Visual verification |
 | 1 | PR creation & merge | Code review workflow |
 | 2 | Run ingestion scripts manually | Local execution verification |
 | 2 | Review GX reports | Understanding quality reports |

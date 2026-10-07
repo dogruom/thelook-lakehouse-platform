@@ -1,9 +1,9 @@
-# Project Charter: TheLook E-Commerce Hybrid Lakehouse Platform
+﻿# Project Charter: TheLook E-Commerce Hybrid Lakehouse Platform
 
-> **Version**: 2.0  
-> **Last Updated**: 2026-10-06  
+> **Version**: 2.1  
+> **Last Updated**: 2026-10-07  
 > **Owner**: Ömer Faruk Doğru — Senior Data / Analytics Engineer  
-> **Status**: 🟡 In Progress — Phase 0 (Foundation & Planning)
+> **Status**: 🟡 In Progress — Sprint 1 Complete ✅ | Sprint 2 Starting
 
 ---
 
@@ -32,7 +32,7 @@ This project delivers a **production-grade, end-to-end data platform** that comb
 │           │                               │                             │
 │           ▼                               ▼                             │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                    BRONZE LAYER (MinIO/S3)                       │   │
+│  │                    BRONZE LAYER (SeaweedFS S3 / s3a://lakehouse)       │   │
 │  │  • Raw, immutable, append-only                                   │   │
 │  │  • Technical metadata: _ingested_at, _source_file, _batch_id     │   │
 │  │  • Schema-on-read (Parquet for batch, Parquet for streaming)     │   │
@@ -43,7 +43,7 @@ This project delivers a **production-grade, end-to-end data platform** that comb
 │                             │                                           │
 │                             ▼                                           │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                    SILVER LAYER (MinIO/S3 + PostgreSQL)          │   │
+│  │            SILVER LAYER (SeaweedFS S3 + PostgreSQL)              │   │
 │  │  • Cleaned, deduplicated, typed, conformed                       │   │
 │  │  • Business keys resolved, nulls handled                        │   │
 │  │  • SCD Type 2 where applicable (dim_products)                   │   │
@@ -68,10 +68,10 @@ This project delivers a **production-grade, end-to-end data platform** that comb
 | Aspect | Batch Pipeline | Streaming Pipeline |
 |--------|---------------|-------------------|
 | **Source** | TheLook CSV dataset | Synthetic Kafka events |
-| **Ingestion** | Python scripts → MinIO Bronze | Kafka Producer → Topic |
+| **Ingestion** | Python scripts → SeaweedFS Bronze | Kafka Producer → Topic |
 | **Processing** | dbt models (Silver/Gold) | PySpark Structured Streaming |
 | **Latency** | Daily / Hourly | Near real-time (30s micro-batch) |
-| **Output** | PostgreSQL Star Schema | MinIO Parquet → dbt incremental merge |
+| **Output** | PostgreSQL Star Schema | SeaweedFS Parquet → dbt incremental merge |
 | **Quality Gate** | Great Expectations + dbt tests | Schema validation + Watermarking |
 
 ### 2.3 Non-Negotiable Design Principles
@@ -93,7 +93,7 @@ This project delivers a **production-grade, end-to-end data platform** that comb
 | Technology | Role | Why This Choice (Trade-offs) |
 |-----------|------|------------------------------|
 | **Docker Compose** | Local orchestration | Single-command reproducibility. Trade-off: Not K8s-grade, but sufficient for portfolio/POC. |
-| **MinIO** | S3-compatible object store | Free, local, API-identical to AWS S3. Enables lakehouse patterns without cloud costs. |
+| **MinIO → SeaweedFS** | S3-compatible object store | MinIO Community Edition was archived/deprecated in 2025/2026. SeaweedFS is the drop-in open-source replacement. Same boto3 API, same S3A config — only endpoint URL changes. |
 | **Kafka (KRaft)** | Event streaming | Zookeeper-free = simpler ops, lower resource footprint. Single broker is fine for demo-scale. |
 | **PySpark 3.5+** | Stream processing | Structured Streaming with watermarking is production-standard. Trade-off: Heavy container, but demonstrates real Spark skills. |
 | **dbt-core** | Transformation layer | Industry standard for SQL-first transformations. Incremental models + contracts = Gold standard for analytics engineering. |
@@ -108,7 +108,7 @@ This project delivers a **production-grade, end-to-end data platform** that comb
 
 | Excluded Tech | Reason |
 |--------------|--------|
-| **Delta Lake / Iceberg** | Adds JVM dependency complexity. Parquet on MinIO demonstrates the same lakehouse concepts with simpler ops. Future enhancement candidate. |
+| **Delta Lake / Iceberg** | Adds JVM dependency complexity. Parquet on SeaweedFS demonstrates the same lakehouse concepts with simpler ops. Future enhancement candidate. |
 | **Kubernetes / Helm** | Overkill for portfolio project. Docker Compose achieves the same reproducibility at lower complexity. |
 | **Celery Executor** | LocalExecutor is sufficient for our DAG count. Avoids Redis/RabbitMQ container overhead. |
 | **Superset / Metabase** | BI layer is out of scope. Gold layer is BI-ready; any tool can connect to PostgreSQL. |
@@ -170,7 +170,7 @@ This project delivers a **production-grade, end-to-end data platform** that comb
 - ML feature store / model serving
 - CDC (Change Data Capture) from a live database
 - Multi-node Kafka / Spark clusters
-- Authentication / RBAC on MinIO or Airflow (dev mode)
+- Authentication / RBAC on SeaweedFS or Airflow (dev mode)
 - Data catalog (DataHub, OpenMetadata) — future enhancement
 
 ---
