@@ -14,6 +14,19 @@
 
 ---
 
+## Current State
+
+- **Updated**: 2026-11-05 · **Branch**: `main` = `origin/main` (doc/setup consolidation pushed; see [SESSION_HANDOFF_2026-11-05.md](SESSION_HANDOFF_2026-11-05.md))
+- **Objective (last session)**: repository audit, documentation alignment with Charter v7, Claude Code setup, Git consolidation, milestone re-plan.
+- **Completed**: docs aligned (DATA_CONTRACTS v7, ENGINEERING_STANDARDS v7, DELIVERY_PLAN v7, Charter v7.1, PROGRESS v8.1); `CLAUDE.md`, `.claude/` rules/skills/settings; Git and Claude Code guides; LF enforcement for scripts; history consolidated on `main` (W1.D1.3 ✅, commit `851a88a`).
+- **Tests & results**: no automated tests exist. `pytest` cannot start (`pytest-cov` missing, `addopts` require `--cov`). `GeneratorConfig` import fails in the shared `WS-Projects/.venv` (`pydantic_settings` missing). `ruff check src scripts`: 11 findings (pre-existing). Docker stack not started this session.
+- **Decisions**: data is fully synthetic (TheLook CSVs in `data/raw/` unused); AWS primary cloud, Databricks bounded exercise; benchmarks and backfill moved to Stretch.
+- **Risks / blockers**: Day 1 evidence missing; `seaweedfs`/`aws-cli` images use `:latest`; Milestone 2 is the densest milestone (cut list in DELIVERY_PLAN §3).
+- **Next task**: Milestone 1 step 0 — project-local `.venv`, install `requirements/dev.txt`, make `pytest` run, re-run smoke test and record W1.D1.1–2 evidence, pin image versions; then align `GeneratorConfig` (M1 step 1).
+- **Next model**: Sonnet (routine setup and implementation; no architectural decision pending).
+
+---
+
 ## 📊 6-Week Macro Status
 
 ```
