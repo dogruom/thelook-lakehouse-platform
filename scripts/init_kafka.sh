@@ -1,99 +1,62 @@
 #!/bin/sh
 # =============================================================================
-# Kafka Topic Initialization Script
+# Kafka topic initialisation (idempotent)
 # =============================================================================
-# Creates required Kafka topics using kafka-topics.sh.
-# Runs via the apache/kafka Docker image (same as the broker).
+# Runs in the apache/kafka image (same as the broker) via the kafka-init compose service.
 #
-# Topics:
-#   clickstream_events   — Raw clickstream events from the producer
-#   clickstream_dlq      — Dead Letter Queue for malformed events
+# Topics (Charter v8):
+#   customer_cdc         CDC events; key = {brand_id}:{customer_id}
+#   clickstream_events   click events; key = {brand_id}:{session_id}
+# There is deliberately NO Kafka dead-letter topic: contract failures go to the Delta DLQ
+# (dead_letter.dlq_*) with a _bronze_ref, parse failures stay in Bronze.
 # =============================================================================
 
-set -e
+set -eu
 
 BOOTSTRAP="${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}"
-TOPIC="${CLICKSTREAM_TOPIC:-clickstream_events}"
-DLQ_TOPIC="${TOPIC}_dlq"
-PARTITIONS="${CLICKSTREAM_PARTITIONS:-3}"
-REPLICATION="${CLICKSTREAM_REPLICATION_FACTOR:-1}"
-RETENTION_MS="${CLICKSTREAM_RETENTION_MS:-604800000}"   # 7 days
+CDC_TOPIC="${CDC_TOPIC:-customer_cdc}"
+CLICKSTREAM_TOPIC="${CLICKSTREAM_TOPIC:-clickstream_events}"
+PARTITIONS="${TOPIC_PARTITIONS:-3}"
+RETENTION_MS="${TOPIC_RETENTION_MS:-604800000}"   # 7 days
+REPLICATION=1                                     # single local broker
 
-KAFKA_TOPICS_CMD="/opt/kafka/bin/kafka-topics.sh"
+KAFKA_TOPICS="/opt/kafka/bin/kafka-topics.sh"
 
-echo "=== Kafka Init: Connecting to ${BOOTSTRAP} ==="
+echo "=== Kafka init: connecting to ${BOOTSTRAP} ==="
 
-# Wait for Kafka to be ready
 MAX_ATTEMPTS=30
 ATTEMPT=0
-until ${KAFKA_TOPICS_CMD} --bootstrap-server "${BOOTSTRAP}" --list > /dev/null 2>&1; do
+until "${KAFKA_TOPICS}" --bootstrap-server "${BOOTSTRAP}" --list > /dev/null 2>&1; do
     ATTEMPT=$((ATTEMPT + 1))
     if [ "${ATTEMPT}" -ge "${MAX_ATTEMPTS}" ]; then
-        echo "ERROR: Kafka not reachable after ${MAX_ATTEMPTS} attempts. Aborting."
+        echo "ERROR: Kafka not reachable after ${MAX_ATTEMPTS} attempts." >&2
         exit 1
     fi
     echo "Waiting for Kafka... attempt ${ATTEMPT}/${MAX_ATTEMPTS}"
     sleep 3
 done
 
-echo "--- Connected to Kafka at ${BOOTSTRAP} ---"
-
-# ---------------------------------------------------------------------------
-# Helper function: create topic if not exists
-# ---------------------------------------------------------------------------
-create_topic_if_not_exists() {
-    TOPIC_NAME="$1"
-    NUM_PARTITIONS="$2"
-    REPL_FACTOR="$3"
-    RETENTION="$4"
-
-    if ${KAFKA_TOPICS_CMD} --bootstrap-server "${BOOTSTRAP}" --list | grep -qx "${TOPIC_NAME}"; then
-        echo "Topic '${TOPIC_NAME}' already exists — skipping."
-    else
-        ${KAFKA_TOPICS_CMD} \
-            --bootstrap-server "${BOOTSTRAP}" \
-            --create \
-            --topic "${TOPIC_NAME}" \
-            --partitions "${NUM_PARTITIONS}" \
-            --replication-factor "${REPL_FACTOR}" \
-            --config retention.ms="${RETENTION}" \
-            --config cleanup.policy=delete \
-            --config compression.type=snappy
-        echo "Topic '${TOPIC_NAME}' created (partitions=${NUM_PARTITIONS}, retention=${RETENTION}ms)."
-    fi
-}
-
-# ---------------------------------------------------------------------------
-# Create topics
-# ---------------------------------------------------------------------------
-
-# Main clickstream topic — 3 partitions for parallelism
-create_topic_if_not_exists \
-    "${TOPIC}" \
-    "${PARTITIONS}" \
-    "${REPLICATION}" \
-    "${RETENTION_MS}"
-
-# Dead Letter Queue — 1 partition (low volume)
-create_topic_if_not_exists \
-    "${DLQ_TOPIC}" \
-    "1" \
-    "${REPLICATION}" \
-    "${RETENTION_MS}"
-
-# ---------------------------------------------------------------------------
-# Display topic summary
-# ---------------------------------------------------------------------------
-echo ""
-echo "=== Kafka Init: Complete ==="
-echo "Topics:"
-${KAFKA_TOPICS_CMD} --bootstrap-server "${BOOTSTRAP}" --list | while read -r t; do
-    echo "  - ${t}"
+for TOPIC in "${CDC_TOPIC}" "${CLICKSTREAM_TOPIC}"; do
+    # --if-not-exists makes re-runs a no-op; an existing topic keeps its configuration.
+    "${KAFKA_TOPICS}" --bootstrap-server "${BOOTSTRAP}" \
+        --create --if-not-exists \
+        --topic "${TOPIC}" \
+        --partitions "${PARTITIONS}" \
+        --replication-factor "${REPLICATION}" \
+        --config retention.ms="${RETENTION_MS}" \
+        --config cleanup.policy=delete \
+        --config compression.type=snappy
 done
 
-echo ""
-echo "Topic details for '${TOPIC}':"
-${KAFKA_TOPICS_CMD} \
-    --bootstrap-server "${BOOTSTRAP}" \
-    --describe \
-    --topic "${TOPIC}"
+# Fail loudly if a topic is still missing (the create above would already have exited, this is
+# a belt-and-braces check on the broker's actual state).
+TOPICS="$("${KAFKA_TOPICS}" --bootstrap-server "${BOOTSTRAP}" --list)"
+for TOPIC in "${CDC_TOPIC}" "${CLICKSTREAM_TOPIC}"; do
+    if ! printf '%s\n' "${TOPICS}" | grep -qx "${TOPIC}"; then
+        echo "ERROR: topic '${TOPIC}' missing after init." >&2
+        exit 1
+    fi
+done
+
+echo "=== Kafka init: complete ==="
+printf '%s\n' "${TOPICS}" | sed 's/^/  - /'
