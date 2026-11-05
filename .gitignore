@@ -112,3 +112,7 @@ ehthumbs.db
 
 # Local-only archive of superseded planning notes (not part of the public repo)
 docs/_archive/
+
+# Claude Code personal settings (not shared)
+.claude/settings.local.json
+CLAUDE.local.md
