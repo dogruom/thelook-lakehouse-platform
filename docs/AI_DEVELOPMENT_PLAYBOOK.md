@@ -61,7 +61,17 @@ Claude runs the `checkpoint` skill. You check:
 - **End**: say **"oturumu kapat"** → `session-handoff` updates `Current State` (done, real test results, open issues, next task). Review the summary, approve the push.
 - After a break of days: just say "devam edelim" — Claude recaps where things stand.
 
-## 8. Anti-patterns
+## 8. Daily routine and reply format
+
+1. Morning: **"Sıradaki görevi yap"** (or "Start today's task"). Nothing else is needed.
+2. Every substantive reply follows the standard format in [CLAUDE.md](../CLAUDE.md) (🎯 İstek → 🏷 Sınıf →
+   ⚠ Not → ✅ Sonuç → 👀 Kontrol et → 🧠 Anla → ⏭ Sıradaki). Read 🎯 first: it is your prompt, normalised.
+   Read 👀 and 🧠 last: they are your part of the work.
+3. Your only fixed duties: approvals, the 👀 checks, and the checkpoint/tutor gate at day close.
+4. Interview preparation is built in: each 🧠 line and each PORTFOLIO_NOTES talking point is
+   something you should be able to say aloud without notes.
+
+## 9. Anti-patterns
 
 | Avoid | Because |
 |---|---|

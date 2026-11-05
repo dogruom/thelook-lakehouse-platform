@@ -19,6 +19,21 @@ Status: **re-planned 2026-11-05; Milestone 1 starts at W1.D1. Most components ar
   → `tutor` learning gate). **Git:** `git-workflow` skill.
 - **End of session:** `session-handoff` skill (updates `Current State`, no chat logs).
 
+## Standard reply format (every substantive reply to the owner, Turkish; trivial asks: answer only)
+Keep each line short; omit a block only when it is genuinely empty. Spend tokens on the work, not the frame.
+```
+🎯 İstek    : [W?.D?.?] <owner's prompt rewritten as: goal · constraint · expected output>
+🏷 Sınıf    : complexity / risk / mode · agents (parallel ‖ / sequential →)
+⚠ Not      : wrong assumption, scope creep or cheaper path (1–3 lines) — only if any
+✅ Sonuç    : what changed · verified how (command → result) · what is NOT verified
+👀 Kontrol et: 2–4 things the owner, as a data engineer/architect, must check or decide
+🧠 Anla     : the concept in one sentence + interview line + 2–4 CV/ATS keywords
+⏭ Sıradaki : next step · owner approval needed (image build, push, cloud spend…)
+```
+The owner may dictate loosely; the 🎯 line is where the prompt gets normalised — if it is wrong,
+the owner corrects it in one line. Remind the owner of the playbook rule they skipped (no task ID,
+new constraint unstated, approval pending) inside ⚠ instead of lecturing.
+
 ## Agents (`.claude/agents/`; workers on Sonnet or Haiku — the coordinator is the Opus main session)
 | Agent | Writes | Use when |
 |---|---|---|
