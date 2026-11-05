@@ -10,7 +10,8 @@
 
 | Date | Capability | Evidence | Competency |
 |---|---|---|---|
-| — | _none yet — first entries expected at the W1 checkpoint_ | — | — |
+| 2026-11-06 | Enforced component boundaries: import-linter contracts in CI, proven by a negative probe that breaks the contract | commit `00df04e`; PROGRESS W1.D1 Evidence | ARCH |
+| 2026-11-06 | Supply-chain-aware CI: SHA-pinned actions, read-only token, checksum-verified gitleaks full-history scan with reviewed exceptions | commit `00df04e` (CI run link pending) | DE |
 
 Competency tags: **DE** = Senior Data Engineer · **ARCH** = Data Architect.
 
