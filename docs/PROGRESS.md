@@ -1,7 +1,7 @@
 # Project Implementation & Sprint Progress Tracker
 
-> **Document Version**: 8.0  
-> **Last Updated**: 2026-10-20  
+> **Document Version**: 8.1  
+> **Last Updated**: 2026-11-05 (v8.1: Day 1 statuses corrected to match the evidence rule; milestone mapping added — see [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v7 for sequencing, this file for task acceptance criteria)  
 > **Status Conventions**: ✅ Verified | 🔄 In Progress | ⏳ Not Started | ❌ Blocked  
 > **Scope Tiers**: 🟩 Core (MVP vertical slice) | 🟦 Extended | 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)  
 > **Active Milestone**: Week 1 (Days 1–6) — Multi-Tenant Data Generator & Streaming Ingestion
@@ -36,11 +36,13 @@
 
 | Task ID | Description | Status | Deliverable Artifact | Acceptance Criteria | Verification Command |
 |---|---|---|---|---|---|
-| W1.D1.1 | Docker Compose health checks (Kafka KRaft, SeaweedFS, Spark, Postgres) | ✅ Done | `docker-compose.yml` (14KB, 7 services + 3 init containers) | All 7 services reach `healthy` status within 90s; `smoke_test.py` passes 15/15 checks | `docker compose up -d && python scripts/smoke_test.py` |
-| W1.D1.2 | Implement `src/generator/config.py` using `pydantic-settings` | ✅ Done | `src/generator/config.py` (75 lines, 25 configurable fields) | `GeneratorConfig()` instantiates with defaults; env var override `GEN_BATCH_SIZE=1000` parsed correctly; all dirty injection rates within `[0, 50]` bounds | `python -c "from src.generator.config import GeneratorConfig; c = GeneratorConfig(); print(c.model_dump())"` |
-| W1.D1.3 | Reorganize project documentation and eliminate contradictions | ✅ Done | 5 `.md` files under `docs/` (all v6.0+) | All documents reference consistent architecture; no orphan references to removed entities; version numbers aligned | Manual review — all docs cross-referenced |
+| W1.D1.1 | Docker Compose health checks (Kafka KRaft, SeaweedFS, Spark, Postgres) | 🔄 Implemented — evidence pending | `docker-compose.yml` (14KB, 7 services + 3 init containers) | All 7 services reach `healthy` status within 90s; `smoke_test.py` passes 15/15 checks | `docker compose up -d && python scripts/smoke_test.py` |
+| W1.D1.2 | Implement `src/generator/config.py` using `pydantic-settings` | 🔄 Implemented — evidence pending; not yet aligned with Charter v7 (tenant list, seed, CDC topic) | `src/generator/config.py` (75 lines, 25 configurable fields) | `GeneratorConfig()` instantiates with defaults; env var override `GEN_BATCH_SIZE=1000` parsed correctly; all dirty injection rates within `[0, 50]` bounds | `python -c "from src.generator.config import GeneratorConfig; c = GeneratorConfig(); print(c.model_dump())"` |
+| W1.D1.3 | Reorganize project documentation and eliminate contradictions | ✅ Done (2026-11-05; see Current State) | Docs moved under `docs/`; DELIVERY_PLAN, DATA_CONTRACTS, ENGINEERING_STANDARDS re-aligned to Charter v7 | All documents reference consistent architecture; no orphan references to removed entities; version numbers aligned | Manual review — all docs cross-referenced |
 
 **Evidence**: _commit `<hash>`; smoke test output `<link or pasted summary>`; host spec used (CPU / RAM / Docker allocation) — to be filled in._
+
+**Audit note (2026-11-05)**: W1.D1.1 and W1.D1.2 were previously marked ✅ without the evidence this file requires. Re-verification on 2026-11-05 found: no commit hash or smoke-test output recorded; `GeneratorConfig` import fails in the shared `WS-Projects/.venv` (`pydantic_settings` not installed — a project-local venv is required); `pytest` cannot start because `pytest-cov` is missing while `addopts` require `--cov`. Re-verification is the first task of Milestone 1.
 
 **Day 1 Retrospective**: Foundation established. Config model validated with Pydantic v2. Docker stack boots and passes the smoke test on the development machine (clean-machine verification pending). Structured logging (`src/utils/logging.py`) in place.
 

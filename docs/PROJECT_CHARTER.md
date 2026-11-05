@@ -1,7 +1,7 @@
 # Project Charter: Multi-Tenant CRM Lakehouse Platform
 
-> **Document Version**: 7.0  
-> **Last Updated**: 2026-10-20  
+> **Document Version**: 7.1  
+> **Last Updated**: 2026-11-05 (v7.1: scope tiers mapped to the three milestones of [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v7)  
 > **Author & Architect**: Ömer Faruk Doğru — Senior Data / Analytics Engineer (Berlin)  
 > **Status**: 🟡 ACTIVE — Week 1 in progress. Architecture baselined; most components are **planned, not yet implemented** (see [PROGRESS.md](PROGRESS.md)).  
 > **Target Roles**: Senior Data Engineer — Berlin (large-scale e-commerce, delivery and fintech data platforms)
@@ -29,11 +29,11 @@ All data is **fully synthetic**, produced by `src/generator/` (Faker + Pydantic 
 
 ### Scope Tiers
 
-| Tier | Content | Planned Weeks |
+| Tier | Content | Planned Milestone |
 |---|---|---|
-| **Core (MVP vertical slice)** | Generator → Kafka → Spark Structured Streaming → Bronze + DLQ → Silver (CDC MERGE, dedup, SCD2) → dbt Gold → correctness tests; Docker local stack | W1–W3 |
-| **Extended** | Benchmarks, Airflow orchestration, backfill, quality gates, GitHub Actions CI (unit + integration), Terraform (S3 + IAM) and one Spark/Delta job against AWS S3 | W4–W6 |
-| **Stretch** | Databricks Auto Loader + Asset Bundles, Great Expectations, churn feature mart | W6, only if Core + Extended are verified |
+| **Core (MVP vertical slice)** | Generator → Kafka → Spark Structured Streaming → Bronze + DLQ (M1) → Silver (CDC MERGE, dedup, SCD2) → dbt Gold incl. Customer 360 and RFM → correctness tests; Docker local stack (M2) | M1–M2 (W1–W4) |
+| **Extended** | Parametrised Airflow batch DAG (M2), GitHub Actions CI (unit job in M1, integration job in M3), quality gates and alerting, Terraform (S3 + IAM) and one Spark/Delta job against AWS S3 (M3) | M1–M3 |
+| **Stretch** | Bounded Databricks Auto Loader exercise, measured performance benchmarks, idempotent backfill, Great Expectations, churn feature mart | Only if Core + Extended are verified; otherwise documented as next-stage work |
 | **Out of scope (v1)** | Kinesis implementation (ADR comparison only), Reverse ETL / Lambda triggers, live dashboards, MWAA, Kubernetes, Flink, TCO comparisons against real vendors | — |
 
 > [!IMPORTANT]

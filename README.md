@@ -347,9 +347,10 @@ thelook-lakehouse-platform/
 - 📋 [Project Charter — scope, invariants, design](docs/PROJECT_CHARTER.md)
 - 📐 [Data Contracts & Entity Schemas](docs/DATA_CONTRACTS.md)
 - 🛠️ [Engineering Standards](docs/ENGINEERING_STANDARDS.md)
-- 📅 [6-Week Delivery Plan](docs/DELIVERY_PLAN.md)
+- 📅 [Delivery Plan — three two-week milestones](docs/DELIVERY_PLAN.md)
 - 📊 [Progress Tracker](docs/PROGRESS.md)
 - 🏛️ [ADR-0001: Local S3 Object Storage with SeaweedFS](docs/adr/0001-local-object-storage-seaweedfs.md)
+- 🧭 Developer guides: [Git quick reference](docs/GIT_CHEATSHEET.md) · [Claude Code workflow](docs/CLAUDE_CODE_CHEATSHEET.md)
 
 ---
 
