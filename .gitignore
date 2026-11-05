@@ -109,3 +109,6 @@ ehthumbs.db
 # CV Files (not project code)
 # ==========================
 *.docx
+
+# Local-only archive of superseded planning notes (not part of the public repo)
+docs/_archive/

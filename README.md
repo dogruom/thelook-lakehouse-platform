@@ -1,320 +1,362 @@
-﻿# 🏗️ TheLook E-Commerce Hybrid Lakehouse Platform
+# Multi-Tenant CRM Lakehouse Platform
 
-> **Production-grade data platform combining batch and real-time streaming pipelines under a unified Medallion Architecture.**
+[![Status](https://img.shields.io/badge/Status-Early_Development_(Week_1%2F6)-orange?style=flat)](docs/PROGRESS.md)
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose_v2-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
+[![Apache Spark](https://img.shields.io/badge/Apache_Spark-3.5.1-E25A1C?style=flat&logo=apachespark&logoColor=white)](https://spark.apache.org/)
+[![Apache Kafka](https://img.shields.io/badge/Apache_Kafka-3.7_(KRaft)-231F20?style=flat&logo=apachekafka&logoColor=white)](https://kafka.apache.org/)
+[![Delta Lake](https://img.shields.io/badge/Delta_Lake-OSS_3.2-003366?style=flat&logo=delta&logoColor=white)](https://delta.io/)
+[![dbt Core](https://img.shields.io/badge/dbt--core-1.8-FF694B?style=flat&logo=dbt&logoColor=white)](https://www.getdbt.com/)
+[![Apache Airflow](https://img.shields.io/badge/Apache_Airflow-2.9.3-017CEE?style=flat&logo=apacheairflow&logoColor=white)](https://airflow.apache.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-<!-- Badges (activate after CI setup) -->
-<!-- ![CI](https://github.com/<USERNAME>/thelook-lakehouse-platform/actions/workflows/ci.yml/badge.svg) -->
-<!-- ![Python](https://img.shields.io/badge/python-3.11+-blue.svg) -->
-<!-- ![dbt](https://img.shields.io/badge/dbt-1.7+-orange.svg) -->
-<!-- ![License](https://img.shields.io/badge/license-MIT-green.svg) -->
+> **A local-first, multi-tenant streaming lakehouse:** Kafka → Spark Structured Streaming → Delta Lake (Bronze / Silver) → dbt (Gold).  
+> Built around **correctness under failure** — duplicate delivery, out-of-order CDC, late events, schema drift, restarts and cross-tenant leakage — and around proving it with tests rather than claims.
+
+> [!IMPORTANT]
+> **Project status: early development (Week 1 of 6).** The local Docker infrastructure and generator configuration are in place; most components described below are **planned**. Every section is marked ✅ Implemented · 🔄 In progress · 📋 Planned. Live tracker: [docs/PROGRESS.md](docs/PROGRESS.md).
+
+> [!NOTE]
+> **Data**: All data is **fully synthetic**, produced by `src/generator/` (Faker + Pydantic v2). The entity model is inspired by the *TheLook* e-commerce domain (hence the repository name) and reshaped into a multi-brand CRM event model. No real company or customer data is used.
 
 ---
 
-## 📐 Architecture Overview
+## 1. What This Project Demonstrates
+
+**Scenario (synthetic):** a CRM / loyalty data platform serving several retail brands (tenants) from one shared lakehouse.
+
+The engineering questions it answers:
+
+| Question | Approach | Status |
+|---|---|---|
+| How do you turn at-least-once streams into idempotent tables? | Spark checkpoints + `foreachBatch` `MERGE` on deterministic keys; restart & replay tests | 📋 |
+| How do you apply out-of-order CDC and keep history? | Sequence-ordered merge (`_cdc_sequence`), Spark-owned SCD Type 2 | 📋 |
+| How do you prevent cross-tenant leakage in shared tables — and prove it? | `brand_id` in every key/join, deliberate key collisions, negative tests | 📋 |
+| How do you quarantine bad records without losing them? | Two-stage DLQ, reconciliation against a ground-truth manifest, controlled replay | 📋 |
+| What changes between local and cloud? | Shared logic, thin environment adapters, per-environment test reports | 📋 |
+
+---
+
+## 2. Implementation Status
+
+| Component | Status | Evidence / Location |
+|---|---|---|
+| Local stack: Kafka (KRaft), SeaweedFS, Spark, PostgreSQL, Airflow | ✅ | [docker-compose.yml](docker-compose.yml), [scripts/smoke_test.py](scripts/smoke_test.py) |
+| Generator configuration (`pydantic-settings`) | ✅ | [src/generator/config.py](src/generator/config.py) |
+| Synthetic generators (customer CDC, orders, products, clickstream) | 🔄 | Week 1 |
+| Kafka producer (keyed, idempotent) | 📋 | Week 1 |
+| Bronze ingestion (stream + batch), DLQ, replay | 📋 | Week 2 |
+| Silver: CDC MERGE, dedup, tenant-isolation tests | 📋 | Week 2 |
+| Silver SCD2 history + dbt Gold marts | 📋 | Week 3 |
+| Customer 360 / RFM marts, measured benchmarks | 📋 | Week 4 |
+| Airflow orchestration, GitHub Actions CI | 📋 | Week 5 |
+| Terraform (AWS S3 + IAM), Spark job on AWS S3 | 📋 | Week 6 |
+| Databricks Auto Loader / Asset Bundles | 📋 Stretch | Week 6 |
+
+---
+
+## 3. Target Architecture
 
 ```mermaid
-graph TB
-    subgraph Sources["📦 Data Sources"]
-        CSV["TheLook CSV<br/>(Batch)"]
-        PROD["Clickstream Producer<br/>(Real-Time)"]
+flowchart TB
+    subgraph Producers["1. Synthetic Producers (Python / Faker / Pydantic v2)"]
+        direction TB
+        GEN_CLICK["Clickstream Events<br/>(page_view, search, add_to_cart, purchase)"]
+        GEN_CDC["Customer CDC<br/>(I / U / D + _cdc_sequence)"]
+        GEN_TX["Orders, Items, Catalog<br/>(micro-batch files)"]
     end
 
-    subgraph Streaming["🔴 Streaming Pipeline"]
-        KAFKA["Apache Kafka<br/>(KRaft Mode)"]
-        SPARK["PySpark<br/>Structured Streaming"]
+    subgraph Ingestion["2. Ingestion"]
+        direction TB
+        KAFKA["Apache Kafka 3.7 (KRaft)<br/>key = brand_id + entity key"]
+        S3_RAW["Landing Zone (SeaweedFS / AWS S3)<br/>landing/{brand_id}/{entity}/{date}/"]
     end
 
-    subgraph Storage["💾 Lakehouse Storage (SeaweedFS/S3)"]
-        BRONZE["🥉 Bronze<br/>Raw, Immutable"]
-        SILVER_S3["🥈 Silver<br/>Cleaned Parquet"]
+    subgraph Processing["3. Compute (Apache Spark 3.5)"]
+        direction TB
+        SPARK_STREAM["Structured Streaming<br/>checkpoints | availableNow"]
+        SPARK_BATCH["Batch jobs"]
     end
 
-    subgraph Quality["🔍 Quality Gates"]
-        GX["Great Expectations"]
-        PYDANTIC["Pydantic v2<br/>Data Contracts"]
-        DLQ["Dead Letter Queue"]
+    subgraph Medallion["4. Medallion Storage (Delta Lake OSS 3.2)"]
+        direction TB
+        BRONZE["Bronze: append-only raw records"]
+        DLQ["DLQ: rejected records + replay metadata"]
+        SILVER["Silver (Spark): CDC MERGE | dedup | SCD2 | PII tokens"]
+        GOLD["Gold (dbt): dims, facts, obt_customer_360, agg_rfm_segments"]
     end
 
-    subgraph Transform["🔄 Transformation Layer"]
-        DBT["dbt-core<br/>(Staging → Intermediate → Marts)"]
+    subgraph Governance["5. Orchestration, Quality, IaC"]
+        direction TB
+        AIRFLOW["Airflow 2.9: parametrised DAG + task mapping"]
+        QUALITY["Pydantic contracts | Spark checks | dbt tests"]
+        TERRAFORM["Terraform: AWS S3 + IAM"]
     end
 
-    subgraph DWH["📊 Data Warehouse (PostgreSQL)"]
-        DIMS["Dimensions<br/>dim_users, dim_products"]
-        FACTS["Facts<br/>fct_orders, fct_sessions"]
-        KPIS["KPIs<br/>GMV, Abandonment, Funnel"]
-    end
+    GEN_CLICK --> KAFKA
+    GEN_CDC --> KAFKA
+    GEN_TX --> S3_RAW
 
-    subgraph Orchestration["⚙️ Orchestration"]
-        AIRFLOW["Apache Airflow<br/>(TaskFlow API)"]
-    end
+    KAFKA --> SPARK_STREAM
+    S3_RAW --> SPARK_BATCH
+    SPARK_STREAM --> BRONZE
+    SPARK_BATCH --> BRONZE
 
-    CSV -->|Python Scripts| BRONZE
-    PROD -->|JSON Events| KAFKA
-    KAFKA -->|Structured Streaming| SPARK
-    SPARK -->|Parquet + Watermark| SILVER_S3
-    BRONZE -->|Validation| GX
-    BRONZE -->|Schema Check| PYDANTIC
-    GX -->|Failed Records| DLQ
-    BRONZE --> DBT
-    SILVER_S3 --> DBT
-    DBT --> DIMS
-    DBT --> FACTS
-    DBT --> KPIS
-    AIRFLOW -.->|Orchestrates| CSV
-    AIRFLOW -.->|Monitors| SPARK
-    AIRFLOW -.->|Triggers| DBT
-    AIRFLOW -.->|Validates| GX
+    BRONZE -->|"validation gate"| DLQ
+    BRONZE -->|"MERGE / dedup"| SILVER
+    DLQ -->|"controlled replay"| SILVER
+    SILVER -->|"dbt models"| GOLD
 
-    style BRONZE fill:#CD7F32,color:#fff
-    style SILVER_S3 fill:#C0C0C0,color:#000
-    style DIMS fill:#FFD700,color:#000
-    style FACTS fill:#FFD700,color:#000
-    style KPIS fill:#FFD700,color:#000
-    style KAFKA fill:#231F20,color:#fff
-    style SPARK fill:#E25A1C,color:#fff
-    style DBT fill:#FF694B,color:#fff
-    style AIRFLOW fill:#017CEE,color:#fff
+    AIRFLOW -.->|"orchestrates"| Processing
+    AIRFLOW -.->|"dbt build"| GOLD
+    QUALITY -.->|"guards"| SILVER
+    TERRAFORM -.->|"provisions"| S3_RAW
+```
+
+Full design, invariants and scope tiers: [docs/PROJECT_CHARTER.md](docs/PROJECT_CHARTER.md).
+
+---
+
+## 4. Key Design Decisions
+
+### Delivery semantics (no blanket "exactly-once" claim)
+| Stage | Guarantee |
+|---|---|
+| Generator → Kafka | At-least-once (idempotent producer; business duplicates injected on purpose) |
+| Kafka → Bronze | Each offset committed once per checkpoint lineage (Spark checkpoint + Delta sink) |
+| Bronze → Silver | Idempotent outcome — re-running a batch yields the same state |
+| Checkpoint loss | Replay from Kafka; Silver `MERGE` absorbs re-reads (verified by test) |
+
+### Multi-tenancy
+Tenants share tables. `brand_id` is mandatory and part of every key and join. Partitioning is a performance choice, **not** a security boundary; isolation is demonstrated with tests that inject cross-tenant key collisions, including a negative test proving that a leaky join is caught.
+
+### Ownership
+Spark/Delta owns Bronze, DLQ and Silver (including SCD2 history). dbt owns Gold only and never writes Silver.
+
+### Privacy controls
+Emails are pseudonymised with **keyed HMAC-SHA256** in Silver (plain SHA-256 of low-entropy values is dictionary-reversible); phones are masked; raw PII never reaches Gold. An audited erasure procedure covers Bronze, Silver, Gold, time travel and `VACUUM`. This demonstrates privacy controls; it is **not** a legal compliance claim.
+
+---
+
+## 5. Local vs. Cloud: What Is Shared, What Differs
+
+| Layer | Local ($0) | AWS (Extended / Stretch) | What actually differs |
+|---|---|---|---|
+| Infrastructure | [docker-compose.yml](docker-compose.yml) | Terraform (`infra/terraform/`) | Provisioning model |
+| Object storage | SeaweedFS (S3-compatible API) | AWS S3 (SSE, lifecycle rules) | IAM, encryption, listing/error behaviour; endpoint config isolated in settings |
+| Streaming | Kafka 3.7 (KRaft) | Not deployed in v1 | Kinesis is compared in ADR-0002 only |
+| Compute | OSS Spark 3.5.1 standalone | Local Spark → AWS S3 (Extended); Databricks (Stretch) | Runtime versions, connectors, cluster config |
+| Table format | Delta Lake OSS 3.2 | Delta OSS / Databricks Delta | Feature availability verified per runtime |
+| File ingestion | Spark file source | Databricks Auto Loader (Stretch) | Different source implementation → separate adapter |
+| Transformation | dbt Core 1.8 (`dbt-spark`) | `dbt-databricks` (Stretch) | Adapter capabilities verified per adapter |
+
+Business logic is shared; environment specifics live in configuration and thin adapters. Results are reported **per environment**.
+
+---
+
+## 6. Medallion Layers (Planned)
+
+```
+Landing (S3) ──> Bronze (append-only) ──> Silver (CDC, dedup, SCD2) ──> Gold (dbt marts)
+                    │       ▲
+                    └─> DLQ ┘  (controlled replay)
+```
+
+### 🥉 Bronze — Append-Only Raw Records 📋
+- No `UPDATE` / `DELETE` in normal processing; the only exception is the audited privacy erasure procedure.
+- Malformed payloads are stored raw with `_parse_error` — never discarded.
+- Metadata: `_ingest_ts`, `_source_ref` (file URI or Kafka topic/partition/offset), `_batch_id`, `brand_id`.
+
+### 🥈 Silver — Conformed State & History 📋
+**Sequence-ordered CDC merge** (illustrative; column lists abbreviated):
+
+```sql
+MERGE INTO silver.customers AS t
+USING (
+  -- keep only the latest event per key in this micro-batch,
+  -- otherwise MERGE fails on multiple source matches
+  SELECT * FROM (
+    SELECT *, ROW_NUMBER() OVER (
+      PARTITION BY brand_id, customer_id ORDER BY _cdc_sequence DESC) AS rn
+    FROM cdc_batch
+  ) WHERE rn = 1
+) AS s
+ON  t.brand_id = s.brand_id
+AND t.customer_id = s.customer_id
+WHEN MATCHED AND s._cdc_sequence > t._cdc_sequence AND s._cdc_action = 'D' THEN
+  UPDATE SET t.is_deleted = true, t.email_token = NULL, t.phone_masked = NULL,
+             t._cdc_sequence = s._cdc_sequence
+WHEN MATCHED AND s._cdc_sequence > t._cdc_sequence THEN
+  UPDATE SET t.city = s.city, t.loyalty_tier = s.loyalty_tier, t.is_deleted = false,
+             t._cdc_sequence = s._cdc_sequence  -- ...
+WHEN NOT MATCHED AND s._cdc_action <> 'D' THEN
+  INSERT (brand_id, customer_id, city, loyalty_tier, _cdc_sequence /* ... */)
+  VALUES (s.brand_id, s.customer_id, s.city, s.loyalty_tier, s._cdc_sequence /* ... */);
+```
+
+- Stale events (`_cdc_sequence ≤` current) never overwrite newer state; duplicates are no-ops.
+- **SCD Type 2** history (`silver.customers_history`: `valid_from`, `valid_to`, `is_current`) is built by Spark from the CDC log — a single source of truth, no dbt snapshots.
+- Orders / clickstream are deduplicated on `(brand_id, <id>)`; orphan foreign keys are quarantined as *retryable* and re-evaluated on replay.
+
+### 🥇 Gold — dbt Marts 📋
+- Kimball `dim_*` / `fct_*` models, `obt_customer_360`, `agg_rfm_segments` (NTILE-based RFM).
+- Composite-key (`brand_id`, key) relationship tests; tenant-scoped consumption views.
+- Churn-risk feature mart: Stretch.
+
+---
+
+## 7. Data Quality & DLQ (Planned)
+
+- **Two stages**: parse failures captured at Bronze ingest; contract / integrity failures captured at the Bronze → Silver gate.
+- **Reconciliation**: per batch, `bronze = silver_accepted + dlq + duplicates_removed + late_beyond_window`, checked against the generator's ground-truth manifest of injected defects.
+- **Replay**: fixed records are re-processed with their original `event_id`; replaying twice does not duplicate Silver.
+
+```json
+{
+  "_dlq_id": "8f3b1e72-51a8-43d9-95a2-c128f73b64bc",
+  "brand_id": "brand_alpha",
+  "_bronze_ref": "bronze.raw_orders@batch=42/file=part-0003.json/row=118",
+  "_error_category": "REFERENTIAL_INTEGRITY_VIOLATION",
+  "_rejection_reason": "customer_id '9f82d1c0-...' not found in silver.customers for brand_alpha",
+  "_retryable": true,
+  "_rejected_at": "2026-10-20T02:15:30.124Z",
+  "_pipeline_run_id": "<run id>",
+  "_replay_status": "PENDING",
+  "_replay_count": 0
+}
 ```
 
 ---
 
-## 🛠️ Tech Stack
+## 8. Orchestration (Planned — Extended)
 
-| Layer | Technology | Version |
-|-------|-----------|---------|
-| **Containerization** | Docker Compose | v2.20+ |
-| **Object Storage** | SeaweedFS (S3-compatible) | Latest |
-| **Streaming** | Apache Kafka (KRaft) | 3.7 |
-| **Stream Processing** | Apache Spark (PySpark) | 3.5+ |
-| **Transformation** | dbt-core (dbt-postgres) | 1.7+ |
-| **Orchestration** | Apache Airflow | 2.8+ |
-| **Data Warehouse** | PostgreSQL | 16 |
-| **Data Quality** | Great Expectations + Pydantic v2 | Latest |
-| **CI/CD** | GitHub Actions | — |
-| **Linting** | Ruff (Python) + SQLFluff (SQL) | Latest |
-| **Testing** | pytest + dbt tests | Latest |
+- One **parametrised DAG** using dynamic task mapping over the configured tenant list (no per-tenant DAG generation).
+- Airflow triggers Spark jobs (`Trigger.availableNow` micro-batches) and `dbt build`; it does not host long-running streams — Spark owns checkpoints and stream lifecycle.
+- Deterministic, seeded backfill; webhook alerts on failure and DLQ threshold breaches.
 
 ---
 
-## 🚀 Quick Start
+## 9. Local Quickstart
 
-### Prerequisites
-- Docker Desktop (24.0+) with ≥ 8GB RAM allocated
-- Git
-- Python 3.11+ (for local development)
+### What works today ✅
 
-### 1. Clone & Configure
+**Prerequisites**
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) with Docker Compose v2
+- Python 3.11+, Git
+- Memory: running Kafka, Spark, Airflow, PostgreSQL and SeaweedFS together likely needs **≥ 8 GB RAM allocated to Docker** — *to be confirmed by a clean-machine measurement*.
+
 ```bash
-git clone https://github.com/<USERNAME>/thelook-lakehouse-platform.git
+git clone https://github.com/dogruom/thelook-lakehouse-platform.git
 cd thelook-lakehouse-platform
-
-# Copy environment template
 cp .env.example .env
-```
 
-### 2. Start All Services
-```bash
-docker compose up -d
-
-# Wait for all services to be healthy (~2-3 minutes)
+# Start the local stack
+docker compose up -d --build
 docker compose ps
+
+# Infrastructure smoke test (networking, buckets, Kafka topics, service readiness)
+python scripts/smoke_test.py
 ```
 
-### 3. Access UIs
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| **Airflow** | http://localhost:8080 | `airflow` / `airflow` |
-| **SeaweedFS Filer UI** | http://localhost:9001 | *(no auth in dev mode)* |
-| **Spark Master** | http://localhost:8181 | — |
-| **SeaweedFS S3 API** | http://localhost:9000 | `minioadmin` / `minioadmin123` |
-| **SeaweedFS Master** | http://localhost:9333 | — |
+| Service | Local URL | Default Credentials (dev only) |
+|---|---|---|
+| Apache Airflow | http://localhost:8080 | `airflow` / `airflow` |
+| Spark Master UI | http://localhost:8181 | — |
+| SeaweedFS S3 API | http://localhost:9000 | `lakehouse_admin` / `lakehouse_secret_dev` |
+| SeaweedFS Filer | http://localhost:9001 | — |
+| Kafka broker | `localhost:9094` | — |
 
-### 4. Run the Pipeline
+### Pipeline run 📋 (planned — commands become valid as components land)
+
 ```bash
-# Option A: Trigger via Airflow UI
-# Open http://localhost:8080 → Enable "thelook_batch_pipeline" → Trigger
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements/dev.txt
 
-# Option B: Run components individually
-# Batch ingestion
-docker compose exec airflow-scheduler python /opt/airflow/src/ingestion/load_to_bronze.py
+python -m src.generator.batch_runner --batches 15 --batch-size 500
+python -m src.generator.kafka_producer --events 5000
 
-# Start streaming
-docker compose exec airflow-scheduler python /opt/airflow/src/streaming/clickstream_producer.py &
-docker compose exec spark-master spark-submit /opt/spark-apps/spark_streaming_job.py
-
-# dbt transformations
-docker compose exec airflow-scheduler bash -c "cd /opt/airflow/dbt_project && dbt run && dbt test"
-```
-
-### 5. Teardown
-```bash
-docker compose down -v  # -v removes volumes (clean slate)
+cd dbt_project && dbt build
 ```
 
 ---
 
-## 📁 Project Structure
+## 10. Testing Strategy & CI (Planned)
+
+| Suite | Runs where | Scope |
+|---|---|---|
+| Unit | Offline, every PR | Generators, contracts, pure transformation functions |
+| Correctness (integration) | Docker profile, PRs to `main` | Restart/replay, CDC ordering, tenant isolation, DLQ replay, reconciliation |
+| dbt | CI | `dbt compile`; `dbt build` in integration profile |
+| Static | Every PR | `ruff check`, `ruff format --check`, `mypy` |
+
+```bash
+pytest tests/unit/ -v --cov=src --cov-report=term-missing
+ruff check src/ tests/ && ruff format --check src/ tests/
+mypy src/
+```
+
+A CI badge will be added after the first green workflow run.
+
+---
+
+## 11. Repository Layout (Target)
+
+> Most paths below are **planned**; see the status table in §2 for what exists today.
 
 ```
 thelook-lakehouse-platform/
-│
-├── 📋 PROJECT_CHARTER.md          # Architectural vision & scope
-├── 📋 TECH_STACK_RULES.md         # Engineering standards
-├── 📋 DATA_DICTIONARY_CONTRACTS.md # Schema definitions
-├── 📋 SPRINT_PLAN.md              # Sprint breakdown & timeline
-├── 📋 PROGRESS.md                 # Build tracker
-├── 📋 README.md                   # This file
-│
+├── .github/workflows/ci.yml       # CI: lint, types, unit tests, integration job, dbt compile
+├── dags/                          # Airflow: parametrised multi-tenant pipeline
+├── dbt_project/                   # dbt Core Gold models (reads Silver, writes Gold)
+│   └── models/{staging,intermediate,marts}/
+├── docker/                        # Container definitions
+├── docs/
+│   ├── PROJECT_CHARTER.md         # Scope tiers, invariants, design
+│   ├── DATA_CONTRACTS.md          # Schemas, dirty-data budgets, DLQ specs
+│   ├── ENGINEERING_STANDARDS.md   # Coding, Spark, dbt, Airflow, Git standards
+│   ├── DELIVERY_PLAN.md           # 6-week execution plan
+│   ├── PROGRESS.md                # Sprint tracker with evidence
+│   └── adr/                       # Architecture Decision Records
+├── infra/terraform/               # AWS S3 + IAM (Extended)
+├── notebooks/                     # Databricks Auto Loader (Stretch)
+├── scripts/                       # smoke_test.py, init scripts, DLQ replay, backfill
 ├── src/
-│   ├── ingestion/                 # Batch data loading
-│   │   ├── download_thelook.py    # Dataset downloader
-│   │   └── load_to_bronze.py      # SeaweedFS/S3 Bronze uploader
-│   ├── streaming/                 # Real-time pipeline
-│   │   ├── clickstream_producer.py # Kafka event generator
-│   │   ├── spark_streaming_job.py  # PySpark Structured Streaming
-│   │   ├── spark_config.py         # Spark session builder
-│   │   └── schemas.py              # PySpark schemas
-│   ├── contracts/                 # Data contracts
-│   │   ├── batch_schemas.py       # Pydantic models
-│   │   └── validators.py         # Validation orchestrator
-│   ├── quality/                   # Data quality
-│   │   ├── gx_runner.py           # GX validation runner
-│   │   └── expectations/          # GX expectation suites
-│   └── utils/                     # Shared utilities
-│       ├── s3_client.py           # SeaweedFS/S3 client wrapper
-│       └── logging.py            # Structured logging
-│
-├── dags/                          # Airflow DAGs
-│   ├── thelook_batch_pipeline.py  # Main batch DAG
-│   ├── streaming_health_check.py  # Streaming monitor
-│   └── dbt_transformation.py     # dbt run/test DAG
-│
-├── dbt_project/                   # dbt transformation layer
-│   ├── dbt_project.yml
-│   ├── profiles.yml
-│   ├── packages.yml
-│   ├── models/
-│   │   ├── staging/               # 1:1 source mirrors
-│   │   ├── intermediate/          # Business logic joins
-│   │   └── marts/
-│   │       ├── core/              # Kimball star schema
-│   │       ├── analytics/         # Streaming-derived models
-│   │       └── kpi/               # Pre-aggregated metrics
-│   ├── macros/
-│   ├── seeds/
-│   ├── snapshots/                 # SCD Type 2
-│   └── tests/
-│
-├── docker/                        # Docker configurations
-│   ├── airflow/Dockerfile
-│   ├── spark/Dockerfile
-│   └── kafka/                     # Kafka config overrides
-│
-├── tests/                         # Python tests
-│   ├── unit/                      # Fast, isolated tests
-│   ├── integration/               # Docker-dependent tests
-│   └── fixtures/                  # Sample data
-│
-├── scripts/                       # Utility scripts
-│   ├── init_minio.sh              # Bucket creation
-│   ├── init_kafka.sh              # Topic creation
-│   └── init_postgres.sh           # DB initialization
-│
-├── docs/                          # Extended documentation
-│   ├── architecture/              # ADRs, diagrams
-│   └── runbooks/                  # Operational guides
-│
-├── .github/
-│   └── workflows/
-│       └── ci.yml                 # GitHub Actions CI
-│
+│   ├── generator/                 # Synthetic multi-tenant generator + Kafka producer
+│   ├── streaming/                 # Bronze / Silver Spark jobs
+│   ├── quality/                   # Validation gate, DLQ router, reconciliation
+│   └── utils/                     # Structured logging, shared helpers
+├── tests/{unit,integration}/
 ├── docker-compose.yml
-├── pyproject.toml
-├── .env.example
-├── .gitignore
-├── .sqlfluff
-└── .pre-commit-config.yaml
+└── pyproject.toml
 ```
 
 ---
 
-## 🏛️ Medallion Architecture
+## 12. Future Work (Out of Scope for v1)
 
-### Bronze Layer (Raw)
-- Immutable, append-only storage on **SeaweedFS** (S3-compatible, drop-in MinIO replacement)
-- Technical metadata columns: `_ingested_at`, `_source_file`, `_batch_id`
-- Format: Parquet (columnar, compressed)
-- Retention: 90 days
-
-### Silver Layer (Cleaned)
-- Deduplicated, typed, validated
-- Data contracts enforced via Pydantic + Great Expectations
-- Failed records routed to dead letter queue
-- dbt staging models: `stg_*`
-
-### Gold Layer (Business)
-- **Kimball Star Schema**: `dim_users`, `dim_products`, `fct_orders`
-- **Streaming Analytics**: `fct_clickstream_sessions` (incremental)
-- **KPI Aggregates**: GMV, cart abandonment, conversion funnel
-- Materialized in PostgreSQL for BI consumption
-
----
-
-## 🏗️ Design Decisions
-
-| Decision | Choice | Alternative Considered | Why |
-|----------|--------|----------------------|-----|
-| Kafka mode | KRaft (no Zookeeper) | Zookeeper ensemble | Simpler ops, fewer containers, future Kafka standard |
-| Stream processor | Spark Structured Streaming | Kafka Streams, Flink | Mature API, watermarking, checkpoint, wide adoption |
-| DWH target | PostgreSQL | DuckDB, Redshift | Docker-friendly, dbt adapter maturity, SQL standard |
-| Incremental strategy | dbt `merge` | `delete+insert`, `append` | Handles late arrivals, upsert semantics, idempotent |
-| Data quality | Great Expectations | Soda, dbt tests only | Richer expectation library, HTML reports, GX ecosystem |
-| Object storage | **SeaweedFS** | MinIO (archived in 2025/2026) | Active community, S3-compatible, same boto3 API, lighter weight |
-| Executor | Airflow LocalExecutor | CeleryExecutor | Sufficient for our DAG count, avoids Redis overhead |
+- Kinesis adapter behind the common event envelope (compared in ADR-0002).
+- Reverse ETL / operational triggers (e.g. webhook to marketing tools).
+- BI dashboard on Gold marts.
+- Managed Airflow, Kubernetes deployment.
 
 ---
 
 ## 📚 Documentation
 
-| Document | Description |
-|----------|-------------|
-| [PROJECT_CHARTER.md](PROJECT_CHARTER.md) | Full architectural vision, scope, and success criteria |
-| [TECH_STACK_RULES.md](TECH_STACK_RULES.md) | Coding standards, anti-patterns, version requirements |
-| [DATA_DICTIONARY_CONTRACTS.md](DATA_DICTIONARY_CONTRACTS.md) | Complete schema definitions and data quality rules |
-| [SPRINT_PLAN.md](SPRINT_PLAN.md) | Sprint breakdown with effort estimates and timelines |
-| [PROGRESS.md](PROGRESS.md) | Real-time build progress tracker |
-
----
-
-## 🧪 Testing
-
-```bash
-# Python unit tests
-pytest tests/unit/ -v --cov=src --cov-report=term-missing
-
-# dbt tests
-cd dbt_project && dbt test
-
-# Linting
-ruff check src/ tests/ dags/
-sqlfluff lint dbt_project/models/
-
-# All CI checks (locally)
-pre-commit run --all-files
-```
-
----
-
-## 📄 License
-
-MIT License — See [LICENSE](LICENSE) for details.
+- 📋 [Project Charter — scope, invariants, design](docs/PROJECT_CHARTER.md)
+- 📐 [Data Contracts & Entity Schemas](docs/DATA_CONTRACTS.md)
+- 🛠️ [Engineering Standards](docs/ENGINEERING_STANDARDS.md)
+- 📅 [6-Week Delivery Plan](docs/DELIVERY_PLAN.md)
+- 📊 [Progress Tracker](docs/PROGRESS.md)
+- 🏛️ [ADR-0001: Local S3 Object Storage with SeaweedFS](docs/adr/0001-local-object-storage-seaweedfs.md)
 
 ---
 
 ## 👤 Author
 
 **Ömer Faruk Doğru**  
-Senior Data / Analytics Engineer  
-Berlin, Germany  
-[LinkedIn](https://linkedin.com/in/omer-faruk-dogru-2020d/)
+Senior Data / Analytics Engineer — Berlin, Germany  
+- **Email**: [dogruomerfaruk@outlook.com](mailto:dogruomerfaruk@outlook.com)  
+- **LinkedIn**: [linkedin.com/in/omer-faruk-dogru-2020d/](https://linkedin.com/in/omer-faruk-dogru-2020d/)  
+- **GitHub**: [github.com/dogruom](https://github.com/dogruom)
