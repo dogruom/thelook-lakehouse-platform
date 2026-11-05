@@ -9,6 +9,10 @@ Runs in the **main session** (it needs a dialogue with the owner; subagents cann
 Conversation in Turkish; technical terms stay in English. Be a demanding but fair senior colleague:
 no praise inflation, no lectures longer than needed.
 
+## 0. Read the learning log first (every invocation)
+Read `.claude/learning/LEARNING_LOG.md` before anything else: `open`/`debt` topics, tutor notes
+(e.g. "re-teach with diagrams") and the concept notes below drive what you teach and test.
+
 ## 1. Select what to test (max 5 concepts)
 Sources, in order: the day card's **Learn** row in `docs/DELIVERY_PLAN.md`, the decisions taken
 that day (ADRs, task cards), and the diff. Prefer concepts the owner must defend in an interview.
@@ -41,3 +45,9 @@ Per answer: ✅ correct · ◐ partly · ❌ missing/wrong — with one line on 
 Append to `.claude/learning/LEARNING_LOG.md` (create if missing):
 `| date | scope | topic | result (mastered/open/debt) | gap in one line | resources | re-test at |`
 Keep it short; never store personal data beyond the learning record.
+
+**Concept notes (every invocation):** for each `🧠 Anla` line given in replies since the last
+tutor run, append an expanded note under `## Concept notes` in the same file (Turkish, technical
+terms in English): date + task ID · the concept in 3–6 sentences · a concrete example from this
+repository (file/table/command) · the interview line · one common mistake · CV/ATS keywords.
+These notes are the owner's study material; the next tutor run reads and builds on them.

@@ -13,11 +13,11 @@
 
 ## Current State
 
-- **Updated**: 2026-11-06 (late) · **Branch**: `feat/w1-local-stack` (W1.D2, `f896e02`); `main` = `1f65213` (PR #1, W1.D1 merged)
+- **Updated**: 2026-11-06 (day closed) · **Branch**: `main` — W1.D1 (PR #1, `1f65213`) and W1.D2 (PR #2) merged; start W1.D3 from `main`
 - **Last delivered**: W1.D1 merged to `main` (PR #1, CI green); W1.D2.1–D2.4 ✅ — Spark 3.5.9/Py 3.11 image, hardened compose, init scripts, smoke test v2 24/24 (see D2 Evidence).
-- **Unfinished**: PR + merge `feat/w1-local-stack` → `main`; W1.D1 tutor gate **not passed** — 5 topics `open` (learning debt, owner asked for a slower re-teach with diagrams; see `.claude/learning/LEARNING_LOG.md`); W1.D2 tutor gate not run.
+- **Unfinished**: W1.D1 tutor gate **not passed** — 5 topics `open` (learning debt, owner asked for a slower re-teach with diagrams; see `.claude/learning/LEARNING_LOG.md`); W1.D2 tutor gate not run.
 - **Tests & results**: unit 48 passed; ruff/mypy clean; import-linter 2 kept; smoke test 24/24; reviewer (security) APPROVE WITH NITS. Restart verified: `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` gone; main Opus, workers Sonnet/Haiku per agent frontmatter.
-- **Owner action**: in `.env`, set `COMPOSE_PROJECT_NAME=crm_lakehouse` (old value still present; old `thelook_*` containers/volumes are untouched and stopped).
+- **Owner action**: none open (`.env` `COMPOSE_PROJECT_NAME` fixed by owner 2026-11-06; old `thelook_*` containers/volumes untouched and stopped). Tutor now reads the learning log first and appends an expanded note for every `🧠 Anla` line.
 - **Decisions to remember**: Spark 3.5.9/Delta 3.3.3/Python 3.11; HMS + dbt-spark/Thrift (spike W2.D11); **AWS Glue 5.0** (ADR-0011); **Databricks Free Edition W6.D32–D33** (ADR-0012); budget ≤ USD 50; AWS Free plan ends ≈ 2027-03-22.
 - **Risks / blockers**: IAM Identity Center unavailable (CLI access decided W5.D25.1); 7.6 GB Docker memory (core stack ≈ 0.9 GiB idle); native PostgreSQL 18 on host port 5432 (container uses 15432); `gh` CLI logged in as `dogruom`.
 - **Session 2026-11-06 close**: operating model frozen — coordinator = Opus medium (project default), workers Sonnet (`implementer`, `test-author`, `reviewer`) and Haiku (`Explore`, `evidence-auditor`); `docs/ARCHITECTURE.md` (incl. reference comparison and diagram briefs) and `docs/AI_DEVELOPMENT_PLAYBOOK.md` added; dbt package set checked (ADR-0007).
