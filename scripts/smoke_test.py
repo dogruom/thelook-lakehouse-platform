@@ -21,10 +21,10 @@ Exit codes:
     1 — One or more checks failed
 """
 
-import sys
-import urllib.request
-import urllib.error
 import subprocess
+import sys
+import urllib.error
+import urllib.request
 
 
 # ANSI colors
@@ -49,7 +49,7 @@ def warn(msg: str) -> None:
 
 
 def info(msg: str) -> None:
-    print(f"  {CYAN}ℹ️  {msg}{RESET}")
+    print(f"  {CYAN}[info] {msg}{RESET}")
 
 
 def check_http(name: str, url: str, expected_status: int = 200) -> bool:
@@ -80,6 +80,7 @@ def check_docker_health(container_name: str) -> bool:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         status = result.stdout.strip()
         if status == "healthy":
@@ -101,14 +102,18 @@ def check_kafka() -> bool:
     try:
         result = subprocess.run(
             [
-                "docker", "exec", "crm_kafka",
+                "docker",
+                "exec",
+                "crm_kafka",
                 "/opt/kafka/bin/kafka-topics.sh",
-                "--bootstrap-server", "localhost:9092",
+                "--bootstrap-server",
+                "localhost:9092",
                 "--list",
             ],
             capture_output=True,
             text=True,
             timeout=15,
+            check=False,
         )
         if result.returncode == 0:
             topics = [t for t in result.stdout.strip().split("\n") if t]
@@ -117,8 +122,10 @@ def check_kafka() -> bool:
                 return True
             else:
                 warn(f"Kafka reachable but 'clickstream_events' topic missing. Topics: {topics}")
-                info("Hint: kafka-init container may still be running or failed. "
-                     "Check: docker logs crm_kafka_init")
+                info(
+                    "Hint: kafka-init container may still be running or failed. "
+                    "Check: docker logs crm_kafka_init"
+                )
                 return True  # Kafka itself is OK; topic init is a separate concern
         else:
             fail(f"Kafka — kafka-topics.sh failed: {result.stderr.strip()}")
@@ -133,19 +140,33 @@ def check_postgres() -> bool:
     try:
         result = subprocess.run(
             [
-                "docker", "exec", "crm_postgres",
-                "psql", "-U", "crm_admin", "-d", "postgres",
-                "-c", "SELECT datname FROM pg_database WHERE datname IN ('airflow_metadata', 'crm_dwh');",
+                "docker",
+                "exec",
+                "crm_postgres",
+                "psql",
+                "-U",
+                "crm_admin",
+                "-d",
+                "postgres",
+                "-c",
+                "SELECT datname FROM pg_database WHERE datname IN ('airflow_metadata', 'crm_dwh');",
             ],
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
-        if result.returncode == 0 and "airflow_metadata" in result.stdout and "crm_dwh" in result.stdout:
+        if (
+            result.returncode == 0
+            and "airflow_metadata" in result.stdout
+            and "crm_dwh" in result.stdout
+        ):
             ok("PostgreSQL — databases: airflow_metadata ✓, crm_dwh ✓")
             return True
         else:
-            fail(f"PostgreSQL — expected databases not found.\n    stdout: {result.stdout.strip()}\n    stderr: {result.stderr.strip()}")
+            fail(
+                f"PostgreSQL — expected databases not found.\n    stdout: {result.stdout.strip()}\n    stderr: {result.stderr.strip()}"
+            )
             return False
     except Exception as e:
         fail(f"PostgreSQL — {type(e).__name__}: {e}")
@@ -160,26 +181,35 @@ def check_seaweedfs_s3() -> bool:
     try:
         result = subprocess.run(
             [
-                "docker", "run", "--rm",
-                "--network", "crm_lakehouse_net",
-                "-e", "AWS_ACCESS_KEY_ID=lakehouse_admin",
-                "-e", "AWS_SECRET_ACCESS_KEY=lakehouse_secret_dev",
-                "-e", "AWS_DEFAULT_REGION=us-east-1",
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "crm_lakehouse_net",
+                "-e",
+                "AWS_ACCESS_KEY_ID=lakehouse_admin",
+                "-e",
+                "AWS_SECRET_ACCESS_KEY=lakehouse_secret_dev",
+                "-e",
+                "AWS_DEFAULT_REGION=us-east-1",
                 "amazon/aws-cli:latest",
-                "s3", "ls",
-                "--endpoint-url", "http://seaweedfs:9000",
+                "s3",
+                "ls",
+                "--endpoint-url",
+                "http://seaweedfs:9000",
             ],
             capture_output=True,
             text=True,
             timeout=30,
+            check=False,
         )
         if result.returncode == 0:
             output = result.stdout.strip()
             if "lakehouse" in output:
-                ok(f"SeaweedFS S3 API — bucket 'lakehouse' exists ✓")
+                ok("SeaweedFS S3 API — bucket 'lakehouse' exists ✓")
                 info(f"Buckets: {output}")
             else:
-                warn(f"SeaweedFS S3 API reachable but 'lakehouse' bucket not found yet.")
+                warn("SeaweedFS S3 API reachable but 'lakehouse' bucket not found yet.")
                 info(f"Output: {output or '(empty — seaweedfs-init may not have run yet)'}")
             return True
         else:
@@ -197,15 +227,20 @@ def check_airflow_health() -> bool:
         req = urllib.request.Request("http://localhost:8080/health")
         with urllib.request.urlopen(req, timeout=10) as resp:
             import json
+
             body = json.loads(resp.read().decode())
             scheduler_status = body.get("scheduler", {}).get("status", "unknown")
             dag_processor_status = body.get("dag_processor", {}).get("status", "unknown")
 
             if scheduler_status == "healthy":
-                ok(f"Airflow Health — scheduler: {scheduler_status}, dag_processor: {dag_processor_status}")
+                ok(
+                    f"Airflow Health — scheduler: {scheduler_status}, dag_processor: {dag_processor_status}"
+                )
                 return True
             else:
-                warn(f"Airflow Health — scheduler: {scheduler_status}, dag_processor: {dag_processor_status}")
+                warn(
+                    f"Airflow Health — scheduler: {scheduler_status}, dag_processor: {dag_processor_status}"
+                )
                 return False
     except urllib.error.HTTPError as e:
         fail(f"Airflow Health — HTTP {e.code}")
@@ -227,7 +262,7 @@ def main() -> int:
     print(f"{BOLD}[1/5] Container Health Status{RESET}")
     containers = [
         "crm_postgres",
-        "crm_seaweedfs",    # SeaweedFS (replaces crm_minio)
+        "crm_seaweedfs",  # SeaweedFS (replaces crm_minio)
         "crm_kafka",
         "crm_spark_master",
         "crm_spark_worker",
@@ -243,9 +278,9 @@ def main() -> int:
     print(f"{BOLD}[2/5] Service UI & API Endpoints{RESET}")
     endpoints = [
         ("SeaweedFS Master API", "http://localhost:9333/cluster/status"),
-        ("SeaweedFS Filer UI",   "http://localhost:9001"),
-        ("Spark Master UI",      "http://localhost:8181"),
-        ("Spark Worker UI",      "http://localhost:8182"),
+        ("SeaweedFS Filer UI", "http://localhost:9001"),
+        ("Spark Master UI", "http://localhost:8181"),
+        ("Spark Worker UI", "http://localhost:8182"),
     ]
     for name, url in endpoints:
         results.append(check_http(name, url))
