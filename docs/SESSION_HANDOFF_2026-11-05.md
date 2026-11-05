@@ -29,14 +29,20 @@
 - Project: `CLAUDE.md`; agents `implementer`, `test-author`, `reviewer` (`data`/`security` focus),
   `evidence-auditor` (Sonnet), `Explore` override (Haiku); skills `work-orchestrator`,
   `checkpoint`, `tutor`, `session-handoff`, `git-workflow`; rules; guard hook.
-- Main session default in this repo: Sonnet **[V]**. User-level default elsewhere: Opus (unchanged by request).
+- Model split (2026-11-06): coordinator = main session on **Opus, medium** (project default); workers
+  `implementer`/`test-author`/`reviewer` on Sonnet, `Explore`/`evidence-auditor` on Haiku. Sonnet and
+  Haiku agent models verified from subagent transcripts **[V]**; the Opus default takes effect in the next session **[A]**.
+- Owner guides: `docs/AI_DEVELOPMENT_PLAYBOOK.md` (how to work), `docs/ARCHITECTURE.md` (architecture,
+  reference comparison, diagram briefs for image tools).
 
 ## 4. Owner actions
 1. Start a **new** Claude Code session (current one still carries an old env variable that forces
    Sonnet on Explore).
 2. Check the GitHub Actions run of `feat/w1-baseline` (no `gh` CLI here) → paste the run link or
    result; then merge via PR or let Claude fast-forward.
-3. Next session starts W1.D2 (stack rebuild — needs approval for the image build, ~2–3 GB download).
+3. Tomorrow: say **"Start today's task"** → merge after CI is green, then W1.D2 (stack rebuild —
+   approve the image build, ~2–3 GB download). Learning focus: Python driver/executor parity and
+   S3A credential providers.
 
 ## 5. Resume
 ```powershell

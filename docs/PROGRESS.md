@@ -19,8 +19,10 @@
 - **Tests & results**: unit 10 passed, coverage 100%; ruff/mypy clean; import-linter 2 kept (+ negative probe); pre-commit 10/10; full-history gitleaks clean; reviewer APPROVE WITH NITS (MAJOR fixed). Agent models verified: main Sonnet, `reviewer` Sonnet, `Explore` Haiku, no Opus.
 - **Decisions to remember**: Spark 3.5.9/Delta 3.3.3/Python 3.11; HMS + dbt-spark/Thrift (spike W2.D11); **AWS Glue 5.0** (ADR-0011); **Databricks Free Edition W6.D32–D33** (ADR-0012); budget ≤ USD 50; AWS Free plan ends ≈ 2027-03-22.
 - **Risks / blockers**: IAM Identity Center unavailable (CLI access decided W5.D25.1); Spark image rebuild ~2–3 GB (W1.D2.1, needs owner OK); 7.6 GB Docker memory; no `gh` CLI (PRs via web). Restart Claude Code once so the old `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` variable disappears from the session.
-- **Next task**: W1.D2 (stack rebuild + hardening) after D1.4 is confirmed.
-- **Next mode**: direct + review (`security` focus); Sonnet, effort medium; owner approval for the image build.
+- **Session 2026-11-06 close**: operating model frozen — coordinator = Opus medium (project default), workers Sonnet (`implementer`, `test-author`, `reviewer`) and Haiku (`Explore`, `evidence-auditor`); `docs/ARCHITECTURE.md` (incl. reference comparison and diagram briefs) and `docs/AI_DEVELOPMENT_PLAYBOOK.md` added; dbt package set checked (ADR-0007).
+- **Next task (tomorrow, "Start today's task")**: (1) owner confirms the CI run of `feat/w1-baseline` → W1.D1.4 ✅ → merge to `main`; (2) **W1.D2** — local stack rebuild and hardening (DELIVERY_PLAN §3 D2 card: files, deliverable, verify, done-when; PROGRESS W1.D2.1–D2.4).
+- **Next mode**: coordinator plans; `implementer` (Sonnet) for Dockerfile/compose/scripts, `test-author` for `bootstrap_env`/`check_env` unit tests, `reviewer` (`security`) before merge. **Owner approval needed**: Spark image build (~2–3 GB download).
+- **Learning outcome for W1.D2**: why driver and executor Python versions must match, and how S3A credential providers avoid secrets in Spark config.
 
 ---
 

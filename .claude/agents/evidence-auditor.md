@@ -1,8 +1,8 @@
 ---
 name: evidence-auditor
 description: Read-only auditor that runs a day's or week's verification commands and checks that PROGRESS.md statuses, README claims and docs match the evidence (commit hashes, command output, CI links). Use at day close, week gate and milestone review; not during implementation.
-model: sonnet
-effort: medium
+model: haiku
+effort: low
 color: yellow
 maxTurns: 30
 tools: Read, Grep, Glob, Bash
