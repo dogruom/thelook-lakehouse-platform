@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-05 (v9.0: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: Pre-M1 complete → next **W1.D1** (Python baseline and quality gates)
+> **Active**: **W1.D1** (4/4 ✅; merge + tutor gate pending) → next **W1.D2**
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,14 +13,16 @@
 
 ## Current State
 
-- **Updated**: 2026-11-05 · **Branch**: re-plan committed to `main` (see `git log -1`)
-- **Objective (this session)**: critical review, job-market check, multi-agent + tutor setup, personal preferences, secret management, six-week re-plan, start of W1.D1.
-- **Completed**: ADR-0007/0008/0009/0011/0012; DELIVERY_PLAN v8.1; PROGRESS v9; Charter v8; contracts/standards/README/CLAUDE.md aligned; `.claude/` agents (implementer, test-author, reviewer with `data`/`security` focus, evidence-auditor, `Explore` override on Haiku), skills (`checkpoint`, `tutor` new; `work-orchestrator` with scope check), rules (`secrets`, `infra`), guard hook; `docs/PORTFOLIO_NOTES.md`; personal `~/.claude/CLAUDE.md` (outside repo); Python 3.11.9 installed.
-- **Tests & results**: guard hook self-test 34/34 + live blocking; settings JSON valid; frontmatter parsed; 0 broken links. Headless runs: in repo (no `--model`) main = `claude-sonnet-5-5`, `reviewer` = Sonnet, `Explore` override = `claude-haiku-5-5` (subagent transcript), no Opus; outside the repo the personal CLAUDE.md loads and answers are Turkish (model there = user default Opus). Full-history secret scan: clean.
-- **Decisions**: Spark 3.5.9 + Delta 3.3.3 + Python 3.11; dbt-spark via Thrift + HMS; **AWS Glue 5.0** (EMR is Paid-plan only on this account); **Databricks Free Edition track W6.D32–D33**; cloud budget ≤ USD 50 (Free plan: no charges possible).
-- **Risks / blockers**: AWS Free plan ends ≈ 2027-03-22; IAM Identity Center unavailable (CLI access decided at W5.D25.1); Spark image rebuild (W1.D2.1); 7.6 GB Docker memory; `gh` CLI not installed (PRs via web).
-- **Next task**: W1.D1.1–D1.4 on branch `feat/w1-baseline`.
-- **Next mode**: direct + review (normal complexity); Sonnet, effort medium.
+- **Updated**: 2026-11-06 · **Branch**: `feat/w1-baseline` (W1.D1, commit `00df04e` + docs) pushed; `main` = `23b0cb7` (re-plan)
+- **Last delivered**: re-plan v8.1 (`23b0cb7`); W1.D1.1–D1.3 ✅ — `src/lakehouse` package, first tests, pre-commit + gitleaks, import-linter, CI workflow (see D1 Evidence).
+- **Unfinished**: W1.D1.4 ✅ (CI green); merge `feat/w1-baseline` → `main`; W1.D1 learning gate (tutor) not yet run.
+- **Tests & results**: unit 10 passed, coverage 100%; ruff/mypy clean; import-linter 2 kept (+ negative probe); pre-commit 10/10; full-history gitleaks clean; reviewer APPROVE WITH NITS (MAJOR fixed). Agent models verified: main Sonnet, `reviewer` Sonnet, `Explore` Haiku, no Opus.
+- **Decisions to remember**: Spark 3.5.9/Delta 3.3.3/Python 3.11; HMS + dbt-spark/Thrift (spike W2.D11); **AWS Glue 5.0** (ADR-0011); **Databricks Free Edition W6.D32–D33** (ADR-0012); budget ≤ USD 50; AWS Free plan ends ≈ 2027-03-22.
+- **Risks / blockers**: IAM Identity Center unavailable (CLI access decided W5.D25.1); Spark image rebuild ~2–3 GB (W1.D2.1, needs owner OK); 7.6 GB Docker memory; `gh` CLI logged in as `dogruom` (2026-11-06). Restart Claude Code once so the old `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` variable disappears from the session.
+- **Session 2026-11-06 close**: operating model frozen — coordinator = Opus medium (project default), workers Sonnet (`implementer`, `test-author`, `reviewer`) and Haiku (`Explore`, `evidence-auditor`); `docs/ARCHITECTURE.md` (incl. reference comparison and diagram briefs) and `docs/AI_DEVELOPMENT_PLAYBOOK.md` added; dbt package set checked (ADR-0007).
+- **Next task (tomorrow, "Start today's task")**: (1) W1.D1 tutor gate → PR + merge `feat/w1-baseline` → `main` (owner approval); (2) **W1.D2** — local stack rebuild and hardening (DELIVERY_PLAN §3 D2 card: files, deliverable, verify, done-when; PROGRESS W1.D2.1–D2.4).
+- **Next mode**: coordinator plans; `implementer` (Sonnet) for Dockerfile/compose/scripts, `test-author` for `bootstrap_env`/`check_env` unit tests, `reviewer` (`security`) before merge. **Owner approval needed**: Spark image build (~2–3 GB download).
+- **Learning outcome for W1.D2**: why driver and executor Python versions must match, and how S3A credential providers avoid secrets in Spark config.
 
 ---
 
@@ -47,7 +49,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 ## 📊 Macro Status (count of ✅ tasks / planned tasks)
 
 ```
-M1 (D1–D12)   [░░░░░░░░░░░░░░░░░░░░]  0 / 37
+M1 (D1–D12)   [██░░░░░░░░░░░░░░░░░░]  3 / 37
 M2 (D13–D24)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 ```
@@ -70,12 +72,12 @@ M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  
 #### D1 · Python baseline and quality gates
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
-| W1.D1.1 | Project venv + packaging | Python 3.11 venv; `pyproject` build backend `setuptools.build_meta`; `pip install -e .[dev]` succeeds | `python -c "import lakehouse, sys; print(sys.version)"` | ⏳ |
-| W1.D1.2 | Package layout + lint debt + first tests | `src/lakehouse/{common,contracts,generator}`; no `from src.` imports; ruff 0 findings; coverage gate only in CI command; tests for config + logging | `ruff check src tests scripts && mypy src && pytest tests/unit -q` | ⏳ |
-| W1.D1.3 | Pre-commit + import-linter | hooks: ruff, ruff-format, gitleaks, check-yaml, EOF; import-linter contracts per ADR-0009 | `pre-commit run --all-files && lint-imports` | ⏳ |
-| W1.D1.4 | CI job 1 | push/PR: ruff, mypy, unit tests + coverage, import-linter, gitleaks; minimal `permissions` | CI run link | ⏳ |
+| W1.D1.1 | Project venv + packaging | Python 3.11 venv; `pyproject` build backend `setuptools.build_meta`; `pip install -e .[dev]` succeeds | `python -c "import lakehouse, sys; print(sys.version)"` | ✅ |
+| W1.D1.2 | Package layout + lint debt + first tests | `src/lakehouse/{common,contracts,generator}`; no `from src.` imports; ruff 0 findings; coverage gate only in CI command; tests for config + logging | `ruff check src tests scripts && mypy src && pytest tests/unit -q` | ✅ |
+| W1.D1.3 | Pre-commit + import-linter | hooks: ruff, ruff-format, gitleaks, check-yaml, EOF; import-linter contracts per ADR-0009 | `pre-commit run --all-files && lint-imports` | ✅ |
+| W1.D1.4 | CI job 1 | push/PR: ruff, mypy, unit tests + coverage, import-linter, gitleaks; minimal `permissions` | CI run link | ✅ `14a6a20` — CI run 42113731992 success (54 s); earlier run 42111019559 success |
 
-**Evidence**: _—_
+**Evidence** (2026-11-06, commit `00df04e`, branch `feat/w1-baseline`): W1.D1.1 — `import lakehouse` → 0.1.0 on Python 3.11.9; editable install ok. W1.D1.2 — `ruff check` all passed, `ruff format --check` 18 files formatted, `mypy src` no issues in 10 files, `pytest tests/unit -q --cov=lakehouse --cov-fail-under=80` → 10 passed, coverage 100%; 0 `from src.` imports. W1.D1.3 — `pre-commit run --all-files` 10/10 hooks passed (also passed as the commit hook); `lint-imports` 2 kept, 0 broken; negative probe (`common` → `generator` import) broke the contract as expected. Secret scan: `gitleaks git` full history → no leaks (2 reviewed historical local-dev defaults in `.gitleaksignore`). Review: `reviewer` (code, security) APPROVE WITH NITS — both MAJOR items fixed (checksum-verified gitleaks, SHA-pinned actions, no persisted credentials). W1.D1.4 — pending: link of the first green CI run.
 
 #### D2 · Local stack rebuild and hardening
 | ID | Task | Acceptance | Verify | Status |

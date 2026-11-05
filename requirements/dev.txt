@@ -23,3 +23,6 @@ pre-commit==3.7.1
 
 # --- Debug ---
 ipython==8.25.0
+
+# --- Architecture boundaries (ADR-0009) ---
+import-linter==2.15

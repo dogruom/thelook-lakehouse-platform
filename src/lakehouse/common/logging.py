@@ -1,13 +1,12 @@
-"""
-Structured Logging Setup
-=========================
-src/utils/logging.py — Sprint 2.2
+"""Structured logging for every component.
 
-Configures structlog for the entire project with:
-  - JSON output in production (ENVIRONMENT != "development")
-  - Human-readable colored output in development
-  - Consistent fields: timestamp, level, logger, event
-  - stdlib logging bridge: captures 3rd-party logs (boto3, airflow, etc.)
+Configures structlog with:
+  - human-readable coloured output when ``ENVIRONMENT`` is ``development``,
+  - JSON output otherwise (``local``, ``aws``, CI) for log aggregation,
+  - consistent fields: timestamp, level, logger, event, bound context (e.g. ``brand_id``),
+  - a stdlib logging bridge so third-party logs (boto3, Airflow, ...) share the format.
+
+Never pass secrets or raw PII as log fields.
 """
 
 from __future__ import annotations
@@ -17,6 +16,7 @@ import os
 import sys
 
 import structlog
+
 
 # ---------------------------------------------------------------------------
 # Shared processors (applied to every log event regardless of renderer)
@@ -41,7 +41,7 @@ def configure_logging(
     Configure structlog and stdlib logging for the project.
 
     Call once at application startup:
-        from src.utils.logging import configure_logging
+        from lakehouse.common.logging import configure_logging
         configure_logging()
 
     Args:
@@ -52,8 +52,8 @@ def configure_logging(
     if structlog.is_configured() and not force:
         return
 
-    resolved_level = (level or os.getenv("LOG_LEVEL", "INFO")).upper()
-    resolved_env = (environment or os.getenv("ENVIRONMENT", "development")).lower()
+    resolved_level = (level or os.getenv("LOG_LEVEL") or "INFO").upper()
+    resolved_env = (environment or os.getenv("ENVIRONMENT") or "development").lower()
 
     # --- Stdlib bridge ---
     # This ensures that logs from boto3, kafka-python, etc. go through structlog
@@ -76,10 +76,11 @@ def configure_logging(
         logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
     # --- Renderer selection ---
+    renderer: structlog.types.Processor
     if resolved_env == "development":
         renderer = structlog.dev.ConsoleRenderer(colors=True)
     else:
-        # JSON in production/CI — parseable by log aggregators (Loki, Datadog, etc.)
+        # JSON everywhere else (local stack, AWS, CI) — parseable by log aggregators
         renderer = structlog.processors.JSONRenderer()
 
     structlog.configure(
@@ -111,9 +112,10 @@ def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     Get a bound structlog logger.
 
     Usage:
-        from src.utils.logging import get_logger
+        from lakehouse.common.logging import get_logger
         log = get_logger(__name__)
         log.info("event.name", key="value")
     """
     configure_logging()  # safe: no-op if already configured
-    return structlog.get_logger(name)
+    logger: structlog.stdlib.BoundLogger = structlog.stdlib.get_logger(name)
+    return logger

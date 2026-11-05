@@ -29,14 +29,15 @@ Also available in the account: `https://claude.ai/settings/usage` (Settings → 
 
 ### Model selection
 
-**This project runs on Sonnet** (verified 2026-11-05: the `sonnet` alias resolves to `claude-sonnet-5-5` on this account).
+**Model split** (2026-11-06): the main session is the **coordinator on Opus, medium effort**; worker agents run on Sonnet or Haiku. Both aliases were verified on this account (`claude-sonnet-5-5`, `claude-haiku-5-5`).
 
-| Setting (in `.claude/settings.json`) | Effect |
+| Setting (in `.claude/settings.json` / agent files) | Effect |
 |---|---|
-| `"model": "sonnet"` | Default for sessions started in this repository; overrides the user-level `"model": "opus"` in `~/.claude/settings.json` |
+| `"model": "opus"`, `"effortLevel": "medium"` | Default for sessions started in this repository |
 | `CLAUDE_CODE_SUBAGENT_MODEL=sonnet` | Default for subagents without their own `model` (e.g. built-in general-purpose) |
 | `.claude/agents/Explore.md` (`model: haiku`) | Replaces the built-in `Explore`, which otherwise runs on **Opus** on subscription accounts; cheap read-only search on Haiku |
-| Agent frontmatter `model: sonnet` | `implementer`, `test-author`, `reviewer`, `evidence-auditor` |
+| Agent frontmatter `model: sonnet` | `implementer`, `test-author`, `reviewer` |
+| Agent frontmatter `model: haiku` | `Explore`, `evidence-auditor` |
 | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1` | Agents cannot spawn agents (cost control, single coordinator) |
 
 What the model picker shows is what the **main session** uses. The project setting only decides the starting default of a new session. You change it yourself with the picker or by sending `/model opus` as a message of its own (inside a sentence it does nothing; Claude cannot switch its own model). An exported `ANTHROPIC_MODEL` or `claude --model …` also wins. Subagents keep their own model regardless of the main session (built-in `Plan` inherits the main model). Claude Code may use Haiku for tiny internal helpers (e.g. titles).

@@ -44,4 +44,8 @@ Spark 4.x / Delta 4.x is the documented upgrade path once EMR offers it as GA.
   BigQuery remain a documented gap (DELIVERY_PLAN §6).
 - The PostgreSQL `crm_dwh` database and `snapshots` schema are removed from the init script in
   W1.D2; Postgres hosts Airflow metadata and the Hive metastore only.
-- Local Delta 3.3.3 vs EMR Delta 3.3.2-amzn differences are recorded in `docs/LOCAL_VS_CLOUD.md`.
+- Local Delta 3.3.3 vs Glue 5.0 Delta 3.3.0 differences are recorded in `docs/LOCAL_VS_CLOUD.md` (ADR-0011).
+- dbt package set checked against PyPI metadata on 2026-11-06 (all support Python 3.11):
+  `dbt-core 1.12.6`, `dbt-adapters >=1.24.5,<1.25`, `dbt-spark[PyHive] 1.11.0` (thrift method),
+  `dbt-databricks 1.13.0` (W6, requires `dbt-core <1.12.7`). Delta `merge` behaviour through the
+  Thrift Server is verified in the W2.D11 spike before pinning.

@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "multitenant-crm-lakehouse"
@@ -36,6 +36,7 @@ dev = [
     "ruff>=0.4.0",
     "mypy>=1.8",
     "pre-commit>=3.6",
+    "import-linter>=2.0",
 ]
 airflow = [
     "apache-airflow>=2.9.3",
@@ -47,6 +48,10 @@ spark = [
     "pyspark>=3.5.0",
     "delta-spark>=3.1",
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["lakehouse*"]
 
 # =============================================================================
 # TOOL CONFIGURATIONS
@@ -95,7 +100,7 @@ ignore = [
 unfixable = ["ERA001"]  # never auto-remove commented code
 
 [tool.ruff.lint.isort]
-known-first-party = ["src"]
+known-first-party = ["lakehouse"]
 known-third-party = ["airflow", "pyspark", "great_expectations", "structlog"]
 force-single-line = false
 lines-after-imports = 2
@@ -133,15 +138,12 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+# Coverage gates are applied by the CI command (see .github/workflows/ci.yml), not here,
+# so integration and Spark runs are not failed by a unit-test coverage threshold.
 addopts = [
-    "-v",
     "--tb=short",
     "--strict-markers",
     "--no-header",
-    "--cov=src",
-    "--cov-report=term-missing",
-    "--cov-report=html:htmlcov",
-    "--cov-fail-under=80",
 ]
 markers = [
     "unit: Unit tests (no external dependencies)",
@@ -157,9 +159,9 @@ filterwarnings = [
 # COVERAGE
 # -----------------------------------------------------------------------------
 [tool.coverage.run]
-source = ["src"]
+source = ["lakehouse"]
 omit = [
-    "src/**/__init__.py",
+    "*/lakehouse/*/__init__.py",
     "tests/**",
 ]
 
@@ -170,3 +172,36 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
 ]
+
+# -----------------------------------------------------------------------------
+# IMPORT-LINTER — component boundaries (ADR-0009). Run: lint-imports
+# -----------------------------------------------------------------------------
+[tool.importlinter]
+root_package = "lakehouse"
+
+[[tool.importlinter.contracts]]
+name = "Shared layers (contracts, common) do not depend on components"
+type = "forbidden"
+source_modules = ["lakehouse.contracts", "lakehouse.common"]
+forbidden_modules = [
+    "lakehouse.generator",
+    "lakehouse.ingestion",
+    "lakehouse.quality",
+    "lakehouse.silver",
+    "lakehouse.ops",
+]
+
+[[tool.importlinter.contracts]]
+name = "Components are independent (silver may use quality rules)"
+type = "independence"
+modules = [
+    "lakehouse.generator",
+    "lakehouse.ingestion",
+    "lakehouse.quality",
+    "lakehouse.silver",
+    "lakehouse.ops",
+]
+ignore_imports = ["lakehouse.silver.** -> lakehouse.quality.**"]
+# The allowed silver -> quality import does not exist yet (W3.D17): warn (exit 0) instead of
+# failing. When it exists, remove this line and narrow the ignore to lakehouse.quality.rules.
+unmatched_ignore_imports_alerting = "warn"

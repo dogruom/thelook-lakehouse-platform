@@ -6,6 +6,9 @@ AWS Glue on AWS; bounded Databricks Free Edition track. Owner: Ömer Faruk Doğr
 Status: **re-planned 2026-11-05; Milestone 1 starts at W1.D1. Most components are planned.**
 
 ## Session protocol
+- **"Start today's task" / "Bugünün görevine başla":** read `Current State` and the named next
+  task's day card, give a 5-line Turkish brief (goal, deliverable, acceptance, learning outcome,
+  owner approvals needed), then start — do not reopen settled decisions.
 - **Start:** read only the `Current State` block of [docs/PROGRESS.md](docs/PROGRESS.md) and the active
   day card in [docs/DELIVERY_PLAN.md](docs/DELIVERY_PLAN.md); run `git status --short --branch`.
   Open other docs only when the task needs them. After a break, open with a 5-line recap from
@@ -16,20 +19,38 @@ Status: **re-planned 2026-11-05; Milestone 1 starts at W1.D1. Most components ar
   → `tutor` learning gate). **Git:** `git-workflow` skill.
 - **End of session:** `session-handoff` skill (updates `Current State`, no chat logs).
 
-## Agents (`.claude/agents/`; Sonnet, except the `Explore` override on Haiku; never Opus)
+## Standard reply format (every substantive reply to the owner, Turkish; trivial asks: answer only)
+Keep each line short; omit a block only when it is genuinely empty. Spend tokens on the work, not the frame.
+```
+🎯 İstek    : [W?.D?.?] <owner's prompt rewritten as: goal · constraint · expected output>
+🏷 Sınıf    : complexity / risk / mode · agents (parallel ‖ / sequential →)
+⚠ Not      : wrong assumption, scope creep or cheaper path (1–3 lines) — only if any
+✅ Sonuç    : what changed · verified how (command → result) · what is NOT verified
+👀 Kontrol et: 2–4 things the owner, as a data engineer/architect, must check or decide
+🧠 Anla     : the concept in one sentence + interview line + 2–4 CV/ATS keywords
+⏭ Sıradaki : next step · owner approval needed (image build, push, cloud spend…)
+```
+The owner may dictate loosely; the 🎯 line is where the prompt gets normalised — if it is wrong,
+the owner corrects it in one line. Remind the owner of the playbook rule they skipped (no task ID,
+new constraint unstated, approval pending) inside ⚠ instead of lecturing.
+
+## Agents (`.claude/agents/`; workers on Sonnet or Haiku — the coordinator is the Opus main session)
 | Agent | Writes | Use when |
 |---|---|---|
 | `implementer` | assigned production files | complex/multi-file implementation from a task card |
 | `test-author` | `tests/**`, dbt tests | in parallel with implementer; 🔺 correctness suites |
 | `reviewer` | nothing (read-only) | design review before / code review after complex, data-correctness, IAM, security work |
-| `evidence-auditor` | nothing (read-only) | day close with 🔺 claims, week gate, milestone review |
+| `evidence-auditor` (Haiku) | nothing (read-only) | day close with 🔺 claims, week gate, milestone review |
 | `Explore` (Haiku) | nothing | wide read-only searches only |
 The main session is the coordinator; it owns docs, PROGRESS and acceptance. Trivial and normal
 tasks need no agents. Subagents cannot spawn subagents. The `tutor` is a skill (it needs a dialogue).
 
 ## Model policy
-Main session: Sonnet (project default). Hard task → raise effort (`/effort high|xhigh`), split it, or
-add a design review. Opus only when the owner switches the session model for a named task.
+Main session = coordinator on **Opus, medium effort** (project default): checks every prompt,
+plans, sequences, chooses parallelism, reviews. It delegates implementation/tests/SQL/dbt/docs
+drafting to Sonnet agents and search/evidence checks to Haiku agents; it writes only trivial edits
+itself. `high` effort only for architecture checkpoints, hard debugging, material risk reviews.
+Details: `work-orchestrator` §Model split; owner guide: [docs/AI_DEVELOPMENT_PLAYBOOK.md](docs/AI_DEVELOPMENT_PLAYBOOK.md).
 Personal communication preferences live in `~/.claude/CLAUDE.md`; this file holds project rules only.
 
 ## Source-of-truth order (when documents disagree)

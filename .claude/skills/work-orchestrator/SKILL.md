@@ -7,8 +7,14 @@ description: Coordinator playbook for any non-trivial task in this repository - 
 
 The main session coordinates: it talks to the owner, decomposes work, assigns files, merges
 results, updates docs/PROGRESS and decides acceptance. Agents never talk to each other; the
-coordinator passes their outputs on. Project agents run on **Sonnet**; the project `Explore`
-override runs on **Haiku** (cheap read-only search). No agent uses Opus.
+coordinator passes their outputs on.
+
+**Model split** — coordinator = main session (**Opus**, medium effort, project default): evaluates
+every prompt, plans, sequences, decides parallelism, reviews results. Workers use the cheapest
+model that does the job: `implementer`, `test-author`, `reviewer` → **Sonnet**; `Explore`,
+`evidence-auditor` → **Haiku**. Because Opus consumes the plan allowance fastest, the coordinator
+**does not write production code or tests itself** beyond trivial edits (≈ one file, < 20 lines,
+docs/config); everything larger goes to `implementer`/`test-author`.
 
 ## 1. Normalise the request (2–4 lines, Turkish to the owner)
 Requested vs assumed · task ID(s) from `docs/PROGRESS.md` · risks/decisions needing the owner.
@@ -30,7 +36,7 @@ Effort:     medium (default) | high (complex) | xhigh (architectural; before con
 | Situation | Who does what |
 |---|---|
 | Trivial (typo, small doc/config edit, one-liner) | Coordinator only. No agents. |
-| Normal (one module, clear spec) | Coordinator implements + writes tests; `reviewer` (code) only if the change touches an invariant, IAM, secrets or a 🔺 task. |
+| Normal (one module, clear spec) | `implementer` (with tests in the same card, or `test-author` in parallel when the spec is testable independently); `reviewer` (code) only if the change touches an invariant, IAM, secrets or a 🔺 task. |
 | Complex / data-correctness (CDC, SCD2, idempotency, DLQ, tenant isolation, Spark jobs, Terraform/IAM) | `reviewer` (design) → `implementer` ‖ `test-author` in parallel → coordinator runs verification → `reviewer` (code). Add focus flag `data` for pipeline correctness and `security` for IAM, secrets, PII, CI. |
 | Day close | `checkpoint` skill (day). `evidence-auditor` only if ≥ 3 tasks or any ✅ is claimed for a 🔺 task. |
 | Week gate / milestone | `checkpoint` skill (week/milestone) → `evidence-auditor` + `reviewer` (code, milestone diff) once. |
@@ -68,7 +74,8 @@ note decisions (ADR if architectural), and tell the owner in Turkish: what chang
 open risks, next task. Commit via the `git-workflow` skill when the owner has authorised commits.
 
 ## 7. Model policy
-Sonnet for everything planned in `docs/DELIVERY_PLAN.md`. When a task is hard: raise effort
-(`/effort high` or `xhigh`), split the task, or add a design review — do not switch models. Opus
-is used only if the owner explicitly decides it for a specific task; record that decision in the
-Current State block.
+Coordinator on Opus (medium); implementation, tests, SQL/dbt, docs drafting and bounded
+refactoring on Sonnet agents; search and evidence checks on Haiku agents. Raise the coordinator to
+`high` effort only for architecture checkpoints, hard debugging or material risk reviews. If the
+owner switches the session to Sonnet (to save allowance), the same routing still applies.
+End every substantive task with a 3–5 line Turkish summary: done · verified how · open · next.

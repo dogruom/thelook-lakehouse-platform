@@ -354,7 +354,8 @@ thelook-lakehouse-platform/
 - 📅 [Delivery Plan — three two-week milestones](docs/DELIVERY_PLAN.md)
 - 📊 [Progress Tracker](docs/PROGRESS.md)
 - 🏛️ ADRs: [0001 SeaweedFS](docs/adr/0001-local-object-storage-seaweedfs.md) · [0007 Runtime, catalog, Gold engine](docs/adr/0007-runtime-catalog-and-gold-engine.md) · [0008 AWS target and cost guardrails](docs/adr/0008-aws-target-emr-serverless-and-cost-guardrails.md) · [0009 Component boundaries](docs/adr/0009-component-boundaries-and-contracts.md) · [0011 AWS Glue](docs/adr/0011-aws-glue-instead-of-emr-serverless.md) · [0012 Databricks track](docs/adr/0012-databricks-free-edition-track.md)
-- 🧭 Developer guides: [Git quick reference](docs/GIT_CHEATSHEET.md) · [Claude Code workflow](docs/CLAUDE_CODE_CHEATSHEET.md)
+- 🗺️ [Architecture overview and diagram briefs](docs/ARCHITECTURE.md)
+- 🧭 Developer guides: [Git quick reference](docs/GIT_CHEATSHEET.md) · [Claude Code workflow](docs/CLAUDE_CODE_CHEATSHEET.md) · [AI-assisted development playbook](docs/AI_DEVELOPMENT_PLAYBOOK.md)
 
 ---
 
