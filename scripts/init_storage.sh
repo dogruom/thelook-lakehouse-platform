@@ -22,7 +22,7 @@
 
 set -e
 
-ENDPOINT="http://${MINIO_HOST:-seaweedfs}:${MINIO_PORT:-9000}"
+ENDPOINT="http://${S3_HOST:-seaweedfs}:${S3_PORT:-9000}"
 BUCKET="${LAKEHOUSE_BUCKET:-lakehouse}"
 
 echo "=== Storage Init: Connecting to ${ENDPOINT} ==="

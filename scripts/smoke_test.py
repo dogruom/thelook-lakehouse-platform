@@ -5,13 +5,13 @@ smoke_test.py — Docker Compose Smoke Test
 Verifies that all services are up and reachable after `docker compose up`.
 
 Services tested:
-  - thelook_postgres          (PostgreSQL 15)
-  - thelook_seaweedfs         (SeaweedFS S3-compatible storage — replaces MinIO)
-  - thelook_kafka             (Apache Kafka 3.7 KRaft)
-  - thelook_spark_master      (Spark 3.5 Master)
-  - thelook_spark_worker      (Spark 3.5 Worker)
-  - thelook_airflow_webserver (Airflow 2.9.3)
-  - thelook_airflow_scheduler (Airflow Scheduler)
+  - crm_postgres          (PostgreSQL 15)
+  - crm_seaweedfs         (SeaweedFS S3-compatible storage — replaces MinIO)
+  - crm_kafka             (Apache Kafka 3.7 KRaft)
+  - crm_spark_master      (Spark 3.5 Master)
+  - crm_spark_worker      (Spark 3.5 Worker)
+  - crm_airflow_webserver (Airflow 2.9.3)
+  - crm_airflow_scheduler (Airflow Scheduler)
 
 Usage:
     python scripts/smoke_test.py
@@ -101,7 +101,7 @@ def check_kafka() -> bool:
     try:
         result = subprocess.run(
             [
-                "docker", "exec", "thelook_kafka",
+                "docker", "exec", "crm_kafka",
                 "/opt/kafka/bin/kafka-topics.sh",
                 "--bootstrap-server", "localhost:9092",
                 "--list",
@@ -118,7 +118,7 @@ def check_kafka() -> bool:
             else:
                 warn(f"Kafka reachable but 'clickstream_events' topic missing. Topics: {topics}")
                 info("Hint: kafka-init container may still be running or failed. "
-                     "Check: docker logs thelook_kafka_init")
+                     "Check: docker logs crm_kafka_init")
                 return True  # Kafka itself is OK; topic init is a separate concern
         else:
             fail(f"Kafka — kafka-topics.sh failed: {result.stderr.strip()}")
@@ -133,16 +133,16 @@ def check_postgres() -> bool:
     try:
         result = subprocess.run(
             [
-                "docker", "exec", "thelook_postgres",
-                "psql", "-U", "thelook_admin", "-d", "postgres",
-                "-c", "SELECT datname FROM pg_database WHERE datname IN ('airflow_metadata', 'thelook_dwh');",
+                "docker", "exec", "crm_postgres",
+                "psql", "-U", "crm_admin", "-d", "postgres",
+                "-c", "SELECT datname FROM pg_database WHERE datname IN ('airflow_metadata', 'crm_dwh');",
             ],
             capture_output=True,
             text=True,
             timeout=10,
         )
-        if result.returncode == 0 and "airflow_metadata" in result.stdout and "thelook_dwh" in result.stdout:
-            ok("PostgreSQL — databases: airflow_metadata ✓, thelook_dwh ✓")
+        if result.returncode == 0 and "airflow_metadata" in result.stdout and "crm_dwh" in result.stdout:
+            ok("PostgreSQL — databases: airflow_metadata ✓, crm_dwh ✓")
             return True
         else:
             fail(f"PostgreSQL — expected databases not found.\n    stdout: {result.stdout.strip()}\n    stderr: {result.stderr.strip()}")
@@ -161,9 +161,9 @@ def check_seaweedfs_s3() -> bool:
         result = subprocess.run(
             [
                 "docker", "run", "--rm",
-                "--network", "thelook_lakehouse_net",
-                "-e", "AWS_ACCESS_KEY_ID=minioadmin",
-                "-e", "AWS_SECRET_ACCESS_KEY=minioadmin123",
+                "--network", "crm_lakehouse_net",
+                "-e", "AWS_ACCESS_KEY_ID=lakehouse_admin",
+                "-e", "AWS_SECRET_ACCESS_KEY=lakehouse_secret_dev",
                 "-e", "AWS_DEFAULT_REGION=us-east-1",
                 "amazon/aws-cli:latest",
                 "s3", "ls",
@@ -217,7 +217,7 @@ def check_airflow_health() -> bool:
 
 def main() -> int:
     print(f"\n{BOLD}{'='*65}{RESET}")
-    print(f"{BOLD}  TheLook Lakehouse — Sprint 1 Docker Compose Smoke Test{RESET}")
+    print(f"{BOLD}  CRM Lakehouse — Sprint 1 Docker Compose Smoke Test{RESET}")
     print(f"{BOLD}  Stack: PostgreSQL · SeaweedFS(S3) · Kafka · Spark · Airflow{RESET}")
     print(f"{BOLD}{'='*65}{RESET}\n")
 
@@ -226,13 +226,13 @@ def main() -> int:
     # ── 1. Container Health ──────────────────────────────────────────────
     print(f"{BOLD}[1/5] Container Health Status{RESET}")
     containers = [
-        "thelook_postgres",
-        "thelook_seaweedfs",    # SeaweedFS (replaces thelook_minio)
-        "thelook_kafka",
-        "thelook_spark_master",
-        "thelook_spark_worker",
-        "thelook_airflow_webserver",
-        "thelook_airflow_scheduler",
+        "crm_postgres",
+        "crm_seaweedfs",    # SeaweedFS (replaces crm_minio)
+        "crm_kafka",
+        "crm_spark_master",
+        "crm_spark_worker",
+        "crm_airflow_webserver",
+        "crm_airflow_scheduler",
     ]
     for container in containers:
         results.append(check_docker_health(container))
@@ -283,7 +283,7 @@ def main() -> int:
         failed_count = total - passed
         print(f"{RED}{BOLD}  {failed_count} CHECK(S) FAILED ({passed}/{total}){RESET}")
         print(f"{YELLOW}  Debug: docker compose logs <service-name>{RESET}")
-        print(f"{YELLOW}  Init containers: docker logs thelook_seaweedfs_init | thelook_kafka_init{RESET}")
+        print(f"{YELLOW}  Init containers: docker logs crm_seaweedfs_init | crm_kafka_init{RESET}")
         exit_code = 1
     print(f"{BOLD}{'='*65}{RESET}\n")
 

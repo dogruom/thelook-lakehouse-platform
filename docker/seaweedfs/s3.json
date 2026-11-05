@@ -4,8 +4,8 @@
       "name": "admin",
       "credentials": [
         {
-          "accessKey": "minioadmin",
-          "secretKey": "minioadmin123"
+          "accessKey": "lakehouse_admin",
+          "secretKey": "lakehouse_secret_dev"
         }
       ],
       "actions": [

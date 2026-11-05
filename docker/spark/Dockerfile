@@ -9,7 +9,7 @@
 #   - Kafka connector version → 3.5.x compatible
 #   - Delta Lake → 3.x for Spark 3.5
 #
-# Build: docker build -t thelook/spark:3.5.1 docker/spark/
+# Build: docker build -t crm/spark:3.5.1 docker/spark/
 # =============================================================================
 
 ARG SPARK_VERSION=3.5.1

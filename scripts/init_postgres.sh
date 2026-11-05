@@ -4,7 +4,7 @@
 # =============================================================================
 # Creates two databases with dedicated users:
 #   1. airflow_metadata  — Airflow metadata / task state storage
-#   2. thelook_dwh       — TheLook Data Warehouse (dbt target)
+#   2. crm_dwh       — CRM Data Warehouse (dbt target)
 #
 # This script runs automatically as part of PostgreSQL's
 # docker-entrypoint-initdb.d/ mechanism on FIRST startup.
@@ -22,8 +22,8 @@ AIRFLOW_DB="${AIRFLOW_DB_NAME:-airflow_metadata}"
 AIRFLOW_USER="${AIRFLOW_DB_USER:-airflow}"
 AIRFLOW_PASS="${AIRFLOW_DB_PASSWORD:-airflow_secret_2024}"
 
-DWH_DB="${DWH_DB_NAME:-thelook_dwh}"
-DWH_USER="${DWH_DB_USER:-thelook_dwh}"
+DWH_DB="${DWH_DB_NAME:-crm_dwh}"
+DWH_USER="${DWH_DB_USER:-crm_dwh}"
 DWH_PASS="${DWH_DB_PASSWORD:-dwh_secret_2024}"
 
 # ---------------------------------------------------------------------------

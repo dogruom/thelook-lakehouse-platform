@@ -4,7 +4,7 @@
 # Base: apache/airflow:2.9.3-python3.11
 # Adds: boto3 (MinIO/S3), structlog, pydantic, confluent-kafka, dbt-core
 #
-# Build: docker build -t thelook/airflow:2.9.3 docker/airflow/
+# Build: docker build -t crm/airflow:2.9.3 docker/airflow/
 # =============================================================================
 
 ARG AIRFLOW_VERSION=2.9.3
