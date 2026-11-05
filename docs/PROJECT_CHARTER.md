@@ -1,9 +1,9 @@
 # Project Charter: Multi-Tenant CRM Lakehouse Platform
 
-> **Document Version**: 7.1  
-> **Last Updated**: 2026-11-05 (v7.1: scope tiers mapped to the three milestones of [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v7)  
+> **Document Version**: 8.0  
+> **Last Updated**: 2026-11-05 (v8.0: runtime, catalog, AWS target and component boundaries per ADR-0007/0008/0009; scope re-cut per [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8)  
 > **Author & Architect**: Ömer Faruk Doğru — Senior Data / Analytics Engineer (Berlin)  
-> **Status**: 🟡 ACTIVE — Week 1 in progress. Architecture baselined; most components are **planned, not yet implemented** (see [PROGRESS.md](PROGRESS.md)).  
+> **Status**: 🟡 ACTIVE — re-planned 2026-11-05; Milestone 1 starts at W1.D1. Architecture baselined; most components are **planned, not yet implemented** (see [PROGRESS.md](PROGRESS.md)).  
 > **Target Roles**: Senior Data Engineer — Berlin (large-scale e-commerce, delivery and fintech data platforms)
 
 > [!NOTE]
@@ -31,16 +31,16 @@ All data is **fully synthetic**, produced by `src/generator/` (Faker + Pydantic 
 
 | Tier | Content | Planned Milestone |
 |---|---|---|
-| **Core (MVP vertical slice)** | Generator → Kafka → Spark Structured Streaming → Bronze + DLQ (M1) → Silver (CDC MERGE, dedup, SCD2) → dbt Gold incl. Customer 360 and RFM → correctness tests; Docker local stack (M2) | M1–M2 (W1–W4) |
-| **Extended** | Parametrised Airflow batch DAG (M2), GitHub Actions CI (unit job in M1, integration job in M3), quality gates and alerting, Terraform (S3 + IAM) and one Spark/Delta job against AWS S3 (M3) | M1–M3 |
-| **Stretch** | Bounded Databricks Auto Loader exercise, measured performance benchmarks, idempotent backfill, Great Expectations, churn feature mart | Only if Core + Extended are verified; otherwise documented as next-stage work |
-| **Out of scope (v1)** | Kinesis implementation (ADR comparison only), Reverse ETL / Lambda triggers, live dashboards, MWAA, Kubernetes, Flink, TCO comparisons against real vendors | — |
+| **Core (MVP vertical slice)** | Contracts + generator → Kafka → Spark Structured Streaming → Bronze + DLQ, metastore (M1) → Silver (CDC MERGE, dedup, SCD2) → dbt Gold incl. Customer 360 and RFM → correctness tests; Docker local stack (M2) | M1–M2 (W1–W4) |
+| **Extended** | Airflow 3 pipeline with task mapping, gates and alerts (M2); GitHub Actions CI (job 1 in M1, integration job + OIDC deploy in M3); Terraform-provisioned AWS (S3, Glue Catalog, IAM, Budgets) running the same jobs on **AWS Glue 5.0**; operations runbooks, cost report and privacy erasure; bounded **Databricks Free Edition** track — Unity Catalog, serverless jobs, dbt-databricks, dashboard (M3) | M1–M3 |
+| **Stretch** | Additional benchmarks; Snowflake/BigQuery port | Next-stage work |
+| **Out of scope (v1)** | Paid Databricks features, Great Expectations, churn mart, Kinesis implementation (ADR comparison only), managed Kafka (MSK), Schema Registry, Reverse ETL, live dashboards, MWAA, Kubernetes, Flink, real-vendor TCO comparisons | — |
 
 > [!IMPORTANT]
 > A tier only starts when the previous tier's acceptance tests pass. Features are never advertised in the README before they are verified.
 
 ### Strategic Philosophy: "Local-First, Cloud-Deployable"
-1. **Reproducible locally at $0**: `docker compose up -d` starts Apache Kafka 3.7 (KRaft), Apache Spark 3.5.1, Delta Lake OSS 3.2.0, SeaweedFS (S3-compatible API), PostgreSQL and Apache Airflow 2.9.3. Setup time and hardware requirements will be **measured on a clean machine** and published; until then no setup-time claim is made.
+1. **Reproducible locally at $0**: `docker compose --profile core up -d` starts Apache Kafka 3.7 (KRaft), Apache Spark 3.5.9 (Python 3.11, Java 17), Delta Lake OSS 3.3.3, SeaweedFS (S3-compatible API) and PostgreSQL (Hive metastore); the `sql` profile adds the Spark Thrift Server for dbt, the `orchestration` profile Apache Airflow 3.x (ADR-0007). Setup time and hardware requirements will be **measured on a clean machine** and published; until then no setup-time claim is made.
 2. **Shared logic, separate adapters — not "identical environments"**: Business logic (parsing, validation, dedup, CDC merge, SCD2) lives in environment-agnostic Python modules. Environment specifics (storage endpoint, credentials, catalog, trigger mode, file source vs. Auto Loader) are isolated in configuration and thin adapters.
    - SeaweedFS's S3 API is **not** AWS S3 (IAM, encryption, listing and error behaviour differ).
    - OSS Spark/Delta is **not** the Databricks runtime (versions, connectors, available Delta features differ).
@@ -65,9 +65,10 @@ graph TB
     end
 
     subgraph ProcessingEngine["Compute & Table Format"]
-        SPARK_STREAM["Spark Structured Streaming 3.5<br/>(Trigger.availableNow / processingTime)"]
+        SPARK_STREAM["Spark Structured Streaming 3.5.9<br/>(Trigger.availableNow / processingTime)"]
         SPARK_BATCH["PySpark Batch Jobs"]
-        DELTA["Delta Lake OSS 3.2<br/>ACID | Time Travel | Schema Evolution"]
+        DELTA["Delta Lake OSS 3.3<br/>ACID | Time Travel | Schema Evolution"]
+        CATALOG["Hive Metastore (Postgres) locally<br/>AWS Glue Data Catalog on AWS"]
     end
 
     subgraph Medallion["Medallion Lakehouse"]
@@ -78,9 +79,9 @@ graph TB
     end
 
     subgraph Governance["Orchestration, Quality & IaC"]
-        AIRFLOW["Apache Airflow 2.9 (Extended)<br/>Parametrised DAG + dynamic task mapping"]
+        AIRFLOW["Apache Airflow 3.x (Extended)<br/>Parametrised DAG + dynamic task mapping"]
         QUALITY["Quality Gates<br/>Pydantic contracts | Spark checks | dbt tests<br/>Reconciliation vs. manifest"]
-        TERRAFORM["Terraform (Extended)<br/>AWS S3 + IAM"]
+        TERRAFORM["Terraform (Extended)<br/>S3, Glue Catalog + Glue 5.0 jobs, IAM/OIDC, Budgets"]
     end
 
     GEN_STREAM --> KAFKA
@@ -115,7 +116,7 @@ graph TB
    - *Parse failures* (malformed JSON, missing envelope) are captured **at Bronze ingest** as raw strings with `_parse_error`.
    - *Contract / integrity failures* are captured **at the Bronze → Silver gate** into `dead_letter.dlq_*`. The DLQ references the original Bronze record via `_bronze_ref`; the original payload stays in Bronze.
    - *Intentional removals* (duplicates, events beyond the dedup window) are **counted as metrics**, never dropped invisibly; the records remain in Bronze.
-   - Reconciliation invariant per batch: `input = bronze`, and `bronze = silver_accepted + dlq + duplicates_removed + late_beyond_window`, checked against the generator's ground-truth manifest.
+   - Reconciliation invariant per batch (counted in events): `input = bronze`, and `bronze = silver_accepted + dlq + duplicates_removed + stale_cdc_noop + late_beyond_window`, checked against the generator's ground-truth manifest. Every term is a metric in `ops.pipeline_metrics`.
 
 3. **Tenant isolation is tested, not assumed**: `brand_id` is mandatory, non-null and part of **every business key and every join condition**. Tables are shared across tenants, so physical partitioning is a **performance choice, not a security boundary**. Isolation is demonstrated through: (a) composite keys including `brand_id`; (b) automated tests with deliberate cross-tenant key collisions; (c) tenant-scoped consumption views; (d) in AWS, prefix-scoped IAM policies as a demonstration. Not in v1: per-tenant encryption keys or row-level security engines.
 
@@ -145,9 +146,8 @@ The platform models a synthetic omni-channel retail scenario with a configurable
 |---|---|---|---|---|---|---|
 | `customers` | Streaming CDC (I/U/D) | Kafka `customer_cdc` | `{brand_id}:{customer_id}` | `(brand_id, customer_id, _cdc_sequence)` | `_cdc_sequence` | none (small table) |
 | `clickstream_events` | Stream | Kafka `clickstream_events` | `{brand_id}:{session_id}` | `(brand_id, event_id)` | `event_timestamp` | `event_date` |
-| `orders` | Micro-batch | S3 landing | — | `(brand_id, order_id)` | `_ingest_ts` | `brand_id` |
-| `order_items` | Micro-batch | S3 landing | — | `(brand_id, order_id, item_id)` | `_ingest_ts` | `brand_id` |
-| `products` | Seed / daily batch | S3 landing | — | `(brand_id, product_id)` | `_ingest_ts` | none |
+| `orders` (with embedded `items`) | Micro-batch | S3 landing | — | `(brand_id, order_id)`; items `(brand_id, order_id, item_id)` after explode in Silver | `_ingest_ts` | `brand_id` |
+| `products` | Static seed per brand | S3 landing | — | `(brand_id, product_id)` | `_ingest_ts` | none |
 
 \* Partitioning is **not an invariant**. Initial choices are validated against measured file counts and tenant distribution and finalised in ADR-0005.
 
@@ -178,10 +178,11 @@ The platform models a synthetic omni-channel retail scenario with a configurable
 | **dbt Core** | Kimball Gold marts, composite-key tests, contracts (if supported by adapter) | `dbt_project/` | Core |
 | **Data quality & contracts** | Pydantic v2 contracts, validation gate, DLQ + replay, reconciliation vs. manifest | `src/quality/`, `docs/DATA_CONTRACTS.md` | Core |
 | **Spark performance** | AQE vs. salting on skewed joins, broadcast joins, Z-Order — **measured** | `docs/benchmarks.md` | Extended |
-| **Orchestration (Airflow)** | Parametrised DAG with dynamic task mapping, backfill, failure alerts | `dags/` | Extended |
-| **CI/CD** | Ruff, mypy, pytest unit (offline) + integration job (Docker), dbt compile | `.github/workflows/ci.yml` | Extended |
-| **Infrastructure as Code** | Terraform: S3 buckets, prefix-scoped IAM, lifecycle rules, SSE | `infra/terraform/` | Extended |
-| **Databricks** | Auto Loader + Asset Bundles as second deployment target | `notebooks/`, `databricks.yml` | Stretch |
+| **Orchestration (Airflow 3)** | Parametrised DAG with dynamic task mapping, quality gates, failure isolation, alerts | `dags/` | Extended |
+| **CI/CD** | Ruff, mypy, import-linter, gitleaks, unit tests (offline), dbt parse; integration job (Docker); OIDC deploy-and-run workflow | `.github/workflows/` | Extended |
+| **Infrastructure as Code** | Terraform: S3 (lifecycle, SSE), Glue Catalog and Glue job definitions, prefix-scoped IAM, GitHub OIDC, Budgets; tflint + trivy | `infra/terraform/` | Extended |
+| **AWS managed compute** | Same jobs on AWS Glue 5.0 (Spark 3.5, Python 3.11), Glue catalog, Athena queries, measured cost | `infra/`, `docs/LOCAL_VS_CLOUD.md` | Extended |
+| **Databricks** | Unity Catalog (UI and as code), serverless jobs via Asset Bundles, dbt-databricks Gold, AI/BI dashboard — Free Edition | `databricks/`, `docs/LOCAL_VS_CLOUD.md` | Extended |
 
 ---
 
@@ -193,7 +194,7 @@ Ordered by hiring value; each item is only "done" with linked evidence in PROGRE
 2. **Correctness tests** — CDC ordering, idempotent replay & restart, tenant isolation (including a negative test that proves leaks are detected), DLQ replay.
 3. **Measured performance & recovery** — following the methodology in §8.
 4. **Clean CI and reproducible local setup** — green CI run linked; setup time and hardware measured on a clean machine.
-5. **Cloud deployment** — Terraform-provisioned S3/IAM plus one Spark/Delta job verified on AWS; differences documented.
+5. **Cloud deployment** — Terraform-provisioned AWS foundation; the same Bronze/Silver jobs verified on AWS Glue 5.0 via an OIDC-authenticated workflow and on Databricks serverless; differences and actual spend documented.
 6. **ADRs** that articulate trade-offs (§9).
 
 Line coverage ≥ 80% on `src/generator/` is a **hygiene floor**, not a quality claim; correctness and integration tests take priority.
@@ -221,6 +222,12 @@ No percentage improvement is committed in advance. Every benchmark records:
 | ADR-0004 | Spark vs. dbt ownership boundary (Silver/Gold, SCD2 owner, dbt adapter capabilities) | ⏳ |
 | ADR-0005 | Multi-tenant isolation model and partitioning | ⏳ |
 | ADR-0006 | Delivery semantics, idempotency and replay | ⏳ |
+| ADR-0007 | Runtime baseline, table catalog and Gold engine | ✅ Accepted |
+| ADR-0008 | AWS target and cost guardrails (compute superseded by ADR-0011) | ✅ Accepted |
+| ADR-0009 | Component boundaries, contracts and package layout | ✅ Accepted |
+| ADR-0010 | Orchestration ↔ compute interface | ⏳ |
+| ADR-0011 | AWS Glue 5.0 instead of EMR Serverless | ✅ Accepted |
+| ADR-0012 | Bounded Databricks Free Edition track | ✅ Accepted |
 
 ---
 
@@ -230,6 +237,9 @@ No percentage improvement is committed in advance. Every benchmark records:
 |---|---|
 | Scope creep across too many components | Tier gating (§1); Stretch items dropped first |
 | Local resource footprint (Kafka + Spark + Airflow + Postgres + SeaweedFS) | Measure; introduce Docker Compose profiles if needed |
-| dbt-spark via Thrift Server + Delta + metastore compatibility | Capability spike on Day 13; fallback to dbt-spark `session` method |
-| Databricks trial window and cost | Stretch tier; record actual spend from billing, destroy resources after proof |
+| dbt-spark via Thrift Server + Delta + metastore compatibility | Capability spike pulled forward to W2.D11; fallback dbt-spark `session` method (ADR-0007) |
+| Cloud cost | Free plan (no charges possible, credits consumed), budgets 5/20/40 USD, no always-on resources, teardown after every cloud day; ceiling USD 50 (ADR-0008/0011) |
+| AWS Free plan ends ≈ 2027-03-22 (account closes unless upgraded); IAM Identity Center unavailable on the account type | M3 finishes well before; owner decides on upgrade afterwards; short-lived CLI credentials decided at W5.D25.1 |
+| Databricks Free Edition quotas / feature gaps | Time-boxed track; gaps documented, no paid tier |
+| Docker memory (7.6 GB) | Compose profiles; never run `sql` and `orchestration` together |
 | Local results misread as production evidence | Per-environment reporting; methodology caveats in benchmarks |

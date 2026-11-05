@@ -34,10 +34,27 @@ Thumbs.db
 # Environment & Secrets
 # ==========================
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+.envrc
 *.pem
 *.key
+*.p12
+*.pfx
+secrets/
+docker/seaweedfs/s3.local.json
+
+# ==========================
+# Terraform / cloud
+# ==========================
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+.terraform.tfstate.lock.info
+.aws/
 
 # ==========================
 # Docker Volumes (local data)
@@ -50,8 +67,7 @@ spark_data/
 # ==========================
 # TheLook Dataset (raw data)
 # ==========================
-# Generated locally via src/ingestion/download_thelook.py
-# Use --source synthetic for zero-dependency generation
+# Unused local leftovers (Kaggle TheLook CSVs) — data is generated, never imported
 data/raw/
 data/raw/*.csv
 data/raw/*.sha256
@@ -113,6 +129,7 @@ ehthumbs.db
 # Local-only archive of superseded planning notes (not part of the public repo)
 docs/_archive/
 
-# Claude Code personal settings (not shared)
+# Claude Code personal settings and learning record (not shared)
 .claude/settings.local.json
+.claude/learning/
 CLAUDE.local.md

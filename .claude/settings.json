@@ -1,8 +1,27 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "model": "sonnet",
+  "env": {
+    "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet",
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "1"
+  },
   "permissions": {
     "deny": [
-      "Read(./.env)",
-      "Read(./.env.local)",
+      "Read(**/.env)",
+      "Read(**/.env.local)",
+      "Read(**/.env.*.local)",
+      "Read(**/.env.production)",
+      "Read(**/.env.prod)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/*.p12)",
+      "Read(**/*.tfstate)",
+      "Read(**/*.tfstate.*)",
+      "Read(**/*.tfvars)",
+      "Read(**/s3.local.json)",
+      "Read(~/.aws/**)",
+      "Read(~/.ssh/**)",
+      "Read(~/.docker/config.json)",
       "Bash(git reset --hard*)",
       "Bash(git clean*)",
       "Bash(git push --force*)",
@@ -10,24 +29,30 @@
       "Bash(git push -f*)",
       "Bash(git push * -f*)",
       "Bash(git filter-branch*)",
+      "Bash(git filter-repo*)",
       "Bash(git checkout -- *)",
       "Bash(docker system prune*)",
       "Bash(docker volume prune*)",
+      "Bash(docker image prune*)",
       "Bash(docker volume rm*)",
       "Bash(docker compose down -v*)",
       "Bash(docker compose down * -v*)",
+      "Bash(docker compose down --volumes*)",
       "PowerShell(git reset --hard*)",
       "PowerShell(git clean*)",
       "PowerShell(git push --force*)",
       "PowerShell(git push * --force*)",
       "PowerShell(git push -f*)",
       "PowerShell(git push * -f*)",
+      "PowerShell(git filter-branch*)",
       "PowerShell(git checkout -- *)",
       "PowerShell(docker system prune*)",
       "PowerShell(docker volume prune*)",
+      "PowerShell(docker image prune*)",
       "PowerShell(docker volume rm*)",
       "PowerShell(docker compose down -v*)",
-      "PowerShell(docker compose down * -v*)"
+      "PowerShell(docker compose down * -v*)",
+      "PowerShell(docker compose down --volumes*)"
     ],
     "ask": [
       "Bash(git push*)",
@@ -35,13 +60,38 @@
       "Bash(git branch -D*)",
       "Bash(git stash drop*)",
       "Bash(git stash clear*)",
+      "Bash(git tag -d*)",
       "Bash(terraform apply*)",
       "Bash(terraform destroy*)",
+      "Bash(aws *)",
+      "Bash(docker compose build*)",
+      "Bash(docker compose up * --build*)",
       "PowerShell(git push*)",
       "PowerShell(git rebase*)",
       "PowerShell(git branch -D*)",
+      "PowerShell(git stash drop*)",
+      "PowerShell(git stash clear*)",
+      "PowerShell(git tag -d*)",
       "PowerShell(terraform apply*)",
-      "PowerShell(terraform destroy*)"
+      "PowerShell(terraform destroy*)",
+      "PowerShell(aws *)",
+      "PowerShell(docker compose build*)",
+      "PowerShell(docker compose up * --build*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/guard_commands.py"],
+            "timeout": 15
+          }
+        ]
+      }
     ]
   }
 }

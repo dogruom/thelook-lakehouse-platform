@@ -1,7 +1,7 @@
 # Data Contracts & Medallion Specifications
 
-> **Document Version**: 7.0
-> **Last Updated**: 2026-11-05
+> **Document Version**: 7.1
+> **Last Updated**: 2026-11-05 (v7.1: orders carry embedded line items; static product seed; `schema_version` in the envelope; schema-evolution demo moved to orders; reconciliation adds `stale_cdc_noop` — DELIVERY_PLAN v8, ADR-0009)
 > **Status**: 🟡 DRAFT — aligned with [PROJECT_CHARTER.md](PROJECT_CHARTER.md) v7. **Not yet enforced in code**; each contract becomes enforced when the corresponding PROGRESS task is ✅ with evidence.
 > **Target Platform**: Multi-Tenant CRM Lakehouse (Delta Lake OSS locally; cloud targets documented separately)
 
@@ -19,9 +19,8 @@
 graph LR
     subgraph DataProducer["🐍 Synthetic Producer (Faker + Pydantic v2)"]
         GEN_C["customers (CDC: I/U/D + _cdc_sequence)"]
-        GEN_O["orders (Micro-batch)"]
-        GEN_I["order_items (Micro-batch)"]
-        GEN_P["products (Catalog seed)"]
+        GEN_O["orders + embedded items (Micro-batch)"]
+        GEN_P["products (Static seed per brand)"]
         GEN_E["clickstream (High-volume stream)"]
         MAN["Ground-truth manifest"]
     end
@@ -33,14 +32,12 @@ graph LR
 
     subgraph StorageLanding["📦 S3-Compatible Object Store"]
         LAND_O["landing/{brand_id}/orders/{date}/"]
-        LAND_I["landing/{brand_id}/order_items/{date}/"]
         LAND_P["landing/{brand_id}/products/{date}/"]
     end
 
     subgraph BronzeMedallion["🥉 Bronze Layer (Append-Only Delta)"]
         B_C["bronze.raw_customers"]
-        B_O["bronze.raw_orders"]
-        B_I["bronze.raw_order_items"]
+        B_O["bronze.raw_orders (items nested)"]
         B_P["bronze.raw_products"]
         B_E["bronze.raw_clickstream"]
     end
@@ -75,18 +72,17 @@ graph LR
     GEN_C --> TOPIC_CDC --> B_C
     GEN_E --> TOPIC_EVENTS --> B_E
     GEN_O --> LAND_O --> B_O
-    GEN_I --> LAND_I --> B_I
     GEN_P --> LAND_P --> B_P
 
     B_C -.->|"Validation gate"| DLQ_C
     B_O -.->|"Validation gate"| DLQ_O
-    B_I -.->|"Validation gate"| DLQ_I
+    B_O -.->|"Validation gate (items)"| DLQ_I
     B_E -.->|"Validation gate"| DLQ_E
 
     B_C -->|"Sequence-ordered MERGE"| S_C
     B_C -->|"Versioned by _cdc_sequence"| S_CH
     B_O -->|"Dedup + FK check"| S_O
-    B_I -->|"Validate & conform"| S_I
+    B_O -->|"Explode items, validate"| S_I
     B_P -->|"Conform"| S_P
     B_E -->|"Lookback-window dedup"| S_E
 
@@ -115,6 +111,7 @@ Applies to `customer_cdc` and `clickstream_events` (rationale: ADR-0002, planned
 | Message **key** | `{brand_id}:{customer_id}` (CDC) · `{brand_id}:{session_id}` (clickstream) | Determines the partition → preserves per-customer / per-session ordering and spreads tenant load |
 | Header `brand_id` | tenant identifier | Routing and filtering only — **not** used for partitioning |
 | Value | UTF-8 JSON of the entity schema below | Parsed into typed columns in Bronze; unparseable values stored raw with `_parse_error` |
+| Header `schema_version` / `event_type` | e.g. `1` / `page_view` | Consumers select the contract version; additive changes keep the version, breaking changes bump it (ADR-0009) |
 | Producer | `enable.idempotence=true`, `acks=all` | Limits retry duplicates; delivery remains at-least-once |
 
 ### 2.1 `customers` (Streaming CDC)
@@ -147,7 +144,6 @@ All injected defects are recorded in the ground-truth manifest, **not** in the p
 - **Future-Dated Signup**: 2.0% ± 0.5% → DLQ
 - **Out-of-order delivery**: 5.0% ± 1.0% (sequence preserved, emission order shuffled) → handled by sequence-ordered MERGE, **not** DLQ material
 - **Cross-tenant key collisions**: configured rate (same `customer_id`/email in two brands) → must remain independent states
-- **Schema Drift (Batch 10+)**: new column `preferred_language: STRING` → Delta `mergeSchema` demonstration
 
 ---
 
@@ -168,6 +164,8 @@ All injected defects are recorded in the ground-truth manifest, **not** in the p
 | `gross_amount` | DECIMAL(10,2) | No | `gross_amount > 0` | Gross value |
 | `discount_amount` | DECIMAL(10,2) | No | `discount_amount >= 0` | Promotion amount |
 | `net_amount` | DECIMAL(10,2) | No | `net_amount = gross_amount - discount_amount` | Final revenue amount |
+| `items` | ARRAY<STRUCT> | No | 1–5 line items, schema in §2.3 | Embedded line items (exploded into `silver.order_items`) |
+| `sales_channel` | STRING | Yes | ENUM (`web`, `app`, `store`); present from landing batch 10 onwards | **Schema evolution demo** (additive; Delta `mergeSchema`) |
 
 #### 🧪 Dirty Data Budget & Injection Spec (`orders`)
 - **Orphan Foreign Key**: 3.0% ± 0.5% → DLQ with `_retryable = true`
@@ -179,8 +177,8 @@ All injected defects are recorded in the ground-truth manifest, **not** in the p
 ---
 
 ### 2.3 `order_items` (Order Line Items)
-- **Ingestion Mode**: Micro-batch files in `landing/{brand_id}/order_items/{date}/`
-- **Bronze Target**: `bronze.raw_order_items`
+- **Ingestion Mode**: embedded in `orders.items` (no separate landing entity); exploded at the Bronze → Silver gate
+- **Silver Target**: `silver.order_items`; failures → `dead_letter.dlq_order_items`
 - **Business / dedup key**: `(brand_id, order_id, item_id)`
 
 | Column Name | Ingestion Type | Nullable | Constraint | Description |
@@ -195,8 +193,8 @@ All injected defects are recorded in the ground-truth manifest, **not** in the p
 
 ---
 
-### 2.4 `products` (Catalog Seed & Updates)
-- **Ingestion Mode**: Seed / daily batch in `landing/{brand_id}/products/{date}/`
+### 2.4 `products` (Catalog Seed)
+- **Ingestion Mode**: static seed per brand, landed once in `landing/{brand_id}/products/{date}/` (no dirty-data injection)
 - **Bronze Target**: `bronze.raw_products`
 - **Business / dedup key**: `(brand_id, product_id)`
 
@@ -274,7 +272,9 @@ Contract and integrity failures detected at the **Bronze → Silver gate** are w
 | `_replay_status` | ENUM: `PENDING`, `REPLAYED`, `FAILED_AGAIN`, `DISCARDED` (discard is an audited manual action) |
 | Replay | Preserves `event_id` and `_bronze_ref`; replaying the same subset twice creates no Silver duplicates |
 
-**Reconciliation invariant (per batch)**: `input = bronze` and `bronze = silver_accepted + dlq + duplicates_removed + late_beyond_window`, checked against the generator's ground-truth manifest.
+**Reconciliation invariant (per batch, counted in events)**: `input = bronze` and `bronze = silver_accepted + dlq + duplicates_removed + stale_cdc_noop + late_beyond_window`, checked against the generator's ground-truth manifest. `stale_cdc_noop` counts CDC events whose `_cdc_sequence` is not newer than the Silver state. All terms are written to `ops.pipeline_metrics`.
+
+**Injection is exact, not probabilistic**: the generator selects exactly `round(n × rate)` records per defect type with a seeded RNG, so tests assert exact counts against the manifest; the ± tolerances above describe the configured rate only.
 
 ---
 

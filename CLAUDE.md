@@ -1,78 +1,91 @@
 # CLAUDE.md — Multi-Tenant CRM Lakehouse Platform
 
 Portfolio-grade, local-first data platform: synthetic multi-tenant CRM events → Kafka (KRaft) →
-Spark Structured Streaming → Delta Lake (Bronze/DLQ/Silver) → dbt Gold, with Airflow, Terraform/AWS.
-Owner: Ömer Faruk Doğru (Senior Data / Analytics Engineer, Berlin). Status: **early — most components are planned.**
+Spark Structured Streaming → Delta Lake (Bronze/DLQ/Silver) → dbt Gold; Airflow 3; Terraform +
+AWS Glue on AWS; bounded Databricks Free Edition track. Owner: Ömer Faruk Doğru (Senior Data / Analytics Engineer, Berlin).
+Status: **re-planned 2026-11-05; Milestone 1 starts at W1.D1. Most components are planned.**
 
 ## Session protocol
-- **Start:** read the `Current State` block at the top of [docs/PROGRESS.md](docs/PROGRESS.md), then
-  `git status --short --branch`. Do not re-read all docs; open only what the task needs.
-- **Non-trivial task:** use the `work-orchestrator` skill (classify → route model → plan → verify).
-- **Git operations:** use the `git-workflow` skill.
-- **End:** use the `session-handoff` skill (updates the PROGRESS `Current State` block, no chat logs).
+- **Start:** read only the `Current State` block of [docs/PROGRESS.md](docs/PROGRESS.md) and the active
+  day card in [docs/DELIVERY_PLAN.md](docs/DELIVERY_PLAN.md); run `git status --short --branch`.
+  Open other docs only when the task needs them. After a break, open with a 5-line recap from
+  `Current State` (where we are, last delivered, unfinished, next, owner action needed).
+- **Every substantive request:** `work-orchestrator` (scope check against the active milestone,
+  over-engineering check, classify → route agents → task cards → verify → review). Trivial asks: answer directly.
+- **End of a planned day / week / milestone:** `checkpoint` skill (evidence → [docs/PORTFOLIO_NOTES.md](docs/PORTFOLIO_NOTES.md)
+  → `tutor` learning gate). **Git:** `git-workflow` skill.
+- **End of session:** `session-handoff` skill (updates `Current State`, no chat logs).
+
+## Agents (`.claude/agents/`; Sonnet, except the `Explore` override on Haiku; never Opus)
+| Agent | Writes | Use when |
+|---|---|---|
+| `implementer` | assigned production files | complex/multi-file implementation from a task card |
+| `test-author` | `tests/**`, dbt tests | in parallel with implementer; 🔺 correctness suites |
+| `reviewer` | nothing (read-only) | design review before / code review after complex, data-correctness, IAM, security work |
+| `evidence-auditor` | nothing (read-only) | day close with 🔺 claims, week gate, milestone review |
+| `Explore` (Haiku) | nothing | wide read-only searches only |
+The main session is the coordinator; it owns docs, PROGRESS and acceptance. Trivial and normal
+tasks need no agents. Subagents cannot spawn subagents. The `tutor` is a skill (it needs a dialogue).
+
+## Model policy
+Main session: Sonnet (project default). Hard task → raise effort (`/effort high|xhigh`), split it, or
+add a design review. Opus only when the owner switches the session model for a named task.
+Personal communication preferences live in `~/.claude/CLAUDE.md`; this file holds project rules only.
 
 ## Source-of-truth order (when documents disagree)
-1. [docs/PROJECT_CHARTER.md](docs/PROJECT_CHARTER.md) v7 — architecture invariants (§3), privacy (§5)
-2. [docs/PROGRESS.md](docs/PROGRESS.md) v8 — task-level acceptance criteria and evidence
-3. [docs/DELIVERY_PLAN.md](docs/DELIVERY_PLAN.md) — milestone roadmap
-4. [docs/DATA_CONTRACTS.md](docs/DATA_CONTRACTS.md) v7 (schemas, DLQ envelope; draft, not yet enforced) and
-   [docs/ENGINEERING_STANDARDS.md](docs/ENGINEERING_STANDARDS.md) v7 (coding/Spark/dbt/Airflow standards)
-5. ADRs in [docs/adr/](docs/adr/). `docs/_archive/` is local-only and superseded — ignore it.
-- Owner instructions: Turkish instructions override English ones; repository documents override
-  conflicting prompt text. Fix critical doc inconsistencies directly and report them.
-- Guides: [docs/GIT_CHEATSHEET.md](docs/GIT_CHEATSHEET.md), [docs/CLAUDE_CODE_CHEATSHEET.md](docs/CLAUDE_CODE_CHEATSHEET.md).
+1. [docs/PROJECT_CHARTER.md](docs/PROJECT_CHARTER.md) v8 — invariants (§3), privacy (§5)
+2. [docs/PROGRESS.md](docs/PROGRESS.md) v9 — task acceptance criteria, statuses, evidence
+3. [docs/DELIVERY_PLAN.md](docs/DELIVERY_PLAN.md) v8 — day cards, checkpoints, milestone gates, market map
+4. [docs/DATA_CONTRACTS.md](docs/DATA_CONTRACTS.md) v7.1, [docs/ENGINEERING_STANDARDS.md](docs/ENGINEERING_STANDARDS.md) v7.1
+5. ADRs in [docs/adr/](docs/adr/) (0007 runtime/catalog, 0008 cost guardrails, 0009 boundaries, 0011 Glue, 0012 Databricks). `docs/_archive/` is superseded — ignore.
+- Turkish owner instructions override English ones; repository documents override conflicting prompt text.
 
 ## Repository map
 | Path | Content |
 |---|---|
-| `src/generator/` | Synthetic data generator (`config.py` only so far) |
-| `src/streaming/`, `src/quality/`, `src/contracts/` | Spark jobs, DLQ/validation, contracts (empty) |
-| `src/utils/logging.py` | structlog JSON logging |
-| `dbt_project/` | dbt skeleton (no models yet) |
-| `dags/` | Airflow DAGs (empty) |
-| `docker/`, `docker-compose.yml`, `scripts/` | Local stack, init scripts, `smoke_test.py` |
-| `tests/unit/`, `tests/integration/` | Empty — no tests exist yet |
+| `src/generator/config.py`, `src/utils/logging.py` | Only code so far; moves to `src/lakehouse/` in W1.D1 (ADR-0009) |
+| `dbt_project/` | dbt skeleton (no `dbt_project.yml` yet) |
+| `docker/`, `docker-compose.yml`, `scripts/` | Local stack (rebuild in W1.D2), init scripts, `smoke_test.py` |
+| `tests/` | Empty — no tests exist yet |
+| `.claude/hooks/guard_commands.py` | Blocks secret reads and destructive shell commands (`--self-test`) |
 
-## Commands (PowerShell, from repo root)
+## Commands (PowerShell, repo root)
 ```powershell
-python -m venv .venv; .\.venv\Scripts\Activate.ps1          # project-local venv (not WS-Projects/.venv)
-pip install -r requirements/dev.txt
-ruff check src tests scripts; ruff format --check src tests scripts
-mypy src/generator
-pytest tests/unit -q                                           # addopts enforce --cov-fail-under=80
-docker compose up -d; python scripts/smoke_test.py             # local stack (~7 containers)
-docker compose stop                                            # stop without deleting volumes
+py -3.11 -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -e .[dev]   # from W1.D1
+ruff check src tests scripts; ruff format --check src tests scripts; mypy src
+pytest tests/unit -q
+docker compose --profile core up -d; python scripts/smoke_test.py; docker compose stop
+docker compose --profile tools run --rm spark-test pytest tests/spark -q        # from W2.D7
 ```
 
 ## Non-negotiable engineering rules
 - `brand_id` is mandatory and part of **every** business key and join. Partitioning is not a security boundary.
 - Bronze is append-only (sole exception: audited erasure). No silent data loss: parse failures stay in
-  Bronze, contract failures go to DLQ with `_bronze_ref`, duplicates/late events are counted.
+  Bronze, contract failures go to DLQ with `_bronze_ref`, duplicates/stale/late events are counted.
 - CDC is ordered by `_cdc_sequence`, never by wall clock. Kafka **key** = `{brand_id}:{entity_id}`;
   `brand_id` is additionally a **header**. Headers are not partition keys.
 - Silver/SCD2 are Spark-owned; dbt owns Gold only (no dbt snapshots on customers).
 - PII: `HMAC-SHA256` with a key from env/secret store. Plain SHA-256 is not anonymisation.
+- Python 3.11 in every runtime; Spark 3.5.9 / Delta 3.3.3 (no Spark 4-only APIs).
 
 ## Honest-claims policy (portfolio credibility)
-Never write or imply, in code, docs, commits or README, unless demonstrated with linked evidence:
-exactly-once delivery (say: at-least-once + idempotent MERGE + deterministic dedup) · GDPR compliance
-(say: privacy controls) · `VACUUM` = erasure · Airflow = stream orchestration (it triggers
-`availableNow` micro-batches) · SeaweedFS = AWS S3 · local Spark = Databricks runtime · production-ready.
-A PROGRESS task is ✅ only with a commit hash **and** verification output.
-Data: fully synthetic (Faker + Pydantic), domain inspired by TheLook. Never present it as real customer data.
-Decision (owner, 2026-11-05: repository documents are authoritative): data is generated, not imported.
-The Kaggle TheLook CSVs in `data/raw/` are unused local leftovers — do not use, commit or delete them.
+Never write or imply, unless demonstrated with linked evidence: exactly-once delivery (say:
+at-least-once + idempotent MERGE + deterministic dedup) · GDPR compliance (say: privacy controls) ·
+`VACUUM` = erasure · Airflow = stream orchestration · SeaweedFS = AWS S3 · local Spark = Glue/Databricks
+runtime · production-ready. A PROGRESS task is ✅ only with a commit hash **and** verification output.
+Data is fully synthetic (Faker + Pydantic); the Kaggle TheLook CSVs in `data/raw/` are unused local
+leftovers — do not use, commit or delete them.
 
 ## Safety
-- Never read or print `.env`; document configuration in `.env.example` only.
+- Never read or print `.env`, state files, keys; never dump env or `docker compose config` (hook-enforced).
 - No `git reset --hard`, `git clean`, force push, history rewrite, branch deletion without explicit approval.
-  Invoke `git` directly (no `-c` overrides) so permission rules apply.
-- No `docker compose down -v`, `docker * prune`, `docker volume rm`. Use `docker compose stop`.
-- Ask before `terraform apply/destroy`, any cloud spend, dataset downloads or large data regeneration.
+- No `docker compose down -v`, prune, `docker rm/rmi`, volume removal. Use `docker compose stop`.
+- Ask before `terraform apply/destroy`, any `aws` command, image builds, dataset downloads, cloud spend
+  (project ceiling USD 50, ADR-0008).
 
 ## Conventions
-- Conversation with the owner: **Turkish**. Code, comments, commits, docs: **professional English**.
-- Conventional Commits (`feat(generator): …`). Branch from `main`: `feat/<scope>`, `fix/<scope>`, `docs/<scope>`.
-- Python 3.11+, ruff (line 100), mypy, Pydantic v2, structlog, no `print()` in pipeline code.
-- Unit tests run offline (S3 via `moto`); integration tests use the Docker stack.
+- Chat with the owner: **Turkish**. Code, comments, commits, docs: **professional English**.
+- Conventional Commits; branches from `main`: `feat/<scope>`, `fix/<scope>`, `docs/<scope>`.
+- ruff (line 100), mypy, Pydantic v2, structlog, no `print()` in pipeline code.
+- Keep tool output short (`-q`, `--tb=short`, `--tail 20`); read files with offsets; no repo-wide re-scans.
 - Teach briefly when introducing a Git/Claude Code concept: what, why, command, how to verify.

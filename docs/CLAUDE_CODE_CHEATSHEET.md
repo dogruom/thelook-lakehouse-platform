@@ -29,17 +29,30 @@ Also available in the account: `https://claude.ai/settings/usage` (Settings → 
 
 ### Model selection
 
-Use the model picker at the bottom of the Claude Code panel, or type `/model`.
+**This project runs on Sonnet** (verified 2026-11-05: the `sonnet` alias resolves to `claude-sonnet-5-5` on this account).
 
-Suggested starting policy:
-
-| Work | Starting choice |
+| Setting (in `.claude/settings.json`) | Effect |
 |---|---|
-| Architecture decisions, difficult debugging, cross-system review | Opus 5.5 · Medium; use High only when justified |
-| Normal feature implementation, tests, refactoring, documentation | Sonnet 5.5 · Default/Medium |
-| Small, straightforward tasks | Haiku 5.5, when available |
+| `"model": "sonnet"` | Default for sessions started in this repository; overrides the user-level `"model": "opus"` in `~/.claude/settings.json` |
+| `CLAUDE_CODE_SUBAGENT_MODEL=sonnet` | Default for subagents without their own `model` (e.g. built-in general-purpose) |
+| `.claude/agents/Explore.md` (`model: haiku`) | Replaces the built-in `Explore`, which otherwise runs on **Opus** on subscription accounts; cheap read-only search on Haiku |
+| Agent frontmatter `model: sonnet` | `implementer`, `test-author`, `reviewer`, `evidence-auditor` |
+| `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1` | Agents cannot spawn agents (cost control, single coordinator) |
 
-`Medium`, `High`, etc. are **effort levels**, not separate models. Start with Medium. Raise effort only for a difficult task; more reasoning and longer context can consume the plan allowance faster. Model availability is determined by the account and the model picker.
+What the model picker shows is what the **main session** uses. The project setting only decides the starting default of a new session. You change it yourself with the picker or by sending `/model opus` as a message of its own (inside a sentence it does nothing; Claude cannot switch its own model). An exported `ANTHROPIC_MODEL` or `claude --model …` also wins. Subagents keep their own model regardless of the main session (built-in `Plan` inherits the main model). Claude Code may use Haiku for tiny internal helpers (e.g. titles).
+
+### What you type vs. what happens automatically
+| You do | When |
+|---|---|
+| Nothing special — describe the task naturally | Always. `work-orchestrator`, `checkpoint`, `tutor`, rules and agents trigger from `CLAUDE.md` and skill descriptions |
+| `/work-orchestrator <task>` | Only to force the full plan-and-review process when Claude starts editing without a plan |
+| "günü kapat" / `/checkpoint day W1.D1` | End of a planned day (Claude also proposes it when the day's tasks are done) |
+| `/clear` | Topic change (Claude cannot run slash commands; it will suggest it at handoff) |
+| `/compact <focus>` | Same topic, very long session |
+| Picker or `/model …`, `/effort …` | Only if you deliberately want another model/effort |
+| `/status`, `/context`, `/usage` | Check account/model, context fill, plan usage |
+
+`Medium`, `High`, `xhigh` are **effort levels**, not models. Sonnet 5.5 defaults to Medium. For a hard task raise effort (`/effort high`) before considering another model; agents carry their own effort level in their frontmatter.
 
 ---
 
@@ -121,15 +134,52 @@ Defined in `.claude/skills/`; Claude loads them automatically when relevant, or 
 
 | Skill | Invoke | Use |
 |---|---|---|
-| `work-orchestrator` | `/work-orchestrator <task>` | Classify a task (complexity, risk, context, mode), pick the model, plan, execute, verify |
+| `work-orchestrator` | `/work-orchestrator <task>` | Coordinator playbook: classify, route agents, write task cards, verify, gate on review |
+| `checkpoint` | `/checkpoint day W1.D3` · `week 1` · `milestone M1` | Evidence-based day/week/milestone checkpoint incl. portfolio notes and learning gate |
+| `tutor` | automatic at checkpoints; "beni test et" · `/tutor <topic>` | Questions, explanation of gaps, re-test, verified resources; local learning log |
 | `git-workflow` | `/git-workflow` | Safe status/diff review, staging, commits, branch, pull, push with explanations |
 | `session-handoff` | `/session-handoff` | End a session: update the `Current State` block in `docs/PROGRESS.md` and report |
 
-Path-scoped rules in `.claude/rules/` load only when matching files are touched (`python.md`, `data-platform.md`, `docs-claims.md`). Safety deny/ask rules live in `.claude/settings.json`; personal overrides go in `.claude/settings.local.json` (gitignored).
+Path-scoped rules in `.claude/rules/` load only when matching files are touched (`python.md`, `data-platform.md`, `infra.md`, `docs-claims.md`); `secrets.md` always applies. Safety deny/ask rules and the `guard_commands.py` hook live in `.claude/settings.json`; personal overrides go in `.claude/settings.local.json` (gitignored).
+
+### Agents (this repository)
+
+| Agent | Role | Writes | Invoke |
+|---|---|---|---|
+| `implementer` | implements one task card | only the files assigned in the card | `@agent-implementer` or "use the implementer agent for …" |
+| `test-author` | independent tests from acceptance criteria | `tests/**`, dbt tests | `@agent-test-author` |
+| `reviewer` | design review before, code review after | nothing | `@agent-reviewer design …` / `code …` |
+| `evidence-auditor` | runs verifications, checks claims vs evidence | nothing | `@agent-evidence-auditor week 1` |
+
+How they cooperate (complex tasks only): coordinator writes a task card with an INTERFACE block →
+`reviewer` (design) → `implementer` and `test-author` **in parallel** on disjoint files → coordinator
+runs the verification → `reviewer` (code) → coordinator accepts or sends a fix loop (max 2). Trivial
+and normal tasks are done by the main session alone. `/agents` lists and edits agents.
+
+## Token economy (reusable in every project)
+
+What consumes tokens: everything in the context window is re-sent on every turn — CLAUDE.md, loaded
+rules and skills, every file read, every tool output and the whole conversation. Prompt caching
+makes repeated prefixes cheaper, but a long context is still the main cost driver.
+
+| Lever | Practice in this repo |
+|---|---|
+| Small always-on context | `CLAUDE.md` < 100 lines; details live in docs opened on demand |
+| Load on demand | Rules are path-scoped (`paths:` frontmatter); skills load only their one-line description until used |
+| Cheap resume | Start from the `Current State` block (≤ 25 lines) + one day card, not from all docs |
+| Short tool output | `pytest -q --tb=short`, `docker compose logs --tail 20`, `git diff --stat` first, `Read` with offset/limit, `Grep` before `Read` |
+| One topic per context | `/clear` when the topic changes; `/compact <focus>` when the same topic runs long |
+| Agents only when they pay | An agent starts cold (re-reads CLAUDE.md and its files). Use it to keep large exploration or parallel work *out of* the main context; never for small edits. Pass facts in the task card instead of letting it rediscover them |
+| No model ping-pong | Each model has its own cache; switching mid-session re-reads the context uncached |
+| Effort on purpose | Medium by default; High/xhigh only for hard reasoning |
+| Measure | `/context` (what fills the window), `/usage` (plan limits), `/cost` (session spend where shown); note heavy sessions in the handoff and adjust |
+
+Reusing the system in other projects: copy `.claude/agents/`, `.claude/skills/{work-orchestrator,checkpoint,session-handoff,git-workflow}`, `.claude/rules/secrets.md`, `.claude/hooks/guard_commands.py` and the settings skeleton; then rewrite only the project-specific parts (`CLAUDE.md`, `data-platform.md`, file-ownership globs in the orchestrator). Generic pieces can also live in `~/.claude/` (user scope) so every project gets them.
 
 ### Session routine for this project
 
-- **Start**: open VS Code in the repository root, check `/status` (account, model), choose the model with `/model` (Sonnet by default), then say e.g. *"Resume: read Current State in PROGRESS and continue with the next task."*
+- **Start**: open VS Code in the repository root, check `/status` (account, model should show Sonnet), then say e.g. *"Resume: read Current State in PROGRESS and continue with the next task."*
+- **End of a planned day**: *"checkpoint day W1.D2"*; end of week: *"checkpoint week 1"*.
 - **Topic change**: `/clear` (the project memory is reloaded from `CLAUDE.md`). **Same topic, long context**: `/compact`.
 - **End**: *"Session handoff"* (or `/session-handoff`), then review the diff and commit.
 

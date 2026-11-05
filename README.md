@@ -1,20 +1,21 @@
 # Multi-Tenant CRM Lakehouse Platform
 
-[![Status](https://img.shields.io/badge/Status-Early_Development_(Week_1%2F6)-orange?style=flat)](docs/PROGRESS.md)
+[![Status](https://img.shields.io/badge/Status-Early_Development_(Milestone_1%2F3)-orange?style=flat)](docs/PROGRESS.md)
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-Compose_v2-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
-[![Apache Spark](https://img.shields.io/badge/Apache_Spark-3.5.1-E25A1C?style=flat&logo=apachespark&logoColor=white)](https://spark.apache.org/)
+[![Apache Spark](https://img.shields.io/badge/Apache_Spark-3.5.9-E25A1C?style=flat&logo=apachespark&logoColor=white)](https://spark.apache.org/)
 [![Apache Kafka](https://img.shields.io/badge/Apache_Kafka-3.7_(KRaft)-231F20?style=flat&logo=apachekafka&logoColor=white)](https://kafka.apache.org/)
-[![Delta Lake](https://img.shields.io/badge/Delta_Lake-OSS_3.2-003366?style=flat&logo=delta&logoColor=white)](https://delta.io/)
-[![dbt Core](https://img.shields.io/badge/dbt--core-1.8-FF694B?style=flat&logo=dbt&logoColor=white)](https://www.getdbt.com/)
-[![Apache Airflow](https://img.shields.io/badge/Apache_Airflow-2.9.3-017CEE?style=flat&logo=apacheairflow&logoColor=white)](https://airflow.apache.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Delta Lake](https://img.shields.io/badge/Delta_Lake-OSS_3.3-003366?style=flat&logo=delta&logoColor=white)](https://delta.io/)
+[![dbt Core](https://img.shields.io/badge/dbt--spark-Gold_layer-FF694B?style=flat&logo=dbt&logoColor=white)](https://www.getdbt.com/)
+[![Apache Airflow](https://img.shields.io/badge/Apache_Airflow-3.x-017CEE?style=flat&logo=apacheairflow&logoColor=white)](https://airflow.apache.org/)
+[![AWS](https://img.shields.io/badge/AWS-Glue_5.0_%7C_Athena_%7C_Terraform-FF9900?style=flat&logo=amazonaws&logoColor=white)](docs/adr/0011-aws-glue-instead-of-emr-serverless.md)
+[![Databricks](https://img.shields.io/badge/Databricks-Unity_Catalog_(Free_Edition)-FF3621?style=flat&logo=databricks&logoColor=white)](docs/adr/0012-databricks-free-edition-track.md)
 
 > **A local-first, multi-tenant streaming lakehouse:** Kafka → Spark Structured Streaming → Delta Lake (Bronze / Silver) → dbt (Gold).  
 > Built around **correctness under failure** — duplicate delivery, out-of-order CDC, late events, schema drift, restarts and cross-tenant leakage — and around proving it with tests rather than claims.
 
 > [!IMPORTANT]
-> **Project status: early development (Week 1 of 6).** The local Docker infrastructure and generator configuration are in place; most components described below are **planned**. Every section is marked ✅ Implemented · 🔄 In progress · 📋 Planned. Live tracker: [docs/PROGRESS.md](docs/PROGRESS.md).
+> **Project status: early development — re-planned 2026-11-05, Milestone 1 of 3 starting.** The local Docker stack definition and a first generator configuration exist but are **not yet verified**; everything else below is **planned**. Every section is marked ✅ Implemented · 🔄 In progress · 📋 Planned. Live tracker: [docs/PROGRESS.md](docs/PROGRESS.md).
 
 > [!NOTE]
 > **Data**: All data is **fully synthetic**, produced by `src/generator/` (Faker + Pydantic v2). The entity model is inspired by the *TheLook* e-commerce domain (hence the repository name) and reshaped into a multi-brand CRM event model. No real company or customer data is used.
@@ -41,17 +42,14 @@ The engineering questions it answers:
 
 | Component | Status | Evidence / Location |
 |---|---|---|
-| Local stack: Kafka (KRaft), SeaweedFS, Spark, PostgreSQL, Airflow | ✅ | [docker-compose.yml](docker-compose.yml), [scripts/smoke_test.py](scripts/smoke_test.py) |
-| Generator configuration (`pydantic-settings`) | ✅ | [src/generator/config.py](src/generator/config.py) |
-| Synthetic generators (customer CDC, orders, products, clickstream) | 🔄 | Week 1 |
-| Kafka producer (keyed, idempotent) | 📋 | Week 1 |
-| Bronze ingestion (stream + batch), DLQ, replay | 📋 | Week 2 |
-| Silver: CDC MERGE, dedup, tenant-isolation tests | 📋 | Week 2 |
-| Silver SCD2 history + dbt Gold marts | 📋 | Week 3 |
-| Customer 360 / RFM marts, measured benchmarks | 📋 | Week 4 |
-| Airflow orchestration, GitHub Actions CI | 📋 | Week 5 |
-| Terraform (AWS S3 + IAM), Spark job on AWS S3 | 📋 | Week 6 |
-| Databricks Auto Loader / Asset Bundles | 📋 Stretch | Week 6 |
+| Local stack definition: Kafka (KRaft), SeaweedFS, Spark, PostgreSQL, Airflow | 🔄 defined, not verified; rebuild to Python 3.11 / Spark 3.5.9 planned (W1.D2) | [docker-compose.yml](docker-compose.yml) |
+| Generator configuration (`pydantic-settings`) | 🔄 v1, to be aligned with contracts (W1.D3) | [src/generator/config.py](src/generator/config.py) |
+| Data contracts, deterministic generator, keyed idempotent Kafka producer, CI | 📋 | Week 1 |
+| Bronze streaming, restart tests, DLQ, metastore + dbt spike | 📋 | Week 2 |
+| Silver: CDC MERGE, SCD2, dedup, reconciliation, tenant-isolation tests | 📋 | Week 3 |
+| dbt Gold (Customer 360, RFM), Airflow 3 pipeline | 📋 | Week 4 |
+| Terraform AWS foundation, same jobs on AWS Glue 5.0, CI/CD via OIDC | 📋 | Week 5 |
+| Privacy erasure; Databricks (Unity Catalog, jobs, dbt, dashboard); release | 📋 | Week 6 |
 
 ---
 
@@ -78,7 +76,7 @@ flowchart TB
         SPARK_BATCH["Batch jobs"]
     end
 
-    subgraph Medallion["4. Medallion Storage (Delta Lake OSS 3.2)"]
+    subgraph Medallion["4. Medallion Storage (Delta Lake OSS 3.3)"]
         direction TB
         BRONZE["Bronze: append-only raw records"]
         DLQ["DLQ: rejected records + replay metadata"]
@@ -88,7 +86,7 @@ flowchart TB
 
     subgraph Governance["5. Orchestration, Quality, IaC"]
         direction TB
-        AIRFLOW["Airflow 2.9: parametrised DAG + task mapping"]
+        AIRFLOW["Airflow 3.x: parametrised DAG + task mapping"]
         QUALITY["Pydantic contracts | Spark checks | dbt tests"]
         TERRAFORM["Terraform: AWS S3 + IAM"]
     end
@@ -142,13 +140,13 @@ Emails are pseudonymised with **keyed HMAC-SHA256** in Silver (plain SHA-256 of 
 
 | Layer | Local ($0) | AWS (Extended / Stretch) | What actually differs |
 |---|---|---|---|
-| Infrastructure | [docker-compose.yml](docker-compose.yml) | Terraform (`infra/terraform/`) | Provisioning model |
+| Infrastructure | [docker-compose.yml](docker-compose.yml) (profiles) | Terraform (`infra/terraform/`), destroyed after each cloud session | Provisioning model, cost |
 | Object storage | SeaweedFS (S3-compatible API) | AWS S3 (SSE, lifecycle rules) | IAM, encryption, listing/error behaviour; endpoint config isolated in settings |
 | Streaming | Kafka 3.7 (KRaft) | Not deployed in v1 | Kinesis is compared in ADR-0002 only |
-| Compute | OSS Spark 3.5.1 standalone | Local Spark → AWS S3 (Extended); Databricks (Stretch) | Runtime versions, connectors, cluster config |
-| Table format | Delta Lake OSS 3.2 | Delta OSS / Databricks Delta | Feature availability verified per runtime |
-| File ingestion | Spark file source | Databricks Auto Loader (Stretch) | Different source implementation → separate adapter |
-| Transformation | dbt Core 1.8 (`dbt-spark`) | `dbt-databricks` (Stretch) | Adapter capabilities verified per adapter |
+| Compute | OSS Spark 3.5.9 standalone (Python 3.11) | AWS Glue 5.0 (Spark 3.5.4, Python 3.11); Databricks serverless (Free Edition) | Runtime build, credentials (IAM role / workspace identity), logging |
+| Catalog | Hive metastore on PostgreSQL | AWS Glue Data Catalog; Unity Catalog on Databricks | Catalog client configuration, three-level namespace |
+| Table format | Delta Lake OSS 3.3.3 | Delta 3.3.0 on Glue 5.0; Databricks Delta | Patch-level and feature differences recorded |
+| Transformation | dbt-spark via Spark Thrift Server | dbt-databricks on a SQL warehouse; Athena for ad-hoc SQL on AWS | Same models, second adapter |
 
 Business logic is shared; environment specifics live in configuration and thin adapters. Results are reported **per environment**.
 
@@ -230,9 +228,9 @@ WHEN NOT MATCHED AND s._cdc_action <> 'D' THEN
 
 ## 8. Orchestration (Planned — Extended)
 
-- One **parametrised DAG** using dynamic task mapping over the configured tenant list (no per-tenant DAG generation).
+- Apache Airflow 3.x: one **parametrised DAG** using dynamic task mapping over the configured tenant list (no per-tenant DAG generation).
 - Airflow triggers Spark jobs (`Trigger.availableNow` micro-batches) and `dbt build`; it does not host long-running streams — Spark owns checkpoints and stream lifecycle.
-- Deterministic, seeded backfill; webhook alerts on failure and DLQ threshold breaches.
+- Quality gates (reconciliation, DLQ-rate thresholds per brand), tenant failure isolation, webhook alerts.
 
 ---
 
@@ -248,23 +246,25 @@ WHEN NOT MATCHED AND s._cdc_action <> 'D' THEN
 ```bash
 git clone https://github.com/dogruom/thelook-lakehouse-platform.git
 cd thelook-lakehouse-platform
-cp .env.example .env
+python scripts/bootstrap_env.py   # planned (W1.D2): creates .env with random local secrets
 
-# Start the local stack
-docker compose up -d --build
+# Start only what you need (profiles: core, sql, orchestration, tools)
+docker compose --profile core up -d
 docker compose ps
 
-# Infrastructure smoke test (networking, buckets, Kafka topics, service readiness)
+# Infrastructure smoke test (topics, buckets, metastore DB, Delta round trip)
 python scripts/smoke_test.py
 ```
 
-| Service | Local URL | Default Credentials (dev only) |
+| Service | Local URL | Credentials |
 |---|---|---|
-| Apache Airflow | http://localhost:8080 | `airflow` / `airflow` |
+| Apache Airflow (`orchestration`) | http://localhost:8080 | from your `.env` |
 | Spark Master UI | http://localhost:8181 | — |
-| SeaweedFS S3 API | http://localhost:9000 | `lakehouse_admin` / `lakehouse_secret_dev` |
+| SeaweedFS S3 API | http://localhost:9000 | from your `.env` |
 | SeaweedFS Filer | http://localhost:9001 | — |
 | Kafka broker | `localhost:9094` | — |
+
+All ports are published on `127.0.0.1` only (W1.D2). Secrets never appear in tracked files.
 
 ### Pipeline run 📋 (planned — commands become valid as components land)
 
@@ -273,10 +273,9 @@ python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements/dev.txt
 
-python -m src.generator.batch_runner --batches 15 --batch-size 500
-python -m src.generator.kafka_producer --events 5000
-
-cd dbt_project && dbt build
+pip install -e .[dev]
+python -m lakehouse.generator produce --events 5000
+python scripts/run_e2e.py          # planned (W4.D24): generate → Bronze → Silver → dbt
 ```
 
 ---
@@ -318,15 +317,18 @@ thelook-lakehouse-platform/
 │   ├── DELIVERY_PLAN.md           # 6-week execution plan
 │   ├── PROGRESS.md                # Sprint tracker with evidence
 │   └── adr/                       # Architecture Decision Records
-├── infra/terraform/               # AWS S3 + IAM (Extended)
-├── notebooks/                     # Databricks Auto Loader (Stretch)
+├── infra/terraform/               # AWS: S3, Glue Catalog + jobs, IAM/OIDC, Budgets
+├── databricks/                    # Asset Bundle, Unity Catalog grants (W6)
 ├── scripts/                       # smoke_test.py, init scripts, DLQ replay, backfill
-├── src/
-│   ├── generator/                 # Synthetic multi-tenant generator + Kafka producer
-│   ├── streaming/                 # Bronze / Silver Spark jobs
-│   ├── quality/                   # Validation gate, DLQ router, reconciliation
-│   └── utils/                     # Structured logging, shared helpers
-├── tests/{unit,integration}/
+├── src/lakehouse/                 # one package, independent components (ADR-0009)
+│   ├── contracts/                 # versioned event & table schemas (shared interface)
+│   ├── common/                    # settings, logging, Spark/storage adapters
+│   ├── generator/                 # synthetic data + Kafka producer + landing writer
+│   ├── ingestion/                 # Bronze stream + batch jobs
+│   ├── quality/                   # validation gate, DLQ, replay, reconciliation
+│   ├── silver/                    # CDC MERGE, SCD2, dedup jobs
+│   └── ops/                       # erasure, metrics report
+├── tests/{unit,spark,integration}/
 ├── docker-compose.yml
 └── pyproject.toml
 ```
@@ -339,6 +341,8 @@ thelook-lakehouse-platform/
 - Reverse ETL / operational triggers (e.g. webhook to marketing tools).
 - BI dashboard on Gold marts.
 - Managed Airflow, Kubernetes deployment.
+- dbt Gold on Snowflake or BigQuery; Databricks Auto Loader and paid-tier features.
+- Schema Registry (Avro/Protobuf) behind the event contracts; Spark 4 / Delta 4 upgrade.
 
 ---
 
@@ -349,8 +353,14 @@ thelook-lakehouse-platform/
 - 🛠️ [Engineering Standards](docs/ENGINEERING_STANDARDS.md)
 - 📅 [Delivery Plan — three two-week milestones](docs/DELIVERY_PLAN.md)
 - 📊 [Progress Tracker](docs/PROGRESS.md)
-- 🏛️ [ADR-0001: Local S3 Object Storage with SeaweedFS](docs/adr/0001-local-object-storage-seaweedfs.md)
+- 🏛️ ADRs: [0001 SeaweedFS](docs/adr/0001-local-object-storage-seaweedfs.md) · [0007 Runtime, catalog, Gold engine](docs/adr/0007-runtime-catalog-and-gold-engine.md) · [0008 AWS target and cost guardrails](docs/adr/0008-aws-target-emr-serverless-and-cost-guardrails.md) · [0009 Component boundaries](docs/adr/0009-component-boundaries-and-contracts.md) · [0011 AWS Glue](docs/adr/0011-aws-glue-instead-of-emr-serverless.md) · [0012 Databricks track](docs/adr/0012-databricks-free-edition-track.md)
 - 🧭 Developer guides: [Git quick reference](docs/GIT_CHEATSHEET.md) · [Claude Code workflow](docs/CLAUDE_CODE_CHEATSHEET.md)
+
+---
+
+## 🤖 Engineering Workflow
+
+Developed with Claude Code as an AI pair-programmer under explicit controls: a coordinator session plans each task, separate implementation and test-authoring agents work on disjoint files, an independent read-only reviewer gates acceptance, and an evidence auditor checks that every ✅ in [PROGRESS](docs/PROGRESS.md) has a commit and verification output. Configuration: [CLAUDE.md](CLAUDE.md), [.claude/](.claude/).
 
 ---
 
