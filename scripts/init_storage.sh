@@ -1,96 +1,64 @@
 #!/bin/sh
 # =============================================================================
-# Object Storage Initialization Script
+# Object storage initialisation (idempotent)
 # =============================================================================
-# Creates the lakehouse bucket with bronze/silver/gold prefixes.
-# Runs via amazon/aws-cli container against SeaweedFS S3 endpoint.
+# Runs in the amazon/aws-cli image via the seaweedfs-init compose service. Credentials come
+# from AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY in the container environment (never printed).
 #
-# Bucket structure:
-#   lakehouse/
-#   ├── bronze/          ← Raw ingested data (Parquet/CSV, immutable)
-#   │   ├── orders/
-#   │   ├── users/
-#   │   ├── order_items/
-#   │   ├── products/
-#   │   ├── inventory_items/
-#   │   └── distribution_centers/
-#   ├── silver/          ← Cleaned, validated data
-#   │   └── clickstream/
-#   ├── gold/            ← Aggregated analytics-ready data
-#   └── checkpoints/     ← Spark Structured Streaming checkpoints
+# One bucket, layer prefixes per Charter v8:
+#   landing/       raw files / generator landing zone  landing/{brand_id}/{entity}/{date}/
+#   bronze/        append-only raw events (Delta)
+#   silver/        Spark-owned current state and SCD2 (Delta)
+#   gold/          dbt-owned marts (Delta)
+#   dead_letter/   DLQ tables (Delta)
+#   ops/           pipeline metrics, audit and smoke-test scratch
+#   checkpoints/   Structured Streaming checkpoints, one directory per job
+# A zero-byte ".keep" object makes each prefix visible in listings; Delta tables are created
+# below these prefixes by the pipeline jobs.
 # =============================================================================
 
-set -e
+set -eu
 
 ENDPOINT="http://${S3_HOST:-seaweedfs}:${S3_PORT:-9000}"
 BUCKET="${LAKEHOUSE_BUCKET:-lakehouse}"
+PREFIXES="landing bronze silver gold dead_letter ops checkpoints"
 
-echo "=== Storage Init: Connecting to ${ENDPOINT} ==="
+s3() { aws --endpoint-url "${ENDPOINT}" --no-cli-pager "$@"; }
 
-# AWS CLI flags for SeaweedFS (path-style, no SSL verification needed)
-AWS_OPTS="--endpoint-url=${ENDPOINT} --no-cli-pager"
+echo "=== Storage init: ${ENDPOINT}, bucket '${BUCKET}' ==="
 
-# ---------------------------------------------------------------------------
-# Wait for S3 endpoint to be ready
-# ---------------------------------------------------------------------------
 MAX_ATTEMPTS=30
 ATTEMPT=0
-until aws s3 ls ${AWS_OPTS} > /dev/null 2>&1; do
+until s3 s3api list-buckets > /dev/null 2>&1; do
     ATTEMPT=$((ATTEMPT + 1))
     if [ "${ATTEMPT}" -ge "${MAX_ATTEMPTS}" ]; then
-        echo "ERROR: S3 endpoint not reachable after ${MAX_ATTEMPTS} attempts. Aborting."
+        echo "ERROR: S3 endpoint not reachable (or credentials rejected) after ${MAX_ATTEMPTS} attempts." >&2
         exit 1
     fi
     echo "Waiting for S3 endpoint... attempt ${ATTEMPT}/${MAX_ATTEMPTS}"
     sleep 2
 done
 
-echo "--- Connected to S3 endpoint at ${ENDPOINT} ---"
-
-# ---------------------------------------------------------------------------
-# Create main bucket (idempotent)
-# ---------------------------------------------------------------------------
-if aws s3 ls ${AWS_OPTS} "s3://${BUCKET}" > /dev/null 2>&1; then
-    echo "Bucket '${BUCKET}' already exists — skipping creation."
+if s3 s3api head-bucket --bucket "${BUCKET}" > /dev/null 2>&1; then
+    echo "Bucket '${BUCKET}' already exists."
 else
-    aws s3 mb ${AWS_OPTS} "s3://${BUCKET}"
+    s3 s3api create-bucket --bucket "${BUCKET}" > /dev/null
     echo "Bucket '${BUCKET}' created."
 fi
 
-# ---------------------------------------------------------------------------
-# Create folder structure via empty .keep files
-# ---------------------------------------------------------------------------
-PREFIXES="
-bronze/orders
-bronze/users
-bronze/order_items
-bronze/products
-bronze/inventory_items
-bronze/distribution_centers
-silver/clickstream
-gold/dim_users
-gold/dim_products
-gold/dim_distribution_centers
-gold/fct_orders
-gold/fct_clickstream_sessions
-gold/kpi_hourly_gmv
-gold/kpi_cart_abandonment
-gold/kpi_conversion_funnel
-checkpoints/streaming
-"
-
 for PREFIX in ${PREFIXES}; do
-    echo "" | aws s3 cp ${AWS_OPTS} - "s3://${BUCKET}/${PREFIX}/.keep" > /dev/null 2>&1 || true
-    echo "  Created prefix: s3://${BUCKET}/${PREFIX}/"
+    # put-object is idempotent: re-running overwrites the empty marker.
+    s3 s3api put-object --bucket "${BUCKET}" --key "${PREFIX}/.keep" > /dev/null
+    echo "  prefix ready: s3://${BUCKET}/${PREFIX}/"
 done
 
-# ---------------------------------------------------------------------------
-# Display bucket summary
-# ---------------------------------------------------------------------------
-echo ""
-echo "=== Storage Init: Complete ==="
-echo "Bucket: s3://${BUCKET}"
-aws s3 ls ${AWS_OPTS} --recursive "s3://${BUCKET}" | head -20 || true
-echo ""
-echo "  S3 endpoint: ${ENDPOINT}"
-echo "  Access Key:  ${AWS_ACCESS_KEY_ID}"
+# Verify the end state (fail if anything is missing).
+LISTING="$(s3 s3 ls "s3://${BUCKET}/")"
+for PREFIX in ${PREFIXES}; do
+    if ! printf '%s\n' "${LISTING}" | grep -q "PRE ${PREFIX}/"; then
+        echo "ERROR: prefix '${PREFIX}/' missing in s3://${BUCKET}/." >&2
+        exit 1
+    fi
+done
+
+echo "=== Storage init: complete ==="

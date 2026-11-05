@@ -1,68 +1,77 @@
 # =============================================================================
-# Multi-Tenant CRM Lakehouse — Docker Compose
+# Multi-Tenant CRM Lakehouse — local stack (Docker Compose)
 # =============================================================================
-# Services:
-#   postgres          — PostgreSQL 15 (airflow_metadata + crm_dwh)
-#   seaweedfs         — SeaweedFS S3-compatible object storage (replaces MinIO)
-#   seaweedfs-init    — One-shot: create lakehouse bucket + folder structure
-#   kafka             — Apache Kafka 3.7 in KRaft mode (no ZooKeeper!)
-#   spark-master      — Apache Spark 3.5 Master
-#   spark-worker      — Apache Spark 3.5 Worker
-#   airflow-init      — One-shot: DB migrate + admin user creation
-#   airflow-webserver — Airflow Webserver
-#   airflow-scheduler — Airflow Scheduler (LocalExecutor)
+# Profiles (start only what the task needs):
+#   core           postgres, seaweedfs (+init), kafka (+init), spark-master, spark-worker
+#   sql            spark-thrift  (Spark Thrift Server for dbt-spark; ADR-0007, verified in W2.D11)
+#   orchestration  airflow-*     (placeholder until the Airflow 3 image lands in Milestone 2)
+#   tools          spark-test    (pytest inside the Spark image; tests/spark from W2.D7)
 #
-# NOTE: MinIO Community Edition was officially archived in 2025/2026.
-#       SeaweedFS is the drop-in S3-compatible replacement used here.
-#       All boto3/S3 code remains unchanged — only endpoint URL differs.
+# Rules (.claude/rules/infra.md):
+#   - every image is pinned; no :latest
+#   - every host port is bound to 127.0.0.1
+#   - every secret is "${VAR:?message}" with no fallback; values live in the gitignored .env
+#   - config files are mounted, not baked into images
 #
-# Usage:
-#   cp .env.example .env
-#   docker compose up -d --build
-#   docker compose ps          # All should show "healthy"
+# Usage (PowerShell, repo root):
+#   python scripts/bootstrap_env.py                # creates .env with random local secrets if absent
+#   python scripts/check_env.py                    # lists missing keys (names only)
+#   docker compose --profile core up -d            # first run builds the Spark image (~2-3 GB)
+#   python scripts/smoke_test.py
+#   docker compose stop                            # never `down -v`
 #
-# UIs:
-#   SeaweedFS Filer: http://localhost:9001  (no auth in dev mode)
-#   Airflow:         http://localhost:8080  (airflow / airflow)
-#   Spark Master:    http://localhost:8181
+# Local UIs (127.0.0.1 only): SeaweedFS filer :9001, Spark master :8181, worker :8182.
+# SeaweedFS is S3-compatible, not AWS S3; differences go to docs/LOCAL_VS_CLOUD.md.
 # =============================================================================
 
 name: crm_lakehouse
 
+# --- Shared fragments --------------------------------------------------------
+x-s3-credentials: &s3-credentials
+  # Read by the S3A EnvironmentVariableCredentialsProvider and by the AWS CLI / SDKs.
+  AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:?S3_ACCESS_KEY missing - run scripts/bootstrap_env.py}
+  AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY missing - run scripts/bootstrap_env.py}
+
+x-spark-common: &spark-common
+  image: crm/spark:3.5.9
+  build:
+    context: ./docker/spark
+    dockerfile: Dockerfile
+    args:
+      SPARK_VERSION: "3.5.9"
+  networks:
+    - lakehouse_net
+  restart: unless-stopped
+
+# Read-only mount: config is not baked into the image and carries no credentials.
+x-spark-conf: &spark-conf ./docker/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+
 x-airflow-common: &airflow-common
+  # Placeholder: Airflow 3 image and DAG layout are built in Milestone 2.
   image: crm/airflow:2.9.3
   build:
     context: ./docker/airflow
     dockerfile: Dockerfile
     args:
       AIRFLOW_VERSION: "2.9.3"
+  profiles: ["orchestration"]
   environment: &airflow-common-env
+    <<: *s3-credentials
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
-    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:-ZmDfcTF7_60GrrY167zsiPd67pEvs0aGOv2oasOM1Pg=}
-    AIRFLOW__CORE__SECRET_KEY: ${AIRFLOW__CORE__SECRET_KEY:-crm_airflow_secret_key_change_in_prod}
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER:-airflow}:${AIRFLOW_DB_PASSWORD:-airflow_secret_2024}@postgres:5432/${AIRFLOW_DB_NAME:-airflow_metadata}
-    AIRFLOW__WEBSERVER__BASE_URL: http://localhost:8080
-    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
-    # S3 / SeaweedFS (S3-compatible)
-    AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-lakehouse_admin}
-    AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-lakehouse_secret_dev}
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:?AIRFLOW__CORE__FERNET_KEY missing - see .env.example}
+    AIRFLOW__API__SECRET_KEY: ${AIRFLOW__API__SECRET_KEY:?AIRFLOW__API__SECRET_KEY missing - run scripts/bootstrap_env.py}
+    AIRFLOW_DB_NAME: ${AIRFLOW_DB_NAME:-airflow_metadata}
+    AIRFLOW_DB_USER: ${AIRFLOW_DB_USER:-airflow}
+    AIRFLOW_DB_PASSWORD: ${AIRFLOW_DB_PASSWORD:?AIRFLOW_DB_PASSWORD missing - run scripts/bootstrap_env.py}
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER:-airflow}:${AIRFLOW_DB_PASSWORD:?AIRFLOW_DB_PASSWORD missing}@postgres:5432/${AIRFLOW_DB_NAME:-airflow_metadata}
     AWS_ENDPOINT_URL: http://seaweedfs:9000
-    # DWH connection
-    DWH_DB_HOST: postgres
-    DWH_DB_PORT: "5432"
-    DWH_DB_NAME: ${DWH_DB_NAME:-crm_dwh}
-    DWH_DB_USER: ${DWH_DB_USER:-crm_dwh}
-    DWH_DB_PASSWORD: ${DWH_DB_PASSWORD:-dwh_secret_2024}
-    # Kafka
     KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-    # Python
-    PYTHONPATH: /opt/airflow
     PYTHONUNBUFFERED: "1"
   volumes:
     - ./dags:/opt/airflow/dags
-    - ./src:/opt/airflow/src
+    - ./src:/opt/airflow/src:ro
     - ./dbt_project:/opt/airflow/dbt_project
     - airflow_logs:/opt/airflow/logs
     - airflow_plugins:/opt/airflow/plugins
@@ -79,31 +88,34 @@ x-airflow-common: &airflow-common
 services:
 
   # ===========================================================================
-  # POSTGRESQL — Metadata store (Airflow) + DWH
+  # POSTGRESQL — Airflow metadata + Hive metastore (ADR-0007). No other databases.
+  # Init script runs on the FIRST start of an empty data volume only.
   # ===========================================================================
   postgres:
     image: postgres:15.7-alpine
+    profiles: ["core"]
     container_name: crm_postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-crm_admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crm_secret_2024}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD missing - run scripts/bootstrap_env.py}
       POSTGRES_DB: ${POSTGRES_ROOT_DB:-postgres}
-      # These are used by the init script
+      # Consumed by scripts/init_postgres.sh
       AIRFLOW_DB_NAME: ${AIRFLOW_DB_NAME:-airflow_metadata}
       AIRFLOW_DB_USER: ${AIRFLOW_DB_USER:-airflow}
-      AIRFLOW_DB_PASSWORD: ${AIRFLOW_DB_PASSWORD:-airflow_secret_2024}
-      DWH_DB_NAME: ${DWH_DB_NAME:-crm_dwh}
-      DWH_DB_USER: ${DWH_DB_USER:-crm_dwh}
-      DWH_DB_PASSWORD: ${DWH_DB_PASSWORD:-dwh_secret_2024}
+      AIRFLOW_DB_PASSWORD: ${AIRFLOW_DB_PASSWORD:?AIRFLOW_DB_PASSWORD missing - run scripts/bootstrap_env.py}
+      HIVE_METASTORE_DB_NAME: ${HIVE_METASTORE_DB_NAME:-hive_metastore}
+      HIVE_METASTORE_DB_USER: ${HIVE_METASTORE_DB_USER:-hive}
+      HIVE_METASTORE_DB_PASSWORD: ${HIVE_METASTORE_DB_PASSWORD:?HIVE_METASTORE_DB_PASSWORD missing - run scripts/bootstrap_env.py}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init_postgres.sh:/docker-entrypoint-initdb.d/init_postgres.sh:ro
     ports:
-      - "5432:5432"
+      # Host port is configurable: a native Windows PostgreSQL service often owns 5432.
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-15432}:5432"
     networks:
       - lakehouse_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crm_admin} -d ${POSTGRES_ROOT_DB:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -111,35 +123,26 @@ services:
     restart: unless-stopped
 
   # ===========================================================================
-  # SEAWEEDFS — S3-compatible object storage (replaces deprecated MinIO)
-  # Bronze / Silver / Gold lakehouse layers
-  # S3 API:   http://localhost:9000  (AWS_ACCESS_KEY_ID/SECRET work as-is)
-  # Filer UI: http://localhost:9001
+  # SEAWEEDFS — S3-compatible object storage (single bucket, prefixes per Charter)
+  # S3 API :9000, filer UI :9001, master API :9333 (all 127.0.0.1)
+  # Identities are rendered from S3_ACCESS_KEY / S3_SECRET_KEY at container start.
   # ===========================================================================
   seaweedfs:
-    image: chrislusf/seaweedfs:latest
+    image: chrislusf/seaweedfs:4.52
+    profiles: ["core"]
     container_name: crm_seaweedfs
-    # Run all-in-one: master + volume server + filer + S3 gateway
-    command: >
-      server
-      -dir=/data
-      -master.defaultReplication=000
-      -master.port=9333
-      -volume.port=8080
-      -filer
-      -filer.port=9001
-      -s3
-      -s3.port=9000
-      -s3.config=/config/s3.json
-      -s3.allowEmptyFolder=true
-      -s3.domainName=''
+    entrypoint: ["/bin/sh", "/config/entrypoint.sh"]
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?S3_ACCESS_KEY missing - run scripts/bootstrap_env.py}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY missing - run scripts/bootstrap_env.py}
     volumes:
       - seaweedfs_data:/data
-      - ./docker/seaweedfs/s3.json:/config/s3.json:ro
+      - ./docker/seaweedfs/entrypoint.sh:/config/entrypoint.sh:ro
+      - ./docker/seaweedfs/s3.json.template:/config/s3.json.template:ro
     ports:
-      - "9000:9000"   # S3 API  (boto3 endpoint)
-      - "9001:9001"   # Filer Web UI
-      - "9333:9333"   # Master API
+      - "127.0.0.1:9000:9000"   # S3 API
+      - "127.0.0.1:9001:9001"   # Filer UI
+      - "127.0.0.1:9333:9333"   # Master API
     networks:
       - lakehouse_net
     healthcheck:
@@ -150,20 +153,17 @@ services:
       start_period: 40s
     restart: unless-stopped
 
-  # SeaweedFS bucket initialization — creates lakehouse bucket + folder structure
+  # One-shot: create the bucket and the layer prefixes (idempotent).
   seaweedfs-init:
-    image: amazon/aws-cli:latest
+    image: amazon/aws-cli:2.39.5
+    profiles: ["core"]
     container_name: crm_seaweedfs_init
     entrypoint: ["/bin/sh", "/scripts/init_storage.sh"]
     environment:
+      <<: *s3-credentials
       S3_HOST: seaweedfs
       S3_PORT: "9000"
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-lakehouse_admin}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-lakehouse_secret_dev}
       LAKEHOUSE_BUCKET: ${LAKEHOUSE_BUCKET:-lakehouse}
-      # AWS CLI config for SeaweedFS S3 endpoint
-      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-lakehouse_admin}
-      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-lakehouse_secret_dev}
       AWS_DEFAULT_REGION: us-east-1
     volumes:
       - ./scripts/init_storage.sh:/scripts/init_storage.sh:ro
@@ -175,26 +175,28 @@ services:
     restart: on-failure
 
   # ===========================================================================
-  # KAFKA — KRaft mode (no ZooKeeper)
+  # KAFKA — KRaft, single node (no ZooKeeper). Topics: customer_cdc, clickstream_events.
+  # Clients inside the network use kafka:9092; host clients use 127.0.0.1:9094.
   # ===========================================================================
   kafka:
     image: apache/kafka:3.7.1
+    profiles: ["core"]
     container_name: crm_kafka
     environment:
-      KAFKA_NODE_ID: ${KAFKA_NODE_ID:-1}
-      KAFKA_PROCESS_ROLES: ${KAFKA_PROCESS_ROLES:-broker,controller}
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9094
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_CLUSTER_ID: ${KAFKA_CLUSTER_ID:-MkU3OEVBNTcwNTJENDM2Qk}
+      KAFKA_CLUSTER_ID: ${KAFKA_CLUSTER_ID:?KAFKA_CLUSTER_ID missing - see .env.example}
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_LOG_DIRS: /var/lib/kafka/data
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
-      KAFKA_NUM_PARTITIONS: ${CLICKSTREAM_PARTITIONS:-3}
+      KAFKA_NUM_PARTITIONS: ${TOPIC_PARTITIONS:-3}
       KAFKA_DEFAULT_REPLICATION_FACTOR: 1
-      KAFKA_LOG_RETENTION_MS: ${CLICKSTREAM_RETENTION_MS:-604800000}
+      KAFKA_LOG_RETENTION_MS: ${TOPIC_RETENTION_MS:-604800000}
       KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
@@ -202,7 +204,7 @@ services:
     volumes:
       - kafka_data:/var/lib/kafka/data
     ports:
-      - "9094:9094"   # External (host machine)
+      - "127.0.0.1:9094:9094"   # EXTERNAL listener for host clients
     networks:
       - lakehouse_net
     healthcheck:
@@ -213,17 +215,18 @@ services:
       start_period: 60s
     restart: unless-stopped
 
-  # Kafka topic initialization
+  # One-shot: create the two topics (idempotent). There is no Kafka DLQ topic (Charter v8).
   kafka-init:
     image: apache/kafka:3.7.1
+    profiles: ["core"]
     container_name: crm_kafka_init
     entrypoint: ["/bin/sh", "/scripts/init_kafka.sh"]
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      CDC_TOPIC: ${CDC_TOPIC:-customer_cdc}
       CLICKSTREAM_TOPIC: ${CLICKSTREAM_TOPIC:-clickstream_events}
-      CLICKSTREAM_PARTITIONS: ${CLICKSTREAM_PARTITIONS:-3}
-      CLICKSTREAM_REPLICATION_FACTOR: ${CLICKSTREAM_REPLICATION_FACTOR:-1}
-      CLICKSTREAM_RETENTION_MS: ${CLICKSTREAM_RETENTION_MS:-604800000}
+      TOPIC_PARTITIONS: ${TOPIC_PARTITIONS:-3}
+      TOPIC_RETENTION_MS: ${TOPIC_RETENTION_MS:-604800000}
     volumes:
       - ./scripts/init_kafka.sh:/scripts/init_kafka.sh:ro
     depends_on:
@@ -234,95 +237,142 @@ services:
     restart: on-failure
 
   # ===========================================================================
-  # SPARK — Master + Worker
+  # SPARK — standalone master + worker (Python 3.11, Java 17, Spark 3.5.9, Delta 3.3.3)
   # ===========================================================================
   spark-master:
-    image: crm/spark:3.5.1
-    build:
-      context: ./docker/spark
-      dockerfile: Dockerfile
-      args:
-        SPARK_VERSION: "3.5.1"
+    <<: *spark-common
+    profiles: ["core"]
     container_name: crm_spark_master
-    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
     environment:
+      <<: *s3-credentials
       SPARK_MASTER_HOST: spark-master
       SPARK_MASTER_PORT: "7077"
       SPARK_MASTER_WEBUI_PORT: "8181"
-      SPARK_MODE: master
-      # S3A / MinIO
-      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-lakehouse_admin}
-      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-lakehouse_secret_dev}
+      LAKEHOUSE_BUCKET: ${LAKEHOUSE_BUCKET:-lakehouse}
     volumes:
+      - *spark-conf
       - ./src:/opt/spark-apps/src:ro
       - spark_logs:/opt/spark/logs
     ports:
-      - "8181:8181"   # Master Web UI
-      - "7077:7077"   # Master port (Spark protocol)
-    networks:
-      - lakehouse_net
+      - "127.0.0.1:8181:8181"   # Master UI (7077 stays inside the compose network)
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8181"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8181"]
       interval: 15s
       timeout: 10s
       retries: 5
       start_period: 30s
-    restart: unless-stopped
 
   spark-worker:
-    image: crm/spark:3.5.1
-    build:
-      context: ./docker/spark
-      dockerfile: Dockerfile
-      args:
-        SPARK_VERSION: "3.5.1"
+    <<: *spark-common
+    profiles: ["core"]
     container_name: crm_spark_worker
-    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
     environment:
+      <<: *s3-credentials
       SPARK_WORKER_CORES: ${SPARK_WORKER_CORES:-2}
       SPARK_WORKER_MEMORY: ${SPARK_WORKER_MEMORY:-2g}
       SPARK_WORKER_WEBUI_PORT: "8182"
-      SPARK_MODE: worker
-      SPARK_MASTER_URL: spark://spark-master:7077
-      # S3A / MinIO
-      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-lakehouse_admin}
-      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-lakehouse_secret_dev}
+      LAKEHOUSE_BUCKET: ${LAKEHOUSE_BUCKET:-lakehouse}
     volumes:
+      - *spark-conf
       - ./src:/opt/spark-apps/src:ro
-      - spark_logs:/opt/spark/logs
     ports:
-      - "8182:8182"   # Worker Web UI
-    networks:
-      - lakehouse_net
+      - "127.0.0.1:8182:8182"   # Worker UI
     depends_on:
       spark-master:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8182"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8182"]
       interval: 15s
       timeout: 10s
       retries: 5
       start_period: 30s
-    restart: unless-stopped
+
+  # Spark Thrift Server for dbt-spark (thrift method). Metastore wiring (Postgres-backed Hive
+  # metastore) and the dbt capability spike are W2.D11; here it only exposes the SQL endpoint.
+  spark-thrift:
+    <<: *spark-common
+    profiles: ["sql"]
+    container_name: crm_spark_thrift
+    command:
+      - /opt/spark/bin/spark-submit
+      - --class
+      - org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
+      - --name
+      - thrift-server
+      - --master
+      - spark://spark-master:7077
+      - --conf
+      - spark.cores.max=1
+      - --conf
+      - spark.executor.memory=512m
+      - spark-internal
+      - --hiveconf
+      - hive.server2.thrift.port=10000
+      - --hiveconf
+      - hive.server2.thrift.bind.host=0.0.0.0
+    environment:
+      <<: *s3-credentials
+      LAKEHOUSE_BUCKET: ${LAKEHOUSE_BUCKET:-lakehouse}
+    volumes:
+      - *spark-conf
+      - ./src:/opt/spark-apps/src:ro
+    ports:
+      - "127.0.0.1:10000:10000"
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; socket.create_connection(('127.0.0.1', 10000), 3)"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # pytest inside the Spark image (PySpark tests never run on the Windows host):
+  #   docker compose --profile tools run --rm spark-test pytest tests/spark -q
+  spark-test:
+    <<: *spark-common
+    profiles: ["tools"]
+    container_name: crm_spark_test
+    command: ["pytest", "tests/spark", "-q"]
+    working_dir: /workspace
+    environment:
+      <<: *s3-credentials
+      LAKEHOUSE_BUCKET: ${LAKEHOUSE_BUCKET:-lakehouse}
+    volumes:
+      - *spark-conf
+      - ./src:/opt/spark-apps/src:ro
+      - ./tests:/workspace/tests:ro
+      - ./pyproject.toml:/workspace/pyproject.toml:ro
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    restart: "no"
 
   # ===========================================================================
-  # AIRFLOW — Webserver + Scheduler (LocalExecutor)
+  # AIRFLOW — placeholder until Milestone 2 (Airflow 3, own image). Not part of `core`.
   # ===========================================================================
   airflow-init:
     <<: *airflow-common
     container_name: crm_airflow_init
+    environment:
+      <<: *airflow-common-env
+      AIRFLOW_ADMIN_USER: ${AIRFLOW_ADMIN_USER:-admin}
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:?AIRFLOW_ADMIN_PASSWORD missing - run scripts/bootstrap_env.py}
     command:
       - bash
       - -c
       - |
         airflow db migrate &&
         airflow users create \
-          --username "${AIRFLOW_ADMIN_USER:-airflow}" \
-          --password "${AIRFLOW_ADMIN_PASSWORD:-airflow}" \
+          --username "$$AIRFLOW_ADMIN_USER" \
+          --password "$$AIRFLOW_ADMIN_PASSWORD" \
           --firstname Admin \
           --lastname User \
           --role Admin \
-          --email "${AIRFLOW_ADMIN_EMAIL:-admin@crm-lakehouse.local}" &&
+          --email admin@crm-lakehouse.local &&
         echo 'Airflow initialized successfully'
     restart: on-failure
 
@@ -331,7 +381,7 @@ services:
     container_name: crm_airflow_webserver
     command: airflow webserver
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 30s
@@ -349,7 +399,7 @@ services:
     container_name: crm_airflow_scheduler
     command: airflow scheduler
     healthcheck:
-      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname $(hostname)"]
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname $$(hostname)"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -362,7 +412,7 @@ services:
 
 
 # =============================================================================
-# VOLUMES
+# VOLUMES (never delete: `docker compose stop`, not `down -v`)
 # =============================================================================
 volumes:
   postgres_data:

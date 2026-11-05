@@ -1,9 +1,1 @@
-# PySpark and Kafka connector dependencies
-# JARs are managed separately (see docker/spark/Dockerfile)
--r base.txt
-
-pyspark==3.5.1
-delta-spark==3.2.0
-
-# Kafka Python client (used in producer, not Spark itself)
-confluent-kafka==2.4.0
+# Intentionally empty: the Spark runtime (PySpark from the 3.5.9 tarball, delta-spark 3.3.3, JARs and Python deps) is pinned in docker/spark/Dockerfile, the single source of truth (ADR-0007).

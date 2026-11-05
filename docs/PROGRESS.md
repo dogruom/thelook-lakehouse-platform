@@ -13,16 +13,17 @@
 
 ## Current State
 
-- **Updated**: 2026-11-06 · **Branch**: `feat/w1-baseline` (W1.D1, commit `00df04e` + docs) pushed; `main` = `23b0cb7` (re-plan)
-- **Last delivered**: re-plan v8.1 (`23b0cb7`); W1.D1.1–D1.3 ✅ — `src/lakehouse` package, first tests, pre-commit + gitleaks, import-linter, CI workflow (see D1 Evidence).
-- **Unfinished**: W1.D1.4 ✅ (CI green); merge `feat/w1-baseline` → `main`; W1.D1 learning gate (tutor) not yet run.
-- **Tests & results**: unit 10 passed, coverage 100%; ruff/mypy clean; import-linter 2 kept (+ negative probe); pre-commit 10/10; full-history gitleaks clean; reviewer APPROVE WITH NITS (MAJOR fixed). Agent models verified: main Sonnet, `reviewer` Sonnet, `Explore` Haiku, no Opus.
+- **Updated**: 2026-11-06 (day closed) · **Branch**: `main` — W1.D1 (PR #1, `1f65213`) and W1.D2 (PR #2) merged; start W1.D3 from `main`
+- **Last delivered**: W1.D1 merged to `main` (PR #1, CI green); W1.D2.1–D2.4 ✅ — Spark 3.5.9/Py 3.11 image, hardened compose, init scripts, smoke test v2 24/24 (see D2 Evidence).
+- **Unfinished**: W1.D1 tutor gate **not passed** — 5 topics `open` (learning debt, owner asked for a slower re-teach with diagrams; see `.claude/learning/LEARNING_LOG.md`); W1.D2 tutor gate not run.
+- **Tests & results**: unit 48 passed; ruff/mypy clean; import-linter 2 kept; smoke test 24/24; reviewer (security) APPROVE WITH NITS. Restart verified: `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` gone; main Opus, workers Sonnet/Haiku per agent frontmatter.
+- **Owner action**: none open (`.env` `COMPOSE_PROJECT_NAME` fixed by owner 2026-11-06; old `thelook_*` containers/volumes untouched and stopped). Tutor now reads the learning log first and appends an expanded note for every `🧠 Anla` line.
 - **Decisions to remember**: Spark 3.5.9/Delta 3.3.3/Python 3.11; HMS + dbt-spark/Thrift (spike W2.D11); **AWS Glue 5.0** (ADR-0011); **Databricks Free Edition W6.D32–D33** (ADR-0012); budget ≤ USD 50; AWS Free plan ends ≈ 2027-03-22.
-- **Risks / blockers**: IAM Identity Center unavailable (CLI access decided W5.D25.1); Spark image rebuild ~2–3 GB (W1.D2.1, needs owner OK); 7.6 GB Docker memory; `gh` CLI logged in as `dogruom` (2026-11-06). Restart Claude Code once so the old `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` variable disappears from the session.
+- **Risks / blockers**: IAM Identity Center unavailable (CLI access decided W5.D25.1); 7.6 GB Docker memory (core stack ≈ 0.9 GiB idle); native PostgreSQL 18 on host port 5432 (container uses 15432); `gh` CLI logged in as `dogruom`.
 - **Session 2026-11-06 close**: operating model frozen — coordinator = Opus medium (project default), workers Sonnet (`implementer`, `test-author`, `reviewer`) and Haiku (`Explore`, `evidence-auditor`); `docs/ARCHITECTURE.md` (incl. reference comparison and diagram briefs) and `docs/AI_DEVELOPMENT_PLAYBOOK.md` added; dbt package set checked (ADR-0007).
-- **Next task (tomorrow, "Start today's task")**: (1) W1.D1 tutor gate → PR + merge `feat/w1-baseline` → `main` (owner approval); (2) **W1.D2** — local stack rebuild and hardening (DELIVERY_PLAN §3 D2 card: files, deliverable, verify, done-when; PROGRESS W1.D2.1–D2.4).
-- **Next mode**: coordinator plans; `implementer` (Sonnet) for Dockerfile/compose/scripts, `test-author` for `bootstrap_env`/`check_env` unit tests, `reviewer` (`security`) before merge. **Owner approval needed**: Spark image build (~2–3 GB download).
-- **Learning outcome for W1.D2**: why driver and executor Python versions must match, and how S3A credential providers avoid secrets in Spark config.
+- **Next task ("Start today's task")**: (1) tutor: slow re-teach of the 5 W1.D1 topics with diagrams + W1.D2 gate; (2) **W1.D3** — data contracts and generator configuration (DELIVERY_PLAN D3 card), plus the W1.D2 follow-up static compose policy test.
+- **Next mode**: coordinator plans; `implementer` + `test-author` in parallel (contracts are 🔺 correctness); `reviewer` design review first.
+- **Learning outcome for W1.D2 (still to test)**: why driver and executor Python versions must match, and how S3A credential providers avoid secrets in Spark config.
 
 ---
 
@@ -49,7 +50,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 ## 📊 Macro Status (count of ✅ tasks / planned tasks)
 
 ```
-M1 (D1–D12)   [██░░░░░░░░░░░░░░░░░░]  3 / 37
+M1 (D1–D12)   [████░░░░░░░░░░░░░░░░]  8 / 37
 M2 (D13–D24)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 ```
@@ -82,12 +83,12 @@ M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  
 #### D2 · Local stack rebuild and hardening
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
-| W1.D2.1 | Spark image per ADR-0007 | Python 3.11, Java 17, Spark 3.5.9, Delta 3.3.3, pinned JARs; `spark-defaults.conf` mounted, no credentials | `docker compose run --rm spark-master python3 --version` → 3.11.x; `spark-submit --version` → 3.5.9 | ⏳ |
-| W1.D2.2 | Compose profiles + secret hardening | profiles `core/sql/orchestration/tools`; ports on `127.0.0.1`; `${VAR:?}` for every secret; no `:latest`; SeaweedFS identities rendered from env; `bootstrap_env.py` never overwrites; `check_env.py` prints key names only | `docker compose config --quiet`; `python scripts/check_env.py`; `gitleaks detect --no-git -s docker` | ⏳ |
-| W1.D2.3 | Init scripts aligned | topics `customer_cdc`, `clickstream_events` (no Kafka DLQ); prefixes `landing/ bronze/ silver/ gold/ dead_letter/ ops/ checkpoints/`; DBs `airflow_metadata`, `hive_metastore`; no `crm_dwh`/`snapshots` | `kafka-topics.sh --list`; `aws s3 ls` (in container) | ⏳ |
-| W1.D2.4 | Strict smoke test v2 | fails on any missing topic/bucket/DB; Delta write + read via s3a in Spark; prints memory per container; host spec recorded | `python scripts/smoke_test.py` → all pass, exit 0 | ⏳ |
+| W1.D2.1 | Spark image per ADR-0007 | Python 3.11, Java 17, Spark 3.5.9, Delta 3.3.3, pinned JARs; `spark-defaults.conf` mounted, no credentials | `docker compose run --rm spark-master python3 --version` → 3.11.x; `spark-submit --version` → 3.5.9 | ✅ `f896e02` |
+| W1.D2.2 | Compose profiles + secret hardening | profiles `core/sql/orchestration/tools`; ports on `127.0.0.1`; `${VAR:?}` for every secret; no `:latest`; SeaweedFS identities rendered from env; `bootstrap_env.py` never overwrites; `check_env.py` prints key names only | `docker compose config --quiet`; `python scripts/check_env.py`; `gitleaks detect --no-git -s docker` | ✅ `f896e02` |
+| W1.D2.3 | Init scripts aligned | topics `customer_cdc`, `clickstream_events` (no Kafka DLQ); prefixes `landing/ bronze/ silver/ gold/ dead_letter/ ops/ checkpoints/`; DBs `airflow_metadata`, `hive_metastore`; no `crm_dwh`/`snapshots` | `kafka-topics.sh --list`; `aws s3 ls` (in container) | ✅ `f896e02` |
+| W1.D2.4 | Strict smoke test v2 | fails on any missing topic/bucket/DB; Delta write + read via s3a in Spark; prints memory per container; host spec recorded | `python scripts/smoke_test.py` → all pass, exit 0 | ✅ `f896e02` |
 
-**Evidence**: _—_
+**Evidence** (2026-11-06, commit `f896e02`, branch `feat/w1-local-stack`): W1.D2.1 — image `crm/spark:3.5.9` built (1.94 GB): Python 3.11.18, OpenJDK 17.0.21, Spark 3.5.9, `delta-spark_2.12-3.3.3`, `hadoop-aws-3.3.4` = `hadoop-client-api-3.3.4`; tarball SHA-512 and JAR SHA-1 verified at build; non-root `spark` user. W1.D2.2 — `check_env.py` → exit 0 ("all keys set", names only); `bootstrap_env.py --add-missing` appended 15 keys to an existing `.env` without printing values; `docker compose config --quiet` replaced by an offline PyYAML parse (profiles, pinned images, `127.0.0.1` ports, no secret fallbacks) because the guard hook blocks `compose config`; gitleaks via pre-commit on all staged files → passed; 38 unit tests for the env scripts. W1.D2.3 — init logs: topics `customer_cdc`, `clickstream_events` created; 7 prefixes ready; DBs verified by the smoke test. W1.D2.4 — `smoke_test.py` → **24/24 checks passed, exit 0** (health ×5, host endpoints ×3, topics ×2, bucket + 7 prefixes, DBs ×2, Delta s3a round trip rows=3, Spark 3.5.9, driver/executor Python 3.11); memory: kafka 326 MiB, spark-master 265 MiB, spark-worker 217 MiB, postgres 60 MiB, seaweedfs 38 MiB of 7.6 GiB; host: Windows 11 (10.0.26200), 8 logical CPUs, Docker 29.1.3. Gates: ruff/format clean, mypy 13 files clean, `pytest tests/unit` 48 passed, import-linter 2 kept. Review: `reviewer` (code, security) APPROVE WITH NITS, 0 blocker/major; MINOR 1 (Fernet comment) and init_postgres wording fixed; MINOR 2–3 documented in [LOCAL_VS_CLOUD.md](LOCAL_VS_CLOUD.md); open follow-ups: static compose policy test (no `:latest`, `127.0.0.1` ports, no secret fallbacks) and an `entrypoint.sh` test → W1.D3 backlog; SHA-256 for JARs and digest-pinned base image (NIT). Deviations: Postgres host port `${POSTGRES_HOST_PORT:-15432}` (native PostgreSQL 18 owns 5432); stack run with `COMPOSE_PROJECT_NAME=crm_lakehouse` set in the shell because the owner's `.env` still carries an old project name.
 
 #### D3 · Data contracts and generator configuration
 | ID | Task | Acceptance | Verify | Status |
