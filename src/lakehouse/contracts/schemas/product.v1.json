@@ -1,0 +1,78 @@
+{
+  "$defs": {
+    "ProductCategory": {
+      "enum": [
+        "Apparel",
+        "Electronics",
+        "Home",
+        "Beauty"
+      ],
+      "title": "ProductCategory",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "``product`` v1 (static catalog seed).",
+  "properties": {
+    "brand_id": {
+      "pattern": "^brand_[a-z0-9_]{1,40}$",
+      "title": "Brand Id",
+      "type": "string"
+    },
+    "category": {
+      "$ref": "#/$defs/ProductCategory"
+    },
+    "cost_price": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9]{1,8}\\.[0-9]{2}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cost Price"
+    },
+    "is_active": {
+      "default": true,
+      "title": "Is Active",
+      "type": "boolean"
+    },
+    "product_id": {
+      "pattern": "^PRD-[0-9]{5}$",
+      "title": "Product Id",
+      "type": "string"
+    },
+    "product_name": {
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Product Name",
+      "type": "string"
+    },
+    "retail_price": {
+      "pattern": "^[0-9]{1,8}\\.[0-9]{2}$",
+      "title": "Retail Price",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "enum": [
+        1
+      ],
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "product_id",
+    "brand_id",
+    "product_name",
+    "category",
+    "retail_price"
+  ],
+  "title": "Product",
+  "type": "object"
+}

@@ -18,10 +18,11 @@
 - **Unfinished**: W1.D1 tutor gate **not passed** — 5 topics `open` (learning debt, owner asked for a slower re-teach with diagrams; see `.claude/learning/LEARNING_LOG.md`); W1.D2 tutor gate not run.
 - **Tests & results**: unit 48 passed; ruff/mypy clean; import-linter 2 kept; smoke test 24/24; reviewer (security) APPROVE WITH NITS. Restart verified: `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` gone; main Opus, workers Sonnet/Haiku per agent frontmatter.
 - **Owner action**: none open (`.env` `COMPOSE_PROJECT_NAME` fixed by owner 2026-11-06; old `thelook_*` containers/volumes untouched and stopped). Tutor now reads the learning log first and appends an expanded note for every `🧠 Anla` line.
-- **Decisions to remember**: Spark 3.5.9/Delta 3.3.3/Python 3.11; HMS + dbt-spark/Thrift (spike W2.D11); **AWS Glue 5.0** (ADR-0011); **Databricks Free Edition W6.D32–D33** (ADR-0012); budget ≤ USD 50; AWS Free plan ends ≈ 2027-03-22.
+- **Decisions to remember** (full list with reasons: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; HMS + dbt-spark/Thrift (spike W2.D11); **AWS Glue 5.0** (ADR-0011); **Databricks Free Edition W6.D32–D33** (ADR-0012); budget ≤ USD 50; AWS Free plan ends ≈ 2027-03-22.
 - **Risks / blockers**: IAM Identity Center unavailable (CLI access decided W5.D25.1); 7.6 GB Docker memory (core stack ≈ 0.9 GiB idle); native PostgreSQL 18 on host port 5432 (container uses 15432); `gh` CLI logged in as `dogruom`.
 - **Session 2026-11-06 close**: operating model frozen — coordinator = Opus medium (project default), workers Sonnet (`implementer`, `test-author`, `reviewer`) and Haiku (`Explore`, `evidence-auditor`); `docs/ARCHITECTURE.md` (incl. reference comparison and diagram briefs) and `docs/AI_DEVELOPMENT_PLAYBOOK.md` added; dbt package set checked (ADR-0007).
-- **Next task ("Start today's task")**: (1) tutor: slow re-teach of the 5 W1.D1 topics with diagrams + W1.D2 gate; (2) **W1.D3** — data contracts and generator configuration (DELIVERY_PLAN D3 card), plus the W1.D2 follow-up static compose policy test.
+- **Learning mode (owner 2026-11-06)**: W1 tutor runs **batched** — day closes only collect notes + question bank; one learning session at the W1 week gate (D6) covers D1–D6 incl. the slow re-teach of the 5 open W1.D1 topics.
+- **Next task ("Start today's task")**: **W1.D3** — data contracts and generator configuration (DELIVERY_PLAN D3 card), plus the W1.D2 follow-up static compose policy test.
 - **Next mode**: coordinator plans; `implementer` + `test-author` in parallel (contracts are 🔺 correctness); `reviewer` design review first.
 - **Learning outcome for W1.D2 (still to test)**: why driver and executor Python versions must match, and how S3A credential providers avoid secrets in Spark config.
 

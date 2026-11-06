@@ -1,0 +1,186 @@
+{
+  "$defs": {
+    "Currency": {
+      "enum": [
+        "EUR",
+        "USD",
+        "TRY"
+      ],
+      "title": "Currency",
+      "type": "string"
+    },
+    "OrderItem": {
+      "additionalProperties": false,
+      "description": "Embedded order line item (DATA_CONTRACTS.md \u00a72.3).",
+      "properties": {
+        "brand_id": {
+          "pattern": "^brand_[a-z0-9_]{1,40}$",
+          "title": "Brand Id",
+          "type": "string"
+        },
+        "item_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "line_total": {
+          "pattern": "^[0-9]{1,8}\\.[0-9]{2}$",
+          "title": "Line Total",
+          "type": "string"
+        },
+        "order_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Order Id",
+          "type": "string"
+        },
+        "product_id": {
+          "pattern": "^PRD-[0-9]{5}$",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "quantity": {
+          "exclusiveMinimum": 0,
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "unit_price": {
+          "pattern": "^[0-9]{1,8}\\.[0-9]{2}$",
+          "title": "Unit Price",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "order_id",
+        "brand_id",
+        "product_id",
+        "quantity",
+        "unit_price",
+        "line_total"
+      ],
+      "title": "OrderItem",
+      "type": "object"
+    },
+    "OrderStatus": {
+      "enum": [
+        "pending",
+        "completed",
+        "cancelled",
+        "returned"
+      ],
+      "title": "OrderStatus",
+      "type": "string"
+    },
+    "PaymentMethod": {
+      "enum": [
+        "credit_card",
+        "paypal",
+        "sepa_debit",
+        "apple_pay"
+      ],
+      "title": "PaymentMethod",
+      "type": "string"
+    },
+    "SalesChannel": {
+      "enum": [
+        "web",
+        "app",
+        "store"
+      ],
+      "title": "SalesChannel",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "``order_event`` v1 (file-landed; no Kafka envelope).",
+  "properties": {
+    "brand_id": {
+      "pattern": "^brand_[a-z0-9_]{1,40}$",
+      "title": "Brand Id",
+      "type": "string"
+    },
+    "currency": {
+      "$ref": "#/$defs/Currency"
+    },
+    "customer_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Customer Id",
+      "type": "string"
+    },
+    "discount_amount": {
+      "pattern": "^[0-9]{1,8}\\.[0-9]{2}$",
+      "title": "Discount Amount",
+      "type": "string"
+    },
+    "gross_amount": {
+      "pattern": "^[0-9]{1,8}\\.[0-9]{2}$",
+      "title": "Gross Amount",
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/OrderItem"
+      },
+      "maxItems": 5,
+      "minItems": 1,
+      "title": "Items",
+      "type": "array"
+    },
+    "net_amount": {
+      "pattern": "^[0-9]{1,8}\\.[0-9]{2}$",
+      "title": "Net Amount",
+      "type": "string"
+    },
+    "order_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Order Id",
+      "type": "string"
+    },
+    "order_status": {
+      "$ref": "#/$defs/OrderStatus"
+    },
+    "order_timestamp": {
+      "format": "date-time",
+      "title": "Order Timestamp",
+      "type": "string"
+    },
+    "payment_method": {
+      "$ref": "#/$defs/PaymentMethod"
+    },
+    "sales_channel": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SalesChannel"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema_version": {
+      "const": 1,
+      "enum": [
+        1
+      ],
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "order_id",
+    "brand_id",
+    "customer_id",
+    "order_timestamp",
+    "order_status",
+    "payment_method",
+    "currency",
+    "gross_amount",
+    "discount_amount",
+    "net_amount",
+    "items"
+  ],
+  "title": "OrderEvent",
+  "type": "object"
+}

@@ -17,7 +17,8 @@ Argument: `day W<w>.D<d>`, `week <w>` or `milestone M<n>`. Default: the active d
 6. Portfolio (only if something user-visible became ✅): append to `docs/PORTFOLIO_NOTES.md` —
    verified capability (with evidence link), one interview talking point (decision + trade-off),
    competency tag (Senior DE / Data Architect). Drafts stay in the "Draft" section, never in README.
-7. Learning gate: run the `tutor` skill for the day's concepts.
+7. Learning gate: run the `tutor` skill for the day's concepts. In **batched mode** (see tutor
+   §0.1; active for W1) the tutor only *collects* (concept notes + queued questions) — no quiz.
 
 ## Week (in addition to all days of the week)
 1. Run the week's regression set from DELIVERY_PLAN (unit, Spark, integration suites so far).

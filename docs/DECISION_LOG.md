@@ -1,0 +1,35 @@
+# Decision Log
+
+> **Document Version**: 1.0
+> **Last Updated**: 2026-11-06
+> **Purpose**: one place to find every decision that changes behaviour, a contract, a rate/threshold,
+> the architecture or the way of working — with the reason, so each one can be defended in a review.
+
+**Rules**
+- Every decision that changes a contract field, a defect rate or threshold, a default, a component
+  boundary, a tool or the delivery plan gets a row here **in the same commit** as the change.
+- Architecture-level decisions (hard to reverse, cross-component, cost) additionally get an ADR in
+  [adr/](adr/); the row links it. Superseded rows are not deleted: mark them `superseded by D-NNN`.
+- `Approved by`: `owner` (explicit owner decision), `coordinator` (routine, within approved scope),
+  `review` (taken from an independent review finding).
+
+| ID | Date | Task | Area | Decision | Why (and alternatives rejected) | Approved by | Where |
+|---|---|---|---|---|---|---|---|
+| D-001 | 2026-11-06 | W1 | Way of working | W1 learning gate is **batched**: day closes collect concept notes + a question bank; one learning session at the W1 week gate (D6) | Owner prefers one focused session over daily quizzes; daily gates had left 5 topics open. Rejected: daily quizzes (kept for later weeks unless extended) | owner | `.claude/skills/tutor/SKILL.md` §0.1 |
+| D-002 | 2026-11-06 | W1.D3 | Data contract | Duplicate CDC events budget **2.0% ± 0.5%** (exact replay, same `event_id`) → outcome DUPLICATE, counted | D4 injects CDC duplicates but §2.1 had no budget; the reconciliation equation needs the term. Same order of magnitude as other defects | owner (proposed by coordinator + review) | DATA_CONTRACTS §2.1 |
+| D-003 | 2026-11-06 | W1.D3 | Data contract | Rates are **acceptance bands**; the generator injects exactly `round_half_even(n × rate)` defects and records them in the manifest | Resolves "exact counts" (D3/D4 cards) vs "% ± tolerance" (DATA_CONTRACTS). Exact counts make the manifest a test oracle | coordinator | DATA_CONTRACTS §2; `GeneratorConfig.defect_count` |
+| D-004 | 2026-11-06 | W1.D3 | Data contract | Default rates for previously "configured" defects: cross-tenant collision 1.0%, late-arriving parent 2.0%, malformed JSON 0.5% | A default is needed for reproducible demos; small enough not to dominate DLQ volume | coordinator | DATA_CONTRACTS §2.1/§2.2/§2.5 |
+| D-005 | 2026-11-06 | W1.D3 | Data contract | Money is `Decimal(10,2)`, floats rejected, serialised as a 2-decimal JSON **string** (`"12.50"`) | Avoids binary float drift between producer and Spark `DECIMAL(10,2)`. Rejected: JSON number. Spark string→DECIMAL parsing still to be verified in W2 | review | DATA_CONTRACTS §2.0 |
+| D-006 | 2026-11-06 | W1.D3 | Data contract | Producer models reject unknown fields (`extra="forbid"`); consumers ignore unknown fields within the same `schema_version` | Strict producer catches bugs early; tolerant consumers are what make additive changes non-breaking. Rejected: forbid on both sides (every additive change would break readers) | review | DATA_CONTRACTS §2.0 |
+| D-007 | 2026-11-06 | W1.D3 | Data contract | Payload carries `event_id`, `schema_version`, `produced_at`; payload `schema_version` is authoritative, header is a routing copy | Bronze does not persist Kafka headers (§3.1); `produced_at` gives a deterministic reference for `signup_date <= produced_at` | review | DATA_CONTRACTS §2.0 |
+| D-008 | 2026-11-06 | W1.D3 | Kafka | Keys per entity: CDC `{brand_id}:{customer_id}`, clickstream `{brand_id}:{session_id}`; null `session_id` → `{brand_id}:`; CDC `event_type` header = `customer_cdc`; missing `brand_id` → not sent (error) | Keeps per-entity ordering and tenant spread; defect events must still be keyable; no tenant = no send | review | DATA_CONTRACTS §2.0; `lakehouse.contracts` |
+| D-009 | 2026-11-06 | W1.D3 | Privacy | Contract models use `hide_input_in_errors=True`; DLQ reason carries field + error type only | Pydantic errors otherwise embed raw email/name (Charter §5) | review | `lakehouse.contracts` |
+| D-010 | 2026-11-06 | W1.D3 | Determinism | Contracts never generate ids or timestamps (`uuid4()`/`now()`); the generator supplies seeded values | Same seed must give byte-identical output (D4 Verify) | review | `lakehouse.contracts` |
+| D-011 | 2026-11-06 | W1.D3 | Security | `GeneratorConfig` v2 drops all `s3_*` fields (v1 default `"any"`); undocumented v1 defect rates removed | No secret defaults in code (secrets rule); config only holds rates that DATA_CONTRACTS defines | coordinator | `src/lakehouse/generator/config.py` |
+| D-012 | 2026-11-06 | W1.D3 | Tooling | `.gitattributes` forces LF for `*.py`, `*.md`, `*.json` | `core.autocrlf=true` on Windows produced CRLF working copies, so local `ruff format --check` (line-ending lf) failed on untouched files while CI passed. Rejected: changing ruff to `auto` (snapshots/hashes would differ per OS) | coordinator | `.gitattributes` |
+| D-013 | 2026-11-06 | W1.D3 | Data contract | `signup_date` is compared with `produced_at` converted to **UTC** date | A non-UTC offset near midnight would otherwise shift the check by one day | coordinator | `lakehouse.contracts.models` |
+| D-014 | 2026-11-06 | — | Way of working | Replies add an executive summary, a technical summary and a clickable per-file change list; owner can queue unknown terms ("tutora ekle") for the tutor | Owner studies and defends the project from these replies; links let them open the code behind each claim | owner | `CLAUDE.md` reply format; tutor SKILL |
+| D-015 | 2026-11-06 | W1.D3 | Data contract | `classify_change` walks nested schemas (`$ref`, array `items`, `anyOf`) and compares constraint keywords (`format`, `pattern`, `const`, length/range, `minItems`/`maxItems`); any constraint change is BREAKING (conservative) | Code review: top-level-only comparison returned NONE for breaking changes inside `OrderItem`, the schema-evolution demo entity. `const` covers `schema_version: Literal[1]` | review | `lakehouse.contracts.schema` |
+| D-016 | 2026-11-06 | W1.D3 | Data contract | Money JSON Schema carries pattern `^[0-9]{1,8}\.[0-9]{2}$`; all ids are lowercase UUIDv4; Kafka key/header helpers do not validate `brand_id` content (the contract gate does) | Precision changes become visible to the snapshot test; one id format keeps keys stable; defect payloads must stay keyable | review | DATA_CONTRACTS §2.0–2.5 |
+| D-017 | 2026-11-06 | W1.D3 | Kafka | Key/header helpers raise `ValueError` when `customer_id` (CDC) or `event_type` (clickstream header) is missing, not only `brand_id` | An event without its entity id has no valid partition key; added by implementer, accepted by coordinator | coordinator | `lakehouse.contracts.kafka` |
+| D-018 | 2026-11-06 | W1.D3 | Privacy | DLQ and logs build rejection details only via `safe_errors()` (`loc` + `type`); `ValidationError.errors()` is never serialised. Amends D-009 | Code review: `hide_input_in_errors` hides input only in `str()`/`repr()`; `errors()` still returns the full payload incl. email | review | `lakehouse.contracts.errors` |

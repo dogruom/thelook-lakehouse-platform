@@ -18,6 +18,8 @@ Status: **re-planned 2026-11-05; Milestone 1 starts at W1.D1. Most components ar
 - **End of a planned day / week / milestone:** `checkpoint` skill (evidence → [docs/PORTFOLIO_NOTES.md](docs/PORTFOLIO_NOTES.md)
   → `tutor` learning gate). **Git:** `git-workflow` skill.
 - **End of session:** `session-handoff` skill (updates `Current State`, no chat logs).
+- **Decisions:** every change to a contract, rate/threshold, default, boundary, tool or plan gets a
+  row in [docs/DECISION_LOG.md](docs/DECISION_LOG.md) in the same commit (architecture-level → also an ADR).
 
 ## Standard reply format (every substantive reply to the owner, Turkish; trivial asks: answer only)
 Keep each line short; omit a block only when it is genuinely empty. Spend tokens on the work, not the frame.
@@ -25,11 +27,17 @@ Keep each line short; omit a block only when it is genuinely empty. Spend tokens
 🎯 İstek    : [W?.D?.?] <owner's prompt rewritten as: goal · constraint · expected output>
 🏷 Sınıf    : complexity / risk / mode · agents (parallel ‖ / sequential →)
 ⚠ Not      : wrong assumption, scope creep or cheaper path (1–3 lines) — only if any
-✅ Sonuç    : what changed · verified how (command → result) · what is NOT verified
+📌 Yönetici özeti: 2–3 plain sentences — what is done, where it stands, what the owner must decide
+🔧 Teknik özet: what changed and why · verified how (command → result) · what is NOT verified
+📂 Dosyalar : one line per touched file as a clickable repo-relative link — [path](path) or
+              [path:line](path#Lline) to the key spot — plus what changed there (new/edited/deleted)
 👀 Kontrol et: 2–4 things the owner, as a data engineer/architect, must check or decide
 🧠 Anla     : the concept in one sentence + interview line + 2–4 CV/ATS keywords
 ⏭ Sıradaki : next step · owner approval needed (image build, push, cloud spend…)
 ```
+Unknown terms: when the owner says "tutora ekle: <term>" (or asks what something in a doc means),
+answer briefly and append it to `## Owner questions` in `.claude/learning/LEARNING_LOG.md`
+(term · where it was seen · date); the tutor covers that list first in its next session.
 The owner may dictate loosely; the 🎯 line is where the prompt gets normalised — if it is wrong,
 the owner corrects it in one line. Remind the owner of the playbook rule they skipped (no task ID,
 new constraint unstated, approval pending) inside ⚠ instead of lecturing.
