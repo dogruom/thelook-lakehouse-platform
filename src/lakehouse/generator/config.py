@@ -8,10 +8,11 @@ injects ``defect_count(rate, n)`` defects exactly and records them in the manife
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
 from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Annotated
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AwareDatetime, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from lakehouse.contracts import BRAND_ID_PATTERN
@@ -43,7 +44,12 @@ class GeneratorConfig(BaseSettings):
     topic_customer_cdc: str = "customer_cdc"
     topic_clickstream: str = "clickstream_events"
 
+    # Simulated clock origin: every generated timestamp is derived from it, never from wall time
+    sim_start: AwareDatetime = datetime(2026, 1, 1, tzinfo=UTC)
+
     # Customer CDC stream
+    cdc_max_updates: int = Field(default=4, ge=0, le=20)
+    cdc_delete_rate: RatePct = 5.0
     cdc_invalid_email_rate: RatePct = 3.0
     cdc_null_email_rate: RatePct = 2.0
     cdc_future_signup_rate: RatePct = 2.0

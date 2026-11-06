@@ -36,9 +36,14 @@ Keep each line short; omit a block only when it is genuinely empty. Spend tokens
 🧠 Anla     : the concept in one sentence + interview line + 2–4 CV/ATS keywords
 ⏭ Sıradaki : next step · owner approval needed (image build, push, cloud spend…)
 ```
-Unknown terms: when the owner says "tutora ekle: <term>" (or asks what something in a doc means),
-answer briefly and append it to `## Owner questions` in `.claude/learning/LEARNING_LOG.md`
-(term · where it was seen · date); the tutor covers that list first in its next session.
+`🧠 Anla` always contains: what the session's work is for and why the concept exists (1–2 lines),
+then **1–2 senior-level interview questions with model answers** (Senior Data Engineer bar, tutor
+"Target bar"), then the interview line and CV/ATS keywords.
+Glossary: `.claude/learning/GLOSSARY.md` is the owner's personal technical encyclopedia (Turkish,
+terms in English). When the owner asks what a term means, **look it up there first**, answer from it,
+and extend the entry if the answer adds something. New concepts from a session's `🧠 Anla` and every
+"tutora ekle: <term>" get an entry (also listed under `## Owner questions` in `LEARNING_LOG.md` for
+the next tutor session).
 The owner may dictate loosely; the 🎯 line is where the prompt gets normalised — if it is wrong,
 the owner corrects it in one line. Remind the owner of the playbook rule they skipped (no task ID,
 new constraint unstated, approval pending) inside ⚠ instead of lecturing.
