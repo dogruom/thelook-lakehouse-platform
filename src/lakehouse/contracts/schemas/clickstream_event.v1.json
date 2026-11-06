@@ -1,0 +1,104 @@
+{
+  "$defs": {
+    "ClickEventType": {
+      "enum": [
+        "page_view",
+        "search",
+        "add_to_cart",
+        "checkout",
+        "purchase"
+      ],
+      "title": "ClickEventType",
+      "type": "string"
+    },
+    "DeviceCategory": {
+      "enum": [
+        "mobile",
+        "desktop",
+        "tablet"
+      ],
+      "title": "DeviceCategory",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "``clickstream_event`` v1.",
+  "properties": {
+    "brand_id": {
+      "pattern": "^brand_[a-z0-9_]{1,40}$",
+      "title": "Brand Id",
+      "type": "string"
+    },
+    "customer_id": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Customer Id"
+    },
+    "device_category": {
+      "$ref": "#/$defs/DeviceCategory"
+    },
+    "event_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_timestamp": {
+      "format": "date-time",
+      "title": "Event Timestamp",
+      "type": "string"
+    },
+    "event_type": {
+      "$ref": "#/$defs/ClickEventType"
+    },
+    "page_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Page Url"
+    },
+    "produced_at": {
+      "format": "date-time",
+      "title": "Produced At",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "enum": [
+        1
+      ],
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "session_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Session Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "brand_id",
+    "schema_version",
+    "produced_at",
+    "session_id",
+    "event_type",
+    "device_category",
+    "event_timestamp"
+  ],
+  "title": "ClickstreamEvent",
+  "type": "object"
+}

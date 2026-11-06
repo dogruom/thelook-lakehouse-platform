@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-05 (v9.0: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W1.D1** (4/4 ✅; merge + tutor gate pending) → next **W1.D2**
+> **Active**: **W1.D3** (3/3 ✅; push/PR pending) → next **W1.D4**
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,17 +13,16 @@
 
 ## Current State
 
-- **Updated**: 2026-11-06 (day closed) · **Branch**: `main` — W1.D1 (PR #1, `1f65213`) and W1.D2 (PR #2) merged; start W1.D3 from `main`
-- **Last delivered**: W1.D1 merged to `main` (PR #1, CI green); W1.D2.1–D2.4 ✅ — Spark 3.5.9/Py 3.11 image, hardened compose, init scripts, smoke test v2 24/24 (see D2 Evidence).
-- **Unfinished**: W1.D1 tutor gate **not passed** — 5 topics `open` (learning debt, owner asked for a slower re-teach with diagrams; see `.claude/learning/LEARNING_LOG.md`); W1.D2 tutor gate not run.
-- **Tests & results**: unit 48 passed; ruff/mypy clean; import-linter 2 kept; smoke test 24/24; reviewer (security) APPROVE WITH NITS. Restart verified: `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` gone; main Opus, workers Sonnet/Haiku per agent frontmatter.
-- **Owner action**: none open (`.env` `COMPOSE_PROJECT_NAME` fixed by owner 2026-11-06; old `thelook_*` containers/volumes untouched and stopped). Tutor now reads the learning log first and appends an expanded note for every `🧠 Anla` line.
-- **Decisions to remember**: Spark 3.5.9/Delta 3.3.3/Python 3.11; HMS + dbt-spark/Thrift (spike W2.D11); **AWS Glue 5.0** (ADR-0011); **Databricks Free Edition W6.D32–D33** (ADR-0012); budget ≤ USD 50; AWS Free plan ends ≈ 2027-03-22.
-- **Risks / blockers**: IAM Identity Center unavailable (CLI access decided W5.D25.1); 7.6 GB Docker memory (core stack ≈ 0.9 GiB idle); native PostgreSQL 18 on host port 5432 (container uses 15432); `gh` CLI logged in as `dogruom`.
-- **Session 2026-11-06 close**: operating model frozen — coordinator = Opus medium (project default), workers Sonnet (`implementer`, `test-author`, `reviewer`) and Haiku (`Explore`, `evidence-auditor`); `docs/ARCHITECTURE.md` (incl. reference comparison and diagram briefs) and `docs/AI_DEVELOPMENT_PLAYBOOK.md` added; dbt package set checked (ADR-0007).
-- **Next task ("Start today's task")**: (1) tutor: slow re-teach of the 5 W1.D1 topics with diagrams + W1.D2 gate; (2) **W1.D3** — data contracts and generator configuration (DELIVERY_PLAN D3 card), plus the W1.D2 follow-up static compose policy test.
-- **Next mode**: coordinator plans; `implementer` + `test-author` in parallel (contracts are 🔺 correctness); `reviewer` design review first.
-- **Learning outcome for W1.D2 (still to test)**: why driver and executor Python versions must match, and how S3A credential providers avoid secrets in Spark config.
+- **Updated**: 2026-11-06 (W1.D3 closed) · **Branch**: `feat/w1-contracts` (commit `6889317`, not pushed) — W1.D1 (PR #1) and W1.D2 (PR #2) merged to `main`
+- **Last delivered**: W1.D3.1–D3.3 ✅ — `lakehouse.contracts` v1 (4 models + envelope, JSON Schema snapshots, `classify_change`, `safe_errors`, Kafka key/header helpers), `GeneratorConfig` v2, DATA_CONTRACTS v7.2, DECISION_LOG D-001…D-018 (see D3 Evidence).
+- **Unfinished**: push + PR + merge of `feat/w1-contracts` (owner go needed); W1.D2 follow-up static compose policy test → carried to D4; learning gates deferred to the W1 week gate (batched mode).
+- **Tests & results**: unit 470 passed; contracts coverage 96 %; ruff/mypy clean; import-linter 2 kept; pre-commit all passed; design + code review findings applied.
+- **Owner action**: approve push + PR for `feat/w1-contracts`; optionally list unknown D3 terms ("tutora ekle").
+- **Decisions to remember** (full list with reasons: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; HMS + dbt-spark/Thrift (spike W2.D11); **AWS Glue 5.0** (ADR-0011); **Databricks Free Edition W6.D32–D33** (ADR-0012); budget ≤ USD 50; AWS Free plan ends ≈ 2027-03-22; contracts: strict producer / tolerant consumer, money as 2-decimal string, `safe_errors()` only in DLQ.
+- **Risks / blockers**: IAM Identity Center unavailable (CLI access decided W5.D25.1); 7.6 GB Docker memory (core stack ≈ 0.9 GiB idle); native PostgreSQL 18 on host port 5432 (container uses 15432); `gh` CLI logged in as `dogruom`; Spark string→DECIMAL parsing of money unverified (W2 Spark test).
+- **Way of working (owner 2026-11-06)**: W1 tutor **batched** (notes + question bank per day, one learning session at D6); every decision logged in DECISION_LOG in the same commit; replies carry executive summary, technical summary and clickable file list (CLAUDE.md).
+- **Next task ("Start today's task")**: **W1.D4** — customer CDC generator and ground-truth manifest (DELIVERY_PLAN D4 card) + carried-over static compose policy test. Use seeded ids/clock (D-010), `defect_count` (D-003), disjoint defect index sets and largest-remainder tenant apportionment (design-review notes).
+- **Next mode**: coordinator plans; `implementer` + `test-author` in parallel (🔺 determinism/manifest); `reviewer` design review first.
 
 ---
 
@@ -50,7 +49,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 ## 📊 Macro Status (count of ✅ tasks / planned tasks)
 
 ```
-M1 (D1–D12)   [████░░░░░░░░░░░░░░░░]  8 / 37
+M1 (D1–D12)   [██████░░░░░░░░░░░░░░] 11 / 37
 M2 (D13–D24)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 ```
@@ -93,11 +92,17 @@ M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  
 #### D3 · Data contracts and generator configuration
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
-| W1.D3.1 | `lakehouse.contracts` v1 | envelope + CustomerCdcEvent, ClickstreamEvent, OrderEvent (embedded items), Product; JSON Schemas exported and committed | `pytest tests/unit/contracts -q` | ⏳ |
-| W1.D3.2 | `GeneratorConfig` v2 | tenants, weights, seed, topics, exact defect counts per DATA_CONTRACTS; no secret defaults; mirrored in `.env.example` | `pytest tests/unit/generator/test_config.py -q` | ⏳ |
-| W1.D3.3 | Contract tests + snapshot | valid/invalid fixtures; breaking change fails snapshot test (negative test demonstrated) | `pytest tests/unit/contracts -q` | ⏳ |
+| W1.D3.1 | `lakehouse.contracts` v1 | envelope + CustomerCdcEvent, ClickstreamEvent, OrderEvent (embedded items), Product; JSON Schemas exported and committed | `pytest tests/unit/contracts -q` | ✅ |
+| W1.D3.2 | `GeneratorConfig` v2 | tenants, weights, seed, topics, exact defect counts per DATA_CONTRACTS; no secret defaults; mirrored in `.env.example` | `pytest tests/unit/generator/test_config.py -q` | ✅ |
+| W1.D3.3 | Contract tests + snapshot | valid/invalid fixtures; breaking change fails snapshot test (negative test demonstrated) | `pytest tests/unit/contracts -q` | ✅ |
 
-**Evidence**: _—_
+**Evidence** (2026-11-06, commit `6889317`, branch `feat/w1-contracts`):
+- D3.1/D3.3: `pytest tests/unit/contracts -q` → 315 passed; `--cov=lakehouse.contracts` → 96 %; `python -m lakehouse.contracts.export` twice → identical hashes.
+- D3.3 negative test: `CustomerCdcEvent.first_name` changed to `int` → `test_committed_schema_matches_model[customer_cdc.v1]` FAILED (1 failed, 21 passed); reverted → 459 passed.
+- D3.2: `pytest tests/unit/generator/test_config.py -q` → 113 passed (no `s3_*` fields, no secret defaults).
+- Gates: `pytest tests/unit -q` → 470 passed; ruff check/format clean; `mypy src` clean (16 files); `lint-imports` 2 kept; `pre-commit run --all-files` all passed.
+- Reviews: design review APPROVE WITH CHANGES (6 must-fix applied); code review CHANGES REQUIRED (2 must-fix: nested `classify_change`, PII in `errors()` → `safe_errors`) applied and re-verified. Decisions D-002…D-018 in [DECISION_LOG.md](DECISION_LOG.md).
+- Done-when: coverage ≥ 90 % ✔; DATA_CONTRACTS v7.2 vs code field-by-field ✔ by independent code review only (no automated doc↔code check). Day-close audit (`evidence-auditor`): D3.1–D3.3 OK, re-ran contracts 315 / config 113 passed, coverage 96 %. **Carried over to D4**: W1.D2 follow-up static compose policy test (not started).
 
 #### D4 · Customer CDC generator and manifest
 | ID | Task | Acceptance | Verify | Status |

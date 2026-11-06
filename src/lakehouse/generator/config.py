@@ -1,125 +1,95 @@
-"""Generator configuration model.
+"""Generator configuration (v2, DATA_CONTRACTS.md §2).
 
-Centralized configuration for the e-commerce data generator.
-Uses pydantic-settings for environment variable support with sensible defaults.
-All dirty data injection rates are configurable here.
+All values can be overridden with ``GEN_``-prefixed environment variables; list values are JSON,
+e.g. ``GEN_TENANTS='["brand_alpha","brand_beta"]'``. Defect rates are percentages: the generator
+injects ``defect_count(rate, n)`` defects exactly and records them in the manifest.
 """
 
 from __future__ import annotations
 
-from pydantic import Field
+import re
+from decimal import ROUND_HALF_EVEN, Decimal
+from typing import Annotated
+
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from lakehouse.contracts import BRAND_ID_PATTERN
+
+
+RatePct = Annotated[float, Field(ge=0, le=50)]
+
+_BRAND_ID_RE = re.compile(BRAND_ID_PATTERN)
+
+
+def defect_count(rate_pct: float | Decimal, n: int) -> int:
+    """Number of defects for ``n`` records at ``rate_pct`` percent (round half to even)."""
+    if n < 0:
+        raise ValueError("n must be >= 0")
+    exact = Decimal(str(rate_pct)) * n / 100
+    return int(exact.quantize(Decimal(1), rounding=ROUND_HALF_EVEN))
 
 
 class GeneratorConfig(BaseSettings):
-    """Configuration for the e-commerce data generator.
-
-    All settings can be overridden via environment variables prefixed with ``GEN_``.
-    Example: ``GEN_BATCH_SIZE=1000 python -m lakehouse.generator``.
-    Version 1 — aligned with the data contracts in W1.D3.2.
-    """
+    """Seeded, deterministic generator settings."""
 
     model_config = SettingsConfigDict(env_prefix="GEN_")
 
-    # ── Batch settings ──────────────────────────────────────────────────────
-    batch_size: int = Field(default=500, ge=10, le=10_000, description="Records per batch")
-    num_batches: int = Field(default=15, ge=1, le=100, description="Number of batches to generate")
-    product_seed_count: int = Field(
-        default=500, ge=50, le=5_000, description="Number of seed products"
-    )
-    schema_evolution_batch: int = Field(
-        default=10, ge=1, description="Batch number after which schema evolution kicks in"
-    )
+    seed: int = 42
+    tenants: list[str] = ["brand_alpha", "brand_beta", "brand_gamma"]
+    tenant_weights: list[float] = [0.6, 0.3, 0.1]
 
-    # ── SeaweedFS (S3-compatible) ───────────────────────────────────────────
-    s3_endpoint_url: str = Field(
-        default="http://localhost:9000", description="SeaweedFS S3 API endpoint"
-    )
-    s3_access_key: str = Field(default="any", description="S3 access key (SeaweedFS dev mode)")
-    s3_secret_key: str = Field(default="any", description="S3 secret key (SeaweedFS dev mode)")
-    s3_bucket: str = Field(default="lakehouse", description="Target S3 bucket")
-    s3_region: str = Field(
-        default="us-east-1", description="AWS region (required by boto3, ignored by SeaweedFS)"
-    )
+    kafka_bootstrap_servers: str = "localhost:9094"
+    topic_customer_cdc: str = "customer_cdc"
+    topic_clickstream: str = "clickstream_events"
 
-    # ── Kafka ───────────────────────────────────────────────────────────────
-    kafka_bootstrap_servers: str = Field(
-        default="localhost:9094", description="Kafka bootstrap servers"
-    )
-    kafka_topic: str = Field(
-        default="clickstream_events", description="Kafka topic for clickstream events"
-    )
-    kafka_events_per_batch: int = Field(
-        default=5_000, ge=100, le=100_000, description="Clickstream events per batch"
-    )
+    # Customer CDC stream
+    cdc_invalid_email_rate: RatePct = 3.0
+    cdc_null_email_rate: RatePct = 2.0
+    cdc_future_signup_rate: RatePct = 2.0
+    cdc_out_of_order_rate: RatePct = 5.0
+    cdc_duplicate_rate: RatePct = 2.0
+    cdc_cross_tenant_collision_rate: RatePct = 1.0
 
-    # ── Dirty data injection rates (percentages 0.0 to 100.0) ──────────────
-    # Users
-    user_null_email_rate: float = Field(
-        default=2.0, ge=0, le=50, description="% of users with null email"
-    )
-    user_invalid_email_rate: float = Field(
-        default=3.0, ge=0, le=50, description="% of users with invalid email format"
-    )
-    user_future_date_rate: float = Field(
-        default=2.0, ge=0, le=50, description="% of users with future signup_date"
-    )
-    user_duplicate_rate: float = Field(
-        default=2.0, ge=0, le=50, description="% of duplicate user_id records"
-    )
-    user_null_country_rate: float = Field(
-        default=1.0, ge=0, le=50, description="% of users with null country"
-    )
+    # orders
+    order_orphan_fk_rate: RatePct = 3.0
+    order_late_parent_rate: RatePct = 2.0
+    order_duplicate_rate: RatePct = 4.0
+    order_future_ts_rate: RatePct = 2.0
+    order_negative_amount_rate: RatePct = 1.0
 
-    # Orders
-    order_orphan_fk_rate: float = Field(
-        default=3.0, ge=0, le=50, description="% of orders with orphan user_id"
-    )
-    order_duplicate_rate: float = Field(
-        default=4.0, ge=0, le=50, description="% of duplicate order rows"
-    )
-    order_future_date_rate: float = Field(
-        default=2.0, ge=0, le=50, description="% of orders with future order_date"
-    )
-    order_invalid_currency_rate: float = Field(
-        default=1.0, ge=0, le=50, description="% of orders with invalid currency code"
-    )
+    # clickstream
+    click_late_rate: RatePct = 10.0
+    click_duplicate_rate: RatePct = 4.0
+    click_null_session_rate: RatePct = 1.0
+    click_malformed_json_rate: RatePct = 0.5
 
-    # Order Items
-    item_negative_price_rate: float = Field(
-        default=1.0, ge=0, le=50, description="% of items with negative unit_price"
-    )
-    item_orphan_order_rate: float = Field(
-        default=2.0, ge=0, le=50, description="% of items with orphan order_id"
-    )
-    item_zero_quantity_rate: float = Field(
-        default=0.5, ge=0, le=50, description="% of items with zero quantity"
-    )
-    item_invalid_discount_rate: float = Field(
-        default=0.5, ge=0, le=50, description="% of items with discount > 100"
-    )
+    @field_validator("tenants")
+    @classmethod
+    def _valid_tenants(cls, value: list[str]) -> list[str]:
+        if not value:
+            raise ValueError("at least one tenant is required")
+        if len(set(value)) != len(value):
+            raise ValueError("tenants must be unique")
+        bad = [t for t in value if not _BRAND_ID_RE.fullmatch(t)]
+        if bad:
+            raise ValueError(f"tenant ids must match {BRAND_ID_PATTERN}: {bad}")
+        return value
 
-    # Products
-    product_negative_price_rate: float = Field(
-        default=1.0, ge=0, le=50, description="% of products with negative price"
-    )
-    product_null_category_rate: float = Field(
-        default=1.0, ge=0, le=50, description="% of products with null category"
-    )
+    @field_validator("tenant_weights")
+    @classmethod
+    def _positive_weights(cls, value: list[float]) -> list[float]:
+        if any(w <= 0 for w in value):
+            raise ValueError("tenant_weights must all be > 0")
+        return value
 
-    # Clickstream
-    click_duplicate_rate: float = Field(
-        default=4.0, ge=0, le=50, description="% of duplicate clickstream events"
-    )
-    click_late_arrival_rate: float = Field(
-        default=10.0, ge=0, le=50, description="% of late-arriving events"
-    )
-    click_future_date_rate: float = Field(
-        default=2.0, ge=0, le=50, description="% of events with future timestamp"
-    )
-    click_orphan_user_rate: float = Field(
-        default=2.0, ge=0, le=50, description="% of events with orphan user_id"
-    )
-    click_null_session_rate: float = Field(
-        default=1.0, ge=0, le=50, description="% of events with null session_id"
-    )
+    @model_validator(mode="after")
+    def _consistent(self) -> GeneratorConfig:
+        if len(self.tenant_weights) != len(self.tenants):
+            raise ValueError("tenant_weights must have the same length as tenants")
+        dlq_share = (
+            self.cdc_invalid_email_rate + self.cdc_null_email_rate + self.cdc_future_signup_rate
+        )
+        if dlq_share > 50:
+            raise ValueError("cdc invalid_email + null_email + future_signup rates must be <= 50")
+        return self

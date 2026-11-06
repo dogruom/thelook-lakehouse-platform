@@ -21,8 +21,14 @@ Re-run or quote the checks that were actually executed this session. Unknown = "
 - The block is the cheapest resume point for the next session: facts only, no narrative, no
   duplicated plan text (link the DELIVERY_PLAN day card instead).
 - Update task statuses: ✅ only with commit hash + verification output; otherwise 🔄.
-- Do **not** append session diaries or chat transcripts. Durable architectural decisions go into an
+- Do **not** append session diaries or chat transcripts to PROGRESS (the factual per-session trace lives in SESSION_LOG, §2b). Durable architectural decisions go into an
   ADR; durable conventions go into `CLAUDE.md` or `.claude/rules/` (only if they will recur).
+
+## 2b. Append to docs/SESSION_LOG.md (newest entry first)
+Build the entry from `git log --name-status <first session commit>^..HEAD` — not from chat memory:
+tasks (IDs + status) · commits / PR links · decision IDs added (DECISION_LOG) · files as clickable
+repo-relative links with one line each · verification results · learning items queued · portfolio
+items. Every decision taken in the session must already have a DECISION_LOG row; add it if missing.
 
 ## 3. Report in chat (Turkish, compact)
 Objective · completed work · files changed · tests and exact results · decisions · risks/blockers ·

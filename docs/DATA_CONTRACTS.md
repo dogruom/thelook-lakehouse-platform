@@ -1,7 +1,7 @@
 # Data Contracts & Medallion Specifications
 
-> **Document Version**: 7.1
-> **Last Updated**: 2026-11-05 (v7.1: orders carry embedded line items; static product seed; `schema_version` in the envelope; schema-evolution demo moved to orders; reconciliation adds `stale_cdc_noop` — DELIVERY_PLAN v8, ADR-0009)
+> **Document Version**: 7.2
+> **Last Updated**: 2026-11-06 (v7.2: `event_id`/`schema_version`/`produced_at` payload fields, duplicate CDC defect, producer/consumer unknown-field rule, 2-decimal money strings; v7.1: orders carry embedded line items; static product seed; `schema_version` in the envelope; schema-evolution demo moved to orders; reconciliation adds `stale_cdc_noop` — DELIVERY_PLAN v8, ADR-0009)
 > **Status**: 🟡 DRAFT — aligned with [PROJECT_CHARTER.md](PROJECT_CHARTER.md) v7. **Not yet enforced in code**; each contract becomes enforced when the corresponding PROGRESS task is ✅ with evidence.
 > **Target Platform**: Multi-Tenant CRM Lakehouse (Delta Lake OSS locally; cloud targets documented separately)
 
@@ -103,6 +103,8 @@ graph LR
 
 Every entity carries a mandatory, non-null tenant identifier `brand_id`, which is part of every business key and every join condition. Tenant count is configurable (demo default: 3–5 brands, e.g. `brand_alpha`, `brand_beta`, `brand_gamma`).
 
+Rates are acceptance bands; the generator injects `round_half_even(n × rate)` defects exactly and records them in the manifest.
+
 ### 2.0 Common Kafka event envelope
 Applies to `customer_cdc` and `clickstream_events` (rationale: ADR-0002, planned).
 
@@ -111,7 +113,13 @@ Applies to `customer_cdc` and `clickstream_events` (rationale: ADR-0002, planned
 | Message **key** | `{brand_id}:{customer_id}` (CDC) · `{brand_id}:{session_id}` (clickstream) | Determines the partition → preserves per-customer / per-session ordering and spreads tenant load |
 | Header `brand_id` | tenant identifier | Routing and filtering only — **not** used for partitioning |
 | Value | UTF-8 JSON of the entity schema below | Parsed into typed columns in Bronze; unparseable values stored raw with `_parse_error` |
-| Header `schema_version` / `event_type` | e.g. `1` / `page_view` | Consumers select the contract version; additive changes keep the version, breaking changes bump it (ADR-0009) |
+| Header `schema_version` / `event_type` | e.g. `1` / `page_view` (CDC: `customer_cdc`) | Routing copies. The payload field `schema_version` is authoritative because Bronze does not persist headers. Additive changes keep the version, breaking changes bump it (ADR-0009) |
+| Payload `event_id`, `schema_version`, `produced_at` | UUIDv4 · integer `1` · UTC timestamp | Present on CDC and clickstream events; `produced_at` is the producer's emission time |
+| Null `session_id` (clickstream) | key `{brand_id}:` | Such events land in Bronze and are rejected to the DLQ downstream |
+| Money (orders, items, products) | JSON string with exactly 2 decimals, e.g. `"12.50"` | Avoids binary-float rounding; parsed into `DECIMAL(10,2)` |
+| Unknown fields | producers reject, consumers ignore (within one `schema_version`) | This is what makes additive changes non-breaking |
+
+Identifiers (`event_id`, `customer_id`, `session_id`, `order_id`, `item_id`) are lowercase UUIDv4 strings. The key/header helpers in `lakehouse.contracts` do not validate the content of `brand_id`, because injected-defect payloads bypass the models; they only refuse a missing or empty `brand_id`. The `brand_id` format is enforced by the contract gate.
 | Producer | `enable.idempotence=true`, `acks=all` | Limits retry duplicates; delivery remains at-least-once |
 
 ### 2.1 `customers` (Streaming CDC)
@@ -123,16 +131,18 @@ Applies to `customer_cdc` and `clickstream_events` (rationale: ADR-0002, planned
 | Column Name | Ingestion Type | Nullable | Business Rule / Constraint | Description |
 |---|---|---|---|---|
 | `event_id` | STRING (UUIDv4) | No | Unique per emitted event | Event identifier |
-| `customer_id` | STRING (UUID) | No | Non-empty UUID | Natural identifier, unique **within** a brand |
-| `brand_id` | STRING | No | Member of the configured tenant list | Tenant identifier |
+| `customer_id` | STRING (UUIDv4) | No | Lowercase UUIDv4 | Natural identifier, unique **within** a brand |
+| `brand_id` | STRING | No | Member of the configured tenant list, pattern `brand_[a-z0-9_]+` | Tenant identifier |
+| `schema_version` | INTEGER | No | `1` | Contract version (authoritative copy, §2.0) |
+| `produced_at` | TIMESTAMP | No | UTC, timezone-aware | Producer emission time |
 | `first_name` | STRING | No | 1–50 characters | Given name (PII) |
 | `last_name` | STRING | No | 1–50 characters | Surname (PII) |
 | `email` | STRING | No | RFC 5322 regex validation | Raw email (PII; tokenised in Silver, never reaches Gold) |
 | `phone` | STRING | Yes | E.164 | Telephone (PII; masked to last 4 digits in Silver) |
 | `city` | STRING | Yes | — | Residential city (SCD2-tracked) |
-| `country` | STRING | No | ISO 3166-1 alpha-2 (e.g. `DE`, `TR`, `GB`) | Country (SCD2-tracked) |
+| `country` | STRING | No | ISO 3166-1 alpha-2 shape `[A-Z]{2}` (e.g. `DE`, `TR`, `GB`) | Country (SCD2-tracked) |
 | `loyalty_tier` | STRING | No | ENUM (`Bronze`, `Silver`, `Gold`, `Platinum`) | CRM tier (SCD2-tracked) |
-| `signup_date` | DATE | No | `signup_date <= CURRENT_DATE()` | Registration date |
+| `signup_date` | DATE | No | `signup_date <= produced_at` (date part) | Registration date |
 | `_cdc_action` | STRING | No | ENUM (`I`, `U`, `D`) | CDC operation type |
 | `_cdc_sequence` | BIGINT | No | Strictly increasing per `(brand_id, customer_id)` | **Ordering field** (simulated source LSN) |
 | `_cdc_ts` | TIMESTAMP | No | Source change timestamp | Informational; used only for SCD2 validity timestamps |
@@ -143,7 +153,8 @@ All injected defects are recorded in the ground-truth manifest, **not** in the p
 - **Null Email**: 2.0% ± 0.5% → DLQ
 - **Future-Dated Signup**: 2.0% ± 0.5% → DLQ
 - **Out-of-order delivery**: 5.0% ± 1.0% (sequence preserved, emission order shuffled) → handled by sequence-ordered MERGE, **not** DLQ material
-- **Cross-tenant key collisions**: configured rate (same `customer_id`/email in two brands) → must remain independent states
+- **Duplicate CDC events**: 2.0% ± 0.5% (exact replay, same `event_id`) → counted as duplicates
+- **Cross-tenant key collisions**: 1.0% default (same `customer_id`/email in two brands) → must remain independent states
 
 ---
 
@@ -154,9 +165,10 @@ All injected defects are recorded in the ground-truth manifest, **not** in the p
 
 | Column Name | Ingestion Type | Nullable | Business Rule / Constraint | Description |
 |---|---|---|---|---|
-| `order_id` | STRING (UUID) | No | Non-empty UUID | Transaction identifier |
+| `schema_version` | INTEGER | No | `1` | Contract version |
+| `order_id` | STRING (UUIDv4) | No | Lowercase UUIDv4 | Transaction identifier |
 | `brand_id` | STRING | No | Tenant identifier | Tenant context |
-| `customer_id` | STRING (UUID) | No | `(brand_id, customer_id)` must exist in `silver.customers` | Foreign key (composite) |
+| `customer_id` | STRING (UUIDv4) | No | `(brand_id, customer_id)` must exist in `silver.customers` | Foreign key (composite) |
 | `order_timestamp` | TIMESTAMP | No | `order_timestamp <= CURRENT_TIMESTAMP()` | Transaction timestamp |
 | `order_status` | STRING | No | ENUM (`pending`, `completed`, `cancelled`, `returned`) | Fulfilment status |
 | `payment_method` | STRING | No | ENUM (`credit_card`, `paypal`, `sepa_debit`, `apple_pay`) | Payment vehicle |
@@ -169,7 +181,7 @@ All injected defects are recorded in the ground-truth manifest, **not** in the p
 
 #### 🧪 Dirty Data Budget & Injection Spec (`orders`)
 - **Orphan Foreign Key**: 3.0% ± 0.5% → DLQ with `_retryable = true`
-- **Late-arriving parent**: configured rate (order emitted before the customer's `I`) → DLQ `_retryable = true`, recovered by controlled replay
+- **Late-arriving parent**: 2.0% default (order emitted before the customer's `I`) → DLQ `_retryable = true`, recovered by controlled replay
 - **Exact Duplicates**: 4.0% ± 0.5% (at-least-once replay simulation) → removed by Silver dedup and **counted**
 - **Future-Dated Timestamps**: 2.0% ± 0.5% → DLQ
 - **Negative Financial Value**: 1.0% ± 0.5% (`gross_amount < 0`) → DLQ
@@ -183,8 +195,8 @@ All injected defects are recorded in the ground-truth manifest, **not** in the p
 
 | Column Name | Ingestion Type | Nullable | Constraint | Description |
 |---|---|---|---|---|
-| `item_id` | STRING (UUID) | No | PK within order | Line item identifier |
-| `order_id` | STRING (UUID) | No | FK → `(brand_id, order_id)` | Parent order |
+| `item_id` | STRING (UUIDv4) | No | PK within order | Line item identifier |
+| `order_id` | STRING (UUIDv4) | No | FK → `(brand_id, order_id)` | Parent order |
 | `brand_id` | STRING | No | Tenant identifier | Tenant context |
 | `product_id` | STRING | No | FK → `(brand_id, product_id)` (same brand) | Catalog item |
 | `quantity` | INTEGER | No | `quantity > 0` | Units ordered |
@@ -200,6 +212,7 @@ All injected defects are recorded in the ground-truth manifest, **not** in the p
 
 | Column Name | Ingestion Type | Nullable | Constraint | Description |
 |---|---|---|---|---|
+| `schema_version` | INTEGER | No | `1` | Contract version |
 | `product_id` | STRING | No | Format `PRD-XXXXX` | Stock keeping unit |
 | `brand_id` | STRING | No | Tenant identifier | Owner brand |
 | `product_name` | STRING | No | 1–255 characters | Display title |
@@ -219,8 +232,10 @@ All injected defects are recorded in the ground-truth manifest, **not** in the p
 |---|---|---|---|---|
 | `event_id` | STRING (UUIDv4) | No | Unique event token | Event identifier |
 | `brand_id` | STRING | No | Tenant identifier | Tenant context |
-| `session_id` | STRING (UUID) | No | Web/App session identifier | Session (Kafka key component) |
-| `customer_id` | STRING (UUID) | Yes | Null for anonymous guests | Identified user |
+| `schema_version` | INTEGER | No | `1` | Contract version (authoritative copy, §2.0) |
+| `produced_at` | TIMESTAMP | No | UTC, timezone-aware | Producer emission time |
+| `session_id` | STRING (UUIDv4) | No | Web/App session identifier | Session (Kafka key component) |
+| `customer_id` | STRING (UUIDv4) | Yes | Null for anonymous guests | Identified user |
 | `event_type` | STRING | No | ENUM (`page_view`, `search`, `add_to_cart`, `checkout`, `purchase`) | Interaction type |
 | `page_url` | STRING | Yes | URL path | Screen or web URL |
 | `device_category` | STRING | No | ENUM (`mobile`, `desktop`, `tablet`) | Client device |
@@ -230,7 +245,7 @@ All injected defects are recorded in the ground-truth manifest, **not** in the p
 - **Late Arriving Records**: 10.0% ± 1.0% (timestamps 10–60 min behind) → accepted within the lookback window; beyond it **counted** as `late_beyond_window` and kept in Bronze
 - **Duplicate Event Tokens**: 4.0% ± 0.5% (same `event_id` re-sent) → removed by Silver dedup and counted
 - **Corrupted Session**: 1.0% ± 0.3% (null `session_id`) → DLQ
-- **Malformed JSON**: configured rate → stored in Bronze with `_parse_error`
+- **Malformed JSON**: 0.5% default → stored in Bronze with `_parse_error`
 
 ---
 

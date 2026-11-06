@@ -19,8 +19,8 @@ classifiers = [
 
 dependencies = [
     "faker>=28.0",
-    "pydantic>=2.7",
-    "pydantic-settings>=2.2",
+    "pydantic>=2.7.1",
+    "pydantic-settings>=2.3.4",
     "structlog>=24.1",
     "boto3>=1.34",
     "confluent-kafka>=2.4",
@@ -52,6 +52,9 @@ spark = [
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["lakehouse*"]
+
+[tool.setuptools.package-data]
+"lakehouse.contracts" = ["schemas/*.json"]
 
 # =============================================================================
 # TOOL CONFIGURATIONS
@@ -104,6 +107,10 @@ known-first-party = ["lakehouse"]
 known-third-party = ["airflow", "pyspark", "great_expectations", "structlog"]
 force-single-line = false
 lines-after-imports = 2
+
+[tool.ruff.lint.flake8-type-checking]
+# Pydantic resolves annotations at runtime, so these imports must stay at module level.
+runtime-evaluated-base-classes = ["pydantic.BaseModel", "pydantic_settings.BaseSettings"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["ARG001", "S101", "PLR2004"]
