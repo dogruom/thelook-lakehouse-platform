@@ -19,6 +19,12 @@ Status: **re-planned 2026-11-05; Milestone 1 starts at W1.D1. Most components ar
   → `tutor` learning gate). **Git:** `git-workflow` skill.
 - **End of session:** `session-handoff` skill (updates `Current State`; appends a git-derived entry to
   [docs/SESSION_LOG.md](docs/SESSION_LOG.md) — commits, files, decision IDs, learning items; no chat logs).
+- **Day close report:** every planned day ends with a report appended to
+  [docs/DAY_CLOSE_REPORTS.md](docs/DAY_CLOSE_REPORTS.md) (newest first) by the `checkpoint` skill.
+- **Standing merge approval (owner, 2026-11-06, D-032):** after a day close, push the day branch,
+  open the PR and merge it (merge commit) **only if** CI is green, the code review verdict is APPROVE /
+  APPROVE WITH NITS with all must-fix applied, and the `evidence-auditor` reports no MISMATCH.
+  Any red check or open must-fix → stop and report. Never force-push, never merge with failing checks.
 - **Decisions:** every change to a contract, rate/threshold, default, boundary, tool or plan gets a
   row in [docs/DECISION_LOG.md](docs/DECISION_LOG.md) in the same commit (architecture-level → also an ADR).
 

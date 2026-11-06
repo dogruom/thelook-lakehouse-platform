@@ -15,9 +15,9 @@
 
 - **Updated**: 2026-11-06 (W1.D4 closed) · **Branch**: `feat/w1-cdc-generator` (commits `f72c2aa`, `848d9c8` + day-close docs; **not pushed**) — W1.D1–D3 merged to `main` (PR #1–#3)
 - **Last delivered**: W1.D4.1–D4.3 ✅ — seeded customer CDC generator, ground-truth manifest with `classify_outcomes`, CLI `--dry-run`; carried-over compose policy test ✅ (see D4 Evidence).
-- **Unfinished**: push + PR + merge of `feat/w1-cdc-generator` (owner go needed); learning gates deferred to the W1 week gate (batched mode).
+- **Unfinished**: merge commit hash of `feat/w1-cdc-generator` to be recorded at the start of W1.D5; learning gates deferred to the W1 week gate (batched mode).
 - **Tests & results**: unit 709 passed; generator coverage 98 %; CLI byte-identical (seed 42); ruff/mypy clean; import-linter 2 kept; design + code review findings applied.
-- **Owner action**: approve push/PR/merge (or give a standing "merge when CI is green" approval).
+- **Owner action**: none — standing merge approval given (D-032); day close reports in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md) (D-033). W1.D5 deliberately not started (owner instruction 2026-11-06).
 - **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; Glue 5.0 (ADR-0011); Databricks Free Edition W6 (ADR-0012); budget ≤ USD 50; contracts strict producer / tolerant consumer; Silver gate order DLQ → dedup → MERGE (D-022); outcome precedence DLQ → DUPLICATE (vs valid Bronze history) → NOOP → ACCEPT (D-023/D-029).
 - **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); Spark string→DECIMAL parsing unverified (W2); generator does not produce intermediate-late CDC or `late_beyond_window` (D-030, extend before SCD2 tests); `confluent-kafka` wheel on Windows untested (D5).
 - **Way of working**: W1 tutor batched (D6 learning session); every decision in DECISION_LOG; per-session trace in [SESSION_LOG.md](SESSION_LOG.md); replies with executive/technical summary, file links, senior Q&A; personal glossary `.claude/learning/GLOSSARY.md`.
