@@ -1,7 +1,7 @@
 # Data Contracts & Medallion Specifications
 
-> **Document Version**: 7.2
-> **Last Updated**: 2026-11-06 (v7.2: `event_id`/`schema_version`/`produced_at` payload fields, duplicate CDC defect, producer/consumer unknown-field rule, 2-decimal money strings; v7.1: orders carry embedded line items; static product seed; `schema_version` in the envelope; schema-evolution demo moved to orders; reconciliation adds `stale_cdc_noop` — DELIVERY_PLAN v8, ADR-0009)
+> **Document Version**: 7.3
+> **Last Updated**: 2026-11-06 (v7.3: CDC ground-truth manifest §2.1.1, gate order and outcome precedence §4.1; v7.2: `event_id`/`schema_version`/`produced_at` payload fields, duplicate CDC defect, producer/consumer unknown-field rule, 2-decimal money strings; v7.1: orders carry embedded line items; static product seed; `schema_version` in the envelope; schema-evolution demo moved to orders; reconciliation adds `stale_cdc_noop` — DELIVERY_PLAN v8, ADR-0009)
 > **Status**: 🟡 DRAFT — aligned with [PROJECT_CHARTER.md](PROJECT_CHARTER.md) v7. **Not yet enforced in code**; each contract becomes enforced when the corresponding PROGRESS task is ✅ with evidence.
 > **Target Platform**: Multi-Tenant CRM Lakehouse (Delta Lake OSS locally; cloud targets documented separately)
 
@@ -247,6 +247,34 @@ All injected defects are recorded in the ground-truth manifest, **not** in the p
 - **Corrupted Session**: 1.0% ± 0.3% (null `session_id`) → DLQ
 - **Malformed JSON**: 0.5% default → stored in Bronze with `_parse_error`
 
+#### 2.1.1 Ground-truth manifest (`cdc_manifest.json`)
+Written next to `cdc_events.ndjson` by `python -m lakehouse.generator cdc`; it is the test oracle for Silver.
+Same seed and config give byte-identical files (verified with the pinned Faker version on Python 3.11; other Faker or Python versions may differ).
+- Header: `seed`, `brands` (tenant count), `base_events` (= `--events`, clean lifecycle events), `emitted_events` (base + replays),
+  `generator_version`, `config_fingerprint` (sha256 of the generation-relevant settings only).
+- `entries`: one per **emission** in emission order (a replay shares `event_id` with its original): `emission_index`, `event_id`,
+  `brand_id`, `customer_id`, `cdc_sequence`, `cdc_action`, `defect` (null for clean events), `expected_outcome`
+  (`ACCEPT`, `DLQ`, `DUPLICATE`, `NOOP`, computed with batch size 1, see §4.1). The `cross_tenant_collision` tag sits only on the colliding
+  customer's `I` entry in brand B.
+- `expected_final`: per `(brand_id, customer_id)` the valid emission with the highest sequence (`cdc_sequence`, `event_id`, `cdc_action`,
+  `is_deleted`, `city`, `country`, `loyalty_tier`). A customer whose events are all in the DLQ has no row.
+- `counts`: per defect (`invalid_email`, `null_email`, `future_signup`, `out_of_order`, `duplicate`, `cross_tenant_collision`) and the
+  reconciliation terms:
+
+| Outcome | Reconciliation term |
+|---|---|
+| `ACCEPT` | `silver_accepted` |
+| `DLQ` | `dlq` |
+| `DUPLICATE` | `duplicates_removed` |
+| `NOOP` | `stale_cdc_noop` |
+| (none in the CDC stream) | `late_beyond_window` = 0 |
+
+`bronze == emitted` (CDC has no parse errors) and `emitted == silver_accepted + dlq + duplicates_removed + stale_cdc_noop + late_beyond_window`.
+
+Injection units: event-level rates apply to the `--events` base events; `cdc_delete_rate` to customers per tenant (exactly
+`round_half_even(customers × rate)` customers end with `D`); `cross_tenant_collision` to customers of brands 2..N. Each emission carries at
+most one defect. If a defect pool is too small the generator fails with `InfeasibleDefectPlan` instead of injecting fewer defects.
+
 ---
 
 ## 3. Bronze Metadata & Dead Letter Queue (DLQ) Envelope
@@ -296,6 +324,20 @@ Contract and integrity failures detected at the **Bronze → Silver gate** are w
 ## 4. Silver Layer Specifications (Spark-owned)
 
 ### 4.1 CDC Reconciliation (`silver.customers`)
+**Gate order** (the Silver job and the manifest oracle follow it): contract gate (DLQ) → dedup → sequence-ordered MERGE.
+
+**Outcome precedence per emission**, evaluated in emission order (the manifest's `expected_outcome` is this rule with batch size 1):
+1. payload fails the `customer_cdc` contract → `DLQ`;
+2. key `(brand_id, customer_id, _cdc_sequence)` already seen in an earlier **valid** emission → `DUPLICATE`. The check runs against **all
+   earlier valid emissions in Bronze** (DLQ rows excluded), not only within the current batch and not against Silver —
+   an earlier event that ended as `NOOP` never reaches Silver, but its replay is still a `DUPLICATE`;
+3. `_cdc_sequence` ≤ highest valid sequence already applied for `(brand_id, customer_id)` → `NOOP` (stale);
+4. otherwise → `ACCEPT`.
+
+With micro-batches, only the highest-sequence valid non-duplicate event per key in a batch can be `ACCEPT` (batch-local dedup); the rest of the
+batch for that key is `NOOP`. A DLQ'd `I` is not a referential-integrity failure: a later valid `U` carries the full row image and is
+`ACCEPT`ed into an empty target.
+
 Processed with `foreachBatch` + Delta `MERGE` on `(brand_id, customer_id)`:
 - Batch-local dedup to the highest `_cdc_sequence` per key.
 - Apply only when `source._cdc_sequence > target._cdc_sequence`; lower or equal sequences are no-ops.

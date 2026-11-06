@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -18,6 +19,7 @@ RATE_DEFAULTS = {
     "cdc_out_of_order_rate": 5.0,
     "cdc_duplicate_rate": 2.0,
     "cdc_cross_tenant_collision_rate": 1.0,
+    "cdc_delete_rate": 5.0,  # W1.D4: share of customers whose lifecycle ends in D
     "order_orphan_fk_rate": 3.0,
     "order_late_parent_rate": 2.0,
     "order_duplicate_rate": 4.0,
@@ -235,3 +237,55 @@ def test_defect_count_half_even_differs_from_half_up() -> None:
     """Negative: the expectations above would fail under round-half-up."""
     assert defect_count(2.5, 100) != 3
     assert defect_count(0.5, 100) != 1
+
+
+# --------------------------------------------------------------------------- W1.D4 fields
+
+
+def test_w1d4_defaults() -> None:
+    config = make()
+
+    assert config.cdc_max_updates == 4
+    assert config.cdc_delete_rate == 5.0
+    assert config.sim_start == datetime(2026, 1, 1, tzinfo=UTC)
+    assert config.sim_start.utcoffset() is not None
+
+
+@pytest.mark.parametrize("value", [0, 1, 20])
+def test_cdc_max_updates_boundaries_are_accepted(value: int) -> None:
+    assert make(cdc_max_updates=value).cdc_max_updates == value
+
+
+@pytest.mark.parametrize("value", [-1, 21])
+def test_cdc_max_updates_outside_zero_to_twenty_is_rejected(value: int) -> None:
+    with pytest.raises(ValidationError):
+        make(cdc_max_updates=value)
+
+
+@pytest.mark.parametrize("value", [-0.1, 50.1])
+def test_cdc_delete_rate_outside_zero_to_fifty_is_rejected(value: float) -> None:
+    with pytest.raises(ValidationError):
+        make(cdc_delete_rate=value)
+
+
+def test_naive_sim_start_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        make(sim_start="2026-01-01T00:00:00")
+
+
+def test_aware_sim_start_is_accepted_from_string() -> None:
+    config = make(sim_start="2026-03-01T12:00:00+02:00")
+
+    assert config.sim_start == datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
+
+
+def test_w1d4_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEN_CDC_MAX_UPDATES", "7")
+    monkeypatch.setenv("GEN_CDC_DELETE_RATE", "12.5")
+    monkeypatch.setenv("GEN_SIM_START", "2025-06-01T00:00:00Z")
+
+    config = GeneratorConfig(_env_file=None)  # type: ignore[call-arg]
+
+    assert config.cdc_max_updates == 7
+    assert config.cdc_delete_rate == 12.5
+    assert config.sim_start == datetime(2025, 6, 1, tzinfo=UTC)

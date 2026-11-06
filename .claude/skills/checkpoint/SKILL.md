@@ -17,6 +17,12 @@ Argument: `day W<w>.D<d>`, `week <w>` or `milestone M<n>`. Default: the active d
 6. Portfolio (only if something user-visible became ✅): append to `docs/PORTFOLIO_NOTES.md` —
    verified capability (with evidence link), one interview talking point (decision + trade-off),
    competency tag (Senior DE / Data Architect). Drafts stay in the "Draft" section, never in README.
+6b. Day close report: append a section to `docs/DAY_CLOSE_REPORTS.md` (newest first) —
+   executive summary · delivered (task IDs + status) · evidence (commit, command → result) ·
+   reviews and audit verdicts · decisions (D-IDs) · not verified / known limitations · carry-overs ·
+   risks · learning queued · next day · merge status (PR, CI run, merge commit).
+6c. Merge under the standing approval in `CLAUDE.md` (D-032) when all its conditions hold;
+   record the PR / CI / merge commit in the report.
 7. Learning gate: run the `tutor` skill for the day's concepts. In **batched mode** (see tutor
    §0.1; active for W1) the tutor only *collects* (concept notes + queued questions) — no quiz.
 

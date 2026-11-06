@@ -27,6 +27,12 @@ code file the owner flagged is walked through line by line ("what would break if
 removed?"). Calibrate with industry vocabulary (e.g. schema-registry compatibility modes BACKWARD /
 FORWARD / FULL for our additive/breaking rules).
 
+**Glossary:** `.claude/learning/GLOSSARY.md` is the owner's encyclopedia. Teach from it, and after
+every session add or deepen entries for the terms covered (never duplicate a term; extend it and
+bump its `updated` date). Each entry: term · Türkçe kısa tanım · neden var (which problem it solves) ·
+repo'da nerede (clickable link) · senior soru + model cevap · sık hata · ilişkili terimler · first
+seen (task, date) · updated.
+
 ## 0.1 Batched mode (owner decision 2026-11-06; active for W1.D1–D6)
 While a week is in batched mode, a day close does **not** quiz the owner. Instead it:
 1. appends the concept notes (§5) for the day's `🧠 Anla` lines and the day card's **Learn** row;

@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "faker>=28.0",
+    "faker>=40.44.0",
     "pydantic>=2.7.1",
     "pydantic-settings>=2.3.4",
     "structlog>=24.1",
@@ -32,6 +32,7 @@ dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
     "pytest-mock>=3.12",
+    "pyyaml>=6.0.3",
     "moto[s3]>=5.0",
     "ruff>=0.4.0",
     "mypy>=1.8",

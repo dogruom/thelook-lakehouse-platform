@@ -19,6 +19,12 @@ Status: **re-planned 2026-11-05; Milestone 1 starts at W1.D1. Most components ar
   → `tutor` learning gate). **Git:** `git-workflow` skill.
 - **End of session:** `session-handoff` skill (updates `Current State`; appends a git-derived entry to
   [docs/SESSION_LOG.md](docs/SESSION_LOG.md) — commits, files, decision IDs, learning items; no chat logs).
+- **Day close report:** every planned day ends with a report appended to
+  [docs/DAY_CLOSE_REPORTS.md](docs/DAY_CLOSE_REPORTS.md) (newest first) by the `checkpoint` skill.
+- **Standing merge approval (owner, 2026-11-06, D-032):** after a day close, push the day branch,
+  open the PR and merge it (merge commit) **only if** CI is green, the code review verdict is APPROVE /
+  APPROVE WITH NITS with all must-fix applied, and the `evidence-auditor` reports no MISMATCH.
+  Any red check or open must-fix → stop and report. Never force-push, never merge with failing checks.
 - **Decisions:** every change to a contract, rate/threshold, default, boundary, tool or plan gets a
   row in [docs/DECISION_LOG.md](docs/DECISION_LOG.md) in the same commit (architecture-level → also an ADR).
 
@@ -36,9 +42,14 @@ Keep each line short; omit a block only when it is genuinely empty. Spend tokens
 🧠 Anla     : the concept in one sentence + interview line + 2–4 CV/ATS keywords
 ⏭ Sıradaki : next step · owner approval needed (image build, push, cloud spend…)
 ```
-Unknown terms: when the owner says "tutora ekle: <term>" (or asks what something in a doc means),
-answer briefly and append it to `## Owner questions` in `.claude/learning/LEARNING_LOG.md`
-(term · where it was seen · date); the tutor covers that list first in its next session.
+`🧠 Anla` always contains: what the session's work is for and why the concept exists (1–2 lines),
+then **1–2 senior-level interview questions with model answers** (Senior Data Engineer bar, tutor
+"Target bar"), then the interview line and CV/ATS keywords.
+Glossary: `.claude/learning/GLOSSARY.md` is the owner's personal technical encyclopedia (Turkish,
+terms in English). When the owner asks what a term means, **look it up there first**, answer from it,
+and extend the entry if the answer adds something. New concepts from a session's `🧠 Anla` and every
+"tutora ekle: <term>" get an entry (also listed under `## Owner questions` in `LEARNING_LOG.md` for
+the next tutor session).
 The owner may dictate loosely; the 🎯 line is where the prompt gets normalised — if it is wrong,
 the owner corrects it in one line. Remind the owner of the playbook rule they skipped (no task ID,
 new constraint unstated, approval pending) inside ⚠ instead of lecturing.
