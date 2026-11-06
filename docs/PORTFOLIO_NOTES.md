@@ -14,6 +14,7 @@
 | 2026-11-06 | Supply-chain-aware CI: SHA-pinned actions, read-only token, checksum-verified gitleaks full-history scan with reviewed exceptions | commit `00df04e` (CI run link pending) | DE |
 | 2026-11-06 | Versioned event contracts (Pydantic v2 + committed JSON Schema snapshots) with a breaking-change gate proven by a negative test; PII-safe validation errors | commit `6889317`; PROGRESS W1.D3 Evidence | DE |
 | 2026-11-06 | Deterministic multi-tenant CDC generator with an exact-count ground-truth manifest (expected outcome per emission, batch-aware `classify_outcomes`, reconciliation equation) validated against an independent reference MERGE | commit `848d9c8`; PROGRESS W1.D4 Evidence | DE |
+| 2026-11-06 | Keyed idempotent Kafka producer (`acks=all`, idempotence, delivery accounting per tenant) with a live round-trip test proving per-key partition affinity and no extra records; clickstream generator with exact defect manifest | commit `03d02b4`; PROGRESS W1.D5 Evidence | DE |
 
 Competency tags: **DE** = Senior Data Engineer · **ARCH** = Data Architect.
 
@@ -21,7 +22,8 @@ Competency tags: **DE** = Senior Data Engineer · **ARCH** = Data Architect.
 
 | Topic | Decision | Trade-off I can explain | Evidence |
 |---|---|---|---|
-| Event keys | `{brand_id}:{entity_id}` key + `brand_id` header | per-entity ordering vs hot tenant partitions; headers are not partition keys | ADR-0002 (W1.D6) |
+| Event keys | `{brand_id}:{entity_id}` key + `brand_id` header | per-entity ordering vs hot tenant partitions; headers are not partition keys | [ADR-0002](adr/0002-event-interface-kafka-envelope.md); round-trip test W1.D5 |
+| Delivery semantics | idempotent producer + `acks=all`, no Kafka transactions; dedup in Silver | at-least-once and simple vs transactional EOS that only covers Kafka→Kafka | D-036; W1.D5 |
 | Runtime parity | Python 3.11 / Spark 3.5 / Delta 3.3 locally, on Glue 5.0 and Databricks | one codebase across three runtimes vs newest Spark 4 features | ADR-0007, ADR-0011 |
 | Service boundaries | data contracts between independently deployable components, enforced by import-linter | microservice benefits without synchronous coupling | ADR-0009 |
 | Schema evolution | strict producer (`extra="forbid"`), tolerant consumer; any constraint change = breaking | safety vs friction of version bumps on harmless tightening | DECISION_LOG D-006, D-015; W1.D3 |

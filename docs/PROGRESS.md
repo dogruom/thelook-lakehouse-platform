@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-05 (v9.0: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W1.D4** (3/3 ✅; push/PR pending) → next **W1.D5**
+> **Active**: **W1 closed except the D6.1 CI link** (D5 3/3 ✅, D6 2/3 ✅) → next **W2.D7**
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,16 +13,16 @@
 
 ## Current State
 
-- **Updated**: 2026-11-06 (W1.D4 closed) · **Branch**: `feat/w1-cdc-generator` (commits `f72c2aa`, `848d9c8` + day-close docs; **not pushed**) — W1.D1–D3 merged to `main` (PR #1–#3)
-- **Last delivered**: W1.D4.1–D4.3 ✅ — seeded customer CDC generator, ground-truth manifest with `classify_outcomes`, CLI `--dry-run`; carried-over compose policy test ✅ (see D4 Evidence).
-- **Unfinished**: merge commit hash of `feat/w1-cdc-generator` to be recorded at the start of W1.D5; learning gates deferred to the W1 week gate (batched mode).
-- **Tests & results**: unit 709 passed; generator coverage 98 %; CLI byte-identical (seed 42); ruff/mypy clean; import-linter 2 kept; design + code review findings applied.
-- **Owner action**: none — standing merge approval given (D-032); day close reports in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md) (D-033). W1.D5 deliberately not started (owner instruction 2026-11-06).
+- **Updated**: 2026-11-06 (Week 1 closed except the D6.1 CI link; evidence audit: no MISMATCH) · **Branch**: `feat/w1-producer` (commits `03d02b4` D5, `12ac263` D6 + checkpoint docs) → PR to `main` under D-032
+- **Last delivered**: W1.D5.1–D5.3 ✅ — clickstream generator + manifest, keyed idempotent producer + `produce` CLI, live round-trip test; W1.D6.2–D6.3 ✅ — ADR-0002, week-1 runbook, week checkpoint.
+- **Unfinished**: W1.D6.1 CI run link (per-package coverage gate, green locally); tutor week-gate answers from the owner (learning summary + senior questions delivered in chat 2026-11-06).
+- **Tests & results**: unit 797 passed; coverage total 95.6 % / generator 95 % / contracts 96 %; integration 3 passed (live broker); smoke 24/24; `produce` 6220/6220 delivered; ruff/mypy/pre-commit clean; import-linter 2 kept.
+- **Owner action**: answer the W1 senior questions (tutor gate); stop the stack when done (`docker compose stop`).
 - **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; Glue 5.0 (ADR-0011); Databricks Free Edition W6 (ADR-0012); budget ≤ USD 50; contracts strict producer / tolerant consumer; Silver gate order DLQ → dedup → MERGE (D-022); outcome precedence DLQ → DUPLICATE (vs valid Bronze history) → NOOP → ACCEPT (D-023/D-029).
-- **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); Spark string→DECIMAL parsing unverified (W2); generator does not produce intermediate-late CDC or `late_beyond_window` (D-030, extend before SCD2 tests); `confluent-kafka` wheel on Windows untested (D5).
+- **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); Spark string→DECIMAL parsing unverified (W2); generator does not produce intermediate-late CDC or `late_beyond_window` (D-030, extend before SCD2 tests); producer under broker outage untested.
 - **Way of working**: W1 tutor batched (D6 learning session); every decision in DECISION_LOG; per-session trace in [SESSION_LOG.md](SESSION_LOG.md); replies with executive/technical summary, file links, senior Q&A; personal glossary `.claude/learning/GLOSSARY.md`.
-- **Next task ("Start today's task")**: **W1.D5** — clickstream generator + keyed idempotent producer + produce→consume round trip (DELIVERY_PLAN D5 card). Reuse `lakehouse.contracts` key/header helpers and the D4 determinism module; integration test needs the `core` stack.
-- **Next mode**: coordinator plans; `reviewer` design review → `implementer` ‖ `test-author`; integration test runs against the local broker (owner: stack must be startable).
+- **Next task ("Start today's task")**: **W2.D7** — Spark job framework (DELIVERY_PLAN D7 card); Spark tests run inside the image (`tools` profile).
+- **Next mode**: coordinator plans; `reviewer` design review → `implementer` ‖ `test-author` → code review.
 
 ---
 
@@ -49,7 +49,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 ## 📊 Macro Status (count of ✅ tasks / planned tasks)
 
 ```
-M1 (D1–D12)   [████████░░░░░░░░░░░░] 14 / 37
+M1 (D1–D12)   [██████████░░░░░░░░░░] 19 / 37
 M2 (D13–D24)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 ```
@@ -122,20 +122,32 @@ M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  
 #### D5 · Clickstream and keyed idempotent producer
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
-| W1.D5.1 | Clickstream model | funnel ordering of frequencies; late (10–60 min), duplicates, null session, malformed payloads at exact counts | `pytest tests/unit/generator/test_clickstream.py -q` | ⏳ |
-| W1.D5.2 | Producer | idempotence + `acks=all`; key `{brand_id}:{entity_id}`; headers `brand_id`, `schema_version`, `event_type`; delivery metrics; flush on shutdown | `python -m lakehouse.generator produce --events 5000` | ⏳ |
-| W1.D5.3 | Round-trip integration test | ≥ 5,000 click + ≥ 1,000 CDC, ≥ 3 brands; keys/headers asserted; one partition per customer key; lag 0 | `pytest tests/integration/test_producer_roundtrip.py -q` | ⏳ |
+| W1.D5.1 | Clickstream model | funnel ordering of frequencies; late (10–60 min), duplicates, null session, malformed payloads at exact counts | `pytest tests/unit/generator/test_clickstream.py -q` | ✅ `03d02b4` |
+| W1.D5.2 | Producer | idempotence + `acks=all`; key `{brand_id}:{entity_id}`; headers `brand_id`, `schema_version`, `event_type`; delivery metrics; flush on shutdown | `python -m lakehouse.generator produce --events 5000` | ✅ `03d02b4` |
+| W1.D5.3 | Round-trip integration test | ≥ 5,000 click + ≥ 1,000 CDC, ≥ 3 brands; keys/headers asserted; one partition per customer key; lag 0 | `pytest tests/integration/test_producer_roundtrip.py -q` | ✅ `03d02b4` |
 
-**Evidence**: _—_
+**Evidence** (2026-11-06, commit `03d02b4`, branch `feat/w1-producer`):
+- D5.1: `pytest tests/unit/generator -q` (incl. `test_clickstream.py`, `test_messages.py`, `test_producer.py`) green inside the full run below; `clickstream --brands 3 --events 5000 --seed 42 --dry-run` twice → identical SHA-256 (`4ddfff4a…` events, `eac6adee…` manifest); counts base 5000, late 500, duplicate 200, null_session 50, malformed_json 25, emitted 5200 (= `defect_count` exactly); funnel 2562 / 1130 / 722 / 459 / 252.
+- D5.2: `python -m lakehouse.generator produce --events 5000` (live broker) → `attempted=6220 delivered=6220 failed=0 undelivered=0`, exit 0; per topic customer_cdc 1020 / clickstream_events 5200; per brand alpha 3735 / beta 1864 / gamma 621. Console consumer shows partition, headers `brand_id,schema_version,event_type`, key `{brand_id}:{session_id}`. `confluent-kafka` 2.4.0 Windows wheel works (risk closed).
+- D5.3: `pytest tests/integration/test_producer_roundtrip.py -q -rs` → 3 passed, 0 skipped (fresh 6-partition topics; counts, key format, `brand_id` header = key prefix, one partition per key, committed = high watermark and total records = sent, i.e. no retry duplicates). "Lag 0" is shown for the test's own group (every record consumed), not for an independent consumer.
+- Gates: `pytest tests/unit -q --cov=lakehouse` → 797 passed, total 95.6 %, generator 95 %, contracts 96 %; ruff/format clean (57 files); mypy 24 files clean; `lint-imports` 2 kept; `pre-commit run --all-files` exit 0; smoke test 24/24.
+- Review: `reviewer` (code, data + security) APPROVE WITH NITS, 0 blockers; 3 MAJOR applied (`produce` ValueError → exit 2 + test; flush 65 s > `delivery.timeout.ms`; DATA_CONTRACTS producer row + §2.5.1 manifest); nits applied (ADR wording, runbook prerequisites). Decisions D-034…D-036. Process deviation: no design review before implementation (interface fixed in the task cards); covered by the code review.
+- Done-when: round trip green ✔; producer metrics logged with `brand_id` ✔.
 
 #### D6 · Week 1 consolidation
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
-| W1.D6.1 | Coverage + typing gates | ≥ 80% on `generator` + `contracts` in CI; mypy clean; import-linter active | CI run link | ⏳ |
-| W1.D6.2 | ADR-0002 | Kafka vs Kinesis, envelope, keys vs headers, JSON + schema vs registry, retention | file review | ⏳ |
-| W1.D6.3 | Week-1 demo + checkpoint | demo steps run; week checkpoint report below | `checkpoint week 1` | ⏳ |
+| W1.D6.1 | Coverage + typing gates | ≥ 80% on `generator` + `contracts` in CI; mypy clean; import-linter active | CI run link | 🔄 `12ac263` — local gates green; CI link after push |
+| W1.D6.2 | ADR-0002 | Kafka vs Kinesis, envelope, keys vs headers, JSON + schema vs registry, retention | file review | ✅ `12ac263` |
+| W1.D6.3 | Week-1 demo + checkpoint | demo steps run; week checkpoint report below | `checkpoint week 1` | ✅ `12ac263` |
 
-**Week 1 checkpoint**: _not run_
+**Evidence** (2026-11-06, commit `12ac263`): D6.1 — CI step "Coverage gate per core package" added; locally `coverage report --include=*/lakehouse/generator/* --fail-under=80` → 95 %, contracts → 96 %; mypy clean; import-linter 2 kept. D6.2 — [ADR-0002](adr/0002-event-interface-kafka-envelope.md) reviewed by `reviewer` (no exactly-once claim; one wording nit fixed); D-038. D6.3 — [runbooks/week1-demo.md](runbooks/week1-demo.md) with recorded results; every demo step was run individually on 2026-11-06 (not timed as one end-to-end run).
+
+**Week 1 checkpoint** (2026-11-06):
+- Regression set: `pytest tests/unit -q` 797 passed · `python scripts/smoke_test.py` 24/24 · `pre-commit run --all-files` exit 0 · `lint-imports` 2 kept · integration round trip 3 passed.
+- Acceptance: same seed → byte-identical output (CDC D4, clickstream D5) ✔ · manifest exact (CDC + clickstream) ✔ · ≥ 5,000 clickstream and ≥ 1,000 CDC events for 3 brands round-trip ✔ · per-key partition affinity asserted ✔ · CI job 1 green on `main` — after the W1.D5/D6 merge (D6.1 link).
+- Demo: steps 1–7 of the runbook run individually; end-to-end timing not recorded.
+- Carry-overs: W1.D6.1 CI link (after push); D-030 CDC lateness limitation (before SCD2 tests); tutor week gate (batched W1 learning session — summary delivered in chat 2026-11-06, quiz answers by the owner pending).
 
 ### Week 2
 

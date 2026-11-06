@@ -32,7 +32,7 @@ filled from recorded evidence.
    ```
    Expected: manifest summary with injected-defect counts per category; re-running with seed 42
    gives identical files (hash). Recorded: emitted 1020 = accepted 880 + dlq 70 + duplicates 20 +
-   stale 50 + late 0.
+   stale 50 + late_beyond_window 0 (CDC lateness is not generated yet, D-030).
 
 4. Produce to Kafka
    ```powershell
