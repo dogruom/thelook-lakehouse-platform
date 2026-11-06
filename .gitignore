@@ -133,3 +133,5 @@ docs/_archive/
 .claude/settings.local.json
 .claude/learning/
 CLAUDE.local.md
+# Unattended run logs, STOP file and transcripts (scripts/autonomous/run_queue.py)
+.claude/runs/
