@@ -29,6 +29,9 @@ plus the entity fields. Details: [DATA_CONTRACTS.md §2.0](../DATA_CONTRACTS.md)
 ### c) Key vs headers
 - **Key** = `{brand_id}:{customer_id}` (CDC) or `{brand_id}:{session_id}` (clickstream). The key
   alone determines the partition, which gives per-customer / per-session ordering.
+- **Partitioner** = `murmur2_random` (D-039), the Java-client hash. librdkafka's default (CRC32)
+  would send the same key to a different partition than Spark, Kafka Connect or a Java producer,
+  so per-key ordering would silently break once a second client writes the topic.
 - **Headers** `brand_id`, `schema_version`, `event_type` are routing copies for filtering and
   debugging. They never take part in partitioning. Bronze does not persist headers, so downstream
   logic must use the payload fields.

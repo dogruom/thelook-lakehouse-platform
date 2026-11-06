@@ -6,6 +6,7 @@ from collections import Counter
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from structlog.testing import capture_logs
 
 from lakehouse.generator.cdc import generate_cdc
 from lakehouse.generator.clickstream import generate_clickstream
@@ -137,6 +138,8 @@ def test_producer_config_is_idempotent_acks_all() -> None:
     assert cfg["enable.idempotence"] is True
     assert cfg["acks"] == "all"
     assert cfg["bootstrap.servers"] == "broker:9094"
+    # Java-client partition parity (D-039); librdkafka's default would be CRC32
+    assert cfg["partitioner"] == "murmur2_random"
 
 
 def test_producer_config_has_no_secret_defaults() -> None:
@@ -290,6 +293,23 @@ def test_delivered_failed_undelivered_always_sum_to_attempted() -> None:
 # --- BufferError retry ----------------------------------------------------------------------
 
 
+def test_queue_that_never_drains_stops_the_run_and_counts_the_message_as_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import lakehouse.generator.producer as producer_module
+
+    class AlwaysFull(FakeProducer):
+        def produce(self, *_a: Any, **_k: Any) -> None:
+            raise BufferError("queue full")
+
+    monkeypatch.setattr(producer_module, "MAX_BUFFER_RETRIES", 3)
+    producer = AlwaysFull()
+    stats = produce_messages(msgs(5), producer=producer)
+    assert stats.interrupted and not stats.ok
+    assert stats.attempted == stats.failed == 1  # stops at the first message, nothing skipped
+    assert stats.attempted == stats.delivered + stats.failed + stats.undelivered
+
+
 def test_buffer_error_triggers_poll_and_retry_without_losing_the_message() -> None:
     producer = FakeProducer(buffer_error_on_call=3)
     batch = msgs(10)
@@ -331,3 +351,18 @@ def test_no_rate_limit_never_sleeps() -> None:
 
     stats = produce_messages(msgs(20), producer=FakeProducer(), sleep=sleep, clock=lambda: 0.0)
     assert stats.ok
+
+
+# --- accounting invariant on every exit path ------------------------------------------------
+
+
+def test_keyboard_interrupt_in_produce_keeps_the_accounting_invariant() -> None:
+    producer = FakeProducer(interrupt_on_call=3)
+    with capture_logs() as logs, pytest.raises(KeyboardInterrupt):
+        produce_messages(msgs(10), producer=producer)
+    assert producer.flush_calls, "flush must run even when interrupted"
+    (summary,) = (e for e in logs if e["event"] == "producer_delivery_summary")
+    assert len(producer.accepted) == 2
+    assert summary["attempted"] == 2
+    assert summary["delivered"] + summary["failed"] + summary["undelivered"] == summary["attempted"]
+    assert summary["delivered"] == 2

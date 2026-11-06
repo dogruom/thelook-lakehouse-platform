@@ -19,10 +19,11 @@ reviewer reproduce the demo.
 - **Evidence**: commit `12ac263`; coverage generator 95 %, contracts 96 %; regression set green (see PROGRESS "Week 1 checkpoint").
 - **Reviews / audit**: ADR reviewed in the D5 code review (one wording fix); week `evidence-auditor`: no MISMATCH (re-ran generator 392 passed, clickstream hashes identical, round trip 3 passed); gate provisional until the CI link on `main`; two wording fixes applied.
 - **Decisions**: D-037 (per-package coverage), D-038 (ADR-0002).
-- **Not verified**: demo not timed end-to-end; tutor week-gate answers pending from the owner.
+- **Not verified**: tutor week-gate answers pending from the owner (re-teaching material delivered: W1 guide + 3 artifacts).
+- **Week-gate follow-ups (closed the same day)**: Java-compatible partitioner (D-039, live probe 157/200 → 0/200), broker-outage and CLI end-to-end integration tests, accounting invariant (D-040), demo timed from a stopped stack (105 s), and a wrong stop command found and fixed (`docker compose stop` skipped profiled services).
 - **Carry-overs**: D6.1 CI link; D-030 CDC lateness before SCD2 tests.
 - **Next**: W2.D7 (Spark job framework).
-- **Merge status**: _filled after CI._
+- **Merge status**: [PR #5](https://github.com/dogruom/thelook-lakehouse-platform/pull/5) · CI green (runs 42218324701, 42218357517: lint/types/boundaries/unit tests + per-package coverage + gitleaks) · merged under D-032 as `3da43d1`; W1.D6.1 → ✅.
 
 ## W1.D5 · Clickstream generator and keyed idempotent producer — closed 2026-11-06
 

@@ -50,6 +50,10 @@ terms in English). When the owner asks what a term means, **look it up there fir
 and extend the entry if the answer adds something. New concepts from a session's `🧠 Anla` and every
 "tutora ekle: <term>" get an entry (also listed under `## Owner questions` in `LEARNING_LOG.md` for
 the next tutor session).
+Visual learning (owner, 2026-11-06): every week gate's `tutor` run produces a study guide
+(`.claude/learning/W<w>_REHBER.md`, Mermaid diagrams) and visual artifacts (architecture + flows +
+practice quiz), saved classified under `.claude/learning/artifacts/M<n>/W<w>/` and listed in
+`.claude/learning/artifacts/INDEX.md`; publish from that path, never from the scratchpad.
 The owner may dictate loosely; the 🎯 line is where the prompt gets normalised — if it is wrong,
 the owner corrects it in one line. Remind the owner of the playbook rule they skipped (no task ID,
 new constraint unstated, approval pending) inside ⚠ instead of lecturing.
@@ -95,7 +99,7 @@ Personal communication preferences live in `~/.claude/CLAUDE.md`; this file hold
 py -3.11 -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -e .[dev]   # from W1.D1
 ruff check src tests scripts; ruff format --check src tests scripts; mypy src
 pytest tests/unit -q
-docker compose --profile core up -d; python scripts/smoke_test.py; docker compose stop
+docker compose --profile core up -d; python scripts/smoke_test.py; docker compose --profile core stop
 docker compose --profile tools run --rm spark-test pytest tests/spark -q        # from W2.D7
 ```
 
@@ -120,7 +124,7 @@ leftovers — do not use, commit or delete them.
 ## Safety
 - Never read or print `.env`, state files, keys; never dump env or `docker compose config` (hook-enforced).
 - No `git reset --hard`, `git clean`, force push, history rewrite, branch deletion without explicit approval.
-- No `docker compose down -v`, prune, `docker rm/rmi`, volume removal. Use `docker compose stop`.
+- No `docker compose down -v`, prune, `docker rm/rmi`, volume removal. Use `docker compose --profile <name> stop` (without `--profile`, profiled services are not stopped).
 - Ask before `terraform apply/destroy`, any `aws` command, image builds, dataset downloads, cloud spend
   (project ceiling USD 50, ADR-0008).
 
