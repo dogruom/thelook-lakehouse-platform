@@ -7,6 +7,9 @@ pytest-cov==5.0.0
 pytest-mock==3.14.0
 pytest-asyncio==0.23.7
 
+# --- Static config checks (docker-compose policy test) ---
+pyyaml==6.0.3
+
 # --- Mocking AWS / S3 ---
 moto[s3]==5.0.10
 
