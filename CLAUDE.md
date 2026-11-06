@@ -42,7 +42,8 @@ Keep each line short; omit a block only when it is genuinely empty. Spend tokens
 🧠 Anla     : the concept in one sentence + interview line + 2–4 CV/ATS keywords
 ⏭ Sıradaki : next step · owner approval needed (image build, push, cloud spend…)
 ```
-`🧠 Anla` always contains: what the session's work is for and why the concept exists (1–2 lines),
+`🧠 Anla` always contains: a one-line real-life story mapping (tutor §0.0 teaching style, D-042)
+and where the owner can see the data, what the session's work is for and why the concept exists (1–2 lines),
 then **1–2 senior-level interview questions with model answers** (Senior Data Engineer bar, tutor
 "Target bar"), then the interview line and CV/ATS keywords.
 Glossary: `.claude/learning/GLOSSARY.md` is the owner's personal technical encyclopedia (Turkish,

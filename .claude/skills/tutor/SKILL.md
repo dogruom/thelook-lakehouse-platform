@@ -33,6 +33,37 @@ bump its `updated` date). Each entry: term · Türkçe kısa tanım · neden var
 repo'da nerede (clickable link) · senior soru + model cevap · sık hata · ilişkili terimler · first
 seen (task, date) · updated.
 
+## 0.0 Teaching style (owner decision 2026-11-06, D-042) — applies to every explanation
+**Owner profile:** mid-level data engineer aiming for Senior in the European market. Has used
+Linux, called APIs from Python, stood up servers and built agents — mostly with AI writing the
+code. Little hands-on software depth; the modern data stack (Kafka, Spark, Delta, dbt, Airflow)
+is new; has seen some AWS in a master's programme. Explain like a senior colleague at the
+whiteboard, not like documentation.
+
+Every concept is taught in this order:
+1. **Real-life story first.** A concrete everyday scene (e.g. "Ayşe pays at an Opet pump by
+   scanning a QR code in the app"; a Trendyol order; a bank card payment) walked step by step,
+   each step mapped to the component (who is the producer, what is the topic, key, partition,
+   offset, Bronze row…). Correct wrong mental models explicitly ("the phone is not the producer —
+   the brand's backend is").
+2. **Where is the data right now, and how do I see it?** Name the physical place (file path,
+   topic + partition + offset, S3 prefix, table) and give the exact command or SQL to look at it
+   from VS Code (DuckDB notebook, Kafka extension at `127.0.0.1:9094`, Data Wrangler,
+   `docker compose exec kafka ...`). Only give commands/SQL you ran and verified.
+3. **The concept and why it exists** (which failure it prevents), in plain words; every new term
+   gets a one-line definition on first use. No stacks of jargon.
+4. **Failure scenario inside the same story** ("Ayşe's phone loses signal after paying and
+   retries" → duplicate → how Bronze counts it, how Silver removes it).
+5. **Interview angle:** the one-minute explanation and one senior question with a model answer.
+
+**Hands-on labs:** every day close (batched or not) and every week gate maintains
+`.claude/learning/labs/W<w>_LAB.md` (+ `W<w>_lab.ipynb` built from its ```sql blocks): story →
+mapping table → Mermaid flow → numbered tasks the owner runs **manually** (command/SQL, what to
+notice, one ❓ question each) → interview paragraph. Every query is executed before it is
+written into the lab; tasks that need later components are marked with the day they become
+runnable. Local tools only (DuckDB + VS Code); Athena only from M3 (cloud cost, ADR-0008).
+The tutor session starts by asking what the owner saw in the lab, then tests.
+
 ## 0.1 Batched mode (owner decision 2026-11-06; active for W1.D1–D6)
 While a week is in batched mode, a day close does **not** quiz the owner. Instead it:
 1. appends the concept notes (§5) for the day's `🧠 Anla` lines and the day card's **Learn** row;

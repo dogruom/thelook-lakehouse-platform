@@ -13,7 +13,7 @@
 
 ## Current State
 
-- **Updated**: 2026-11-06 (Week 1 closed; evidence audit: no MISMATCH) · **Branch**: `main` — W1 merged (PR #5 → `3da43d1`, CI green); this block + D6.1 row + merge lines are edited on local `main`, uncommitted → commit with the W2.D7 branch
+- **Updated**: 2026-11-06 (Week 1 closed; evidence audit: no MISMATCH) · **Branch**: `main` — W1 merged (PR #5 → `3da43d1`; week-gate follow-ups PR #6 → `0c283c5`, CI green); the PR #6 merge line in DAY_CLOSE_REPORTS is edited on local `main`, uncommitted → commit with the W2.D7 branch
 - **Last delivered**: W1.D5.1–D5.3 ✅ — clickstream generator + manifest, keyed idempotent producer + `produce` CLI, live round-trip test; W1.D6.2–D6.3 ✅ — ADR-0002, week-1 runbook, week checkpoint.
 - **Unfinished**: tutor week-gate answers from the owner (learning summary + senior questions delivered in chat 2026-11-06).
 - **Tests & results**: unit 797 passed; coverage total 95.6 % / generator 95 % / contracts 96 %; integration 3 passed (live broker); smoke 24/24; `produce` 6220/6220 delivered; ruff/mypy/pre-commit clean; import-linter 2 kept.
@@ -22,7 +22,8 @@
 - **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); Spark string→DECIMAL parsing unverified (W2); generator does not produce intermediate-late CDC or `late_beyond_window` (D-030, extend before SCD2 tests); broker failing mid-run untested (fully unreachable broker is tested); Kafka container got SIGKILL (exit 137) on one stop — default 10 s grace may be short for a clean KRaft shutdown (check in W2 with `stop_grace_period`).
 - **Way of working**: W1 tutor batched (D6 learning session); every decision in DECISION_LOG; per-session trace in [SESSION_LOG.md](SESSION_LOG.md); replies with executive/technical summary, file links, senior Q&A; personal glossary `.claude/learning/GLOSSARY.md`.
 - **Next task ("Start today's task")**: **W2.D7** — Spark job framework (DELIVERY_PLAN D7 card); Spark tests run inside the image (`tools` profile).
-- **Next mode**: coordinator plans; `reviewer` design review → `implementer` ‖ `test-author` → code review.
+- **Next mode**: coordinator plans; `reviewer` design review → `implementer` ‖ `test-author` → code review. Unattended option (D-041): queue in [TASKS.md](TASKS.md), runner `scripts/autonomous/run_queue.ps1`; pilot = W2.D7.1 with `--max-iterations 1` while the owner is present.
+- **Autonomous run**: not started (setup on `chore/autonomous-run`, D-041/D-042; pre-flight verified: refuses to start with uncommitted guardrail files)
 
 ---
 

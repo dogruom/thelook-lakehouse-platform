@@ -39,6 +39,12 @@ dev = [
     "pre-commit>=3.6",
     "import-linter>=2.0",
 ]
+# Owner learning labs: query generated files, Bronze/Silver Delta tables and SeaweedFS with SQL
+# from VS Code notebooks (D-042). Not used by pipeline code or CI.
+explore = [
+    "duckdb>=1.1,<2",
+    "ipykernel>=6.29",
+]
 airflow = [
     "apache-airflow>=2.9.3",
     "apache-airflow-providers-amazon>=8.0",
