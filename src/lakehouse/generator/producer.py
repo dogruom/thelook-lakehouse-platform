@@ -51,6 +51,9 @@ def producer_config(bootstrap_servers: str) -> dict[str, Any]:
         "client.id": "lakehouse-generator",
         "enable.idempotence": True,
         "acks": "all",
+        # librdkafka defaults to CRC32 (consistent_random); the Java client, Spark and Kafka
+        # Connect use murmur2. Same key -> same partition across clients only with murmur2.
+        "partitioner": "murmur2_random",
         "linger.ms": 20,
         "compression.type": "lz4",
         "delivery.timeout.ms": 60_000,
@@ -174,8 +177,14 @@ def produce_messages(
                 wait = started + stats.attempted * interval - clock()
                 if wait > 0:
                     sleep(wait)
+            # ``attempted`` is counted only once ``_enqueue`` has resolved the message (queued, or
+            # counted as failed there). A message abandoned by an escaping exception (e.g.
+            # KeyboardInterrupt inside ``produce``) was never queued, so it is in no counter and
+            # ``attempted == delivered + failed + undelivered`` holds on every exit path, except a
+            # signal landing in the few bytecodes between _enqueue returning and this increment.
+            enqueued = _enqueue(producer, message, callback_for(message), stats)
             stats.attempted += 1
-            if not _enqueue(producer, message, callback_for(message), stats):
+            if not enqueued:
                 stats.interrupted = True  # local queue never drained: stop, do not skip silently
                 break
             producer.poll(0)

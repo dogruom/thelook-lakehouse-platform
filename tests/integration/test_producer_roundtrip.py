@@ -98,6 +98,10 @@ def _assert_roundtrip(
     split = {k: p for k, p in partitions.items() if len(p) != 1}
     assert not split, f"keys spread over several partitions: {list(split.items())[:3]}"
 
+    # Java-client parity (D-039): the partition is murmur2(key) like Kafka's Java producer
+    wrong = [r.key for r in got if r.partition != java_partition(r.key, PARTITIONS)]
+    assert not wrong, f"partition differs from Java murmur2 for keys {wrong[:3]}"
+
     # every record consumed (committed == high watermark) and no extra records on the topic
     # (total_high == len(sent): the idempotent producer wrote no retry duplicates)
     consumer.commit(asynchronous=False)
@@ -158,6 +162,42 @@ def test_clickstream_roundtrip_keys_headers_partitions_and_zero_lag(
         assert null_keys and all(KEY_RE.match(k) for k in null_keys)
     finally:
         consumer.close()
+
+
+def murmur2(data: bytes) -> int:
+    """Port of ``org.apache.kafka.common.utils.Utils.murmur2`` (unsigned 32-bit result)."""
+    m, mask = 0x5BD1E995, 0xFFFFFFFF
+    length = len(data)
+    h = (0x9747B28C ^ length) & mask
+    for i in range(0, length - length % 4, 4):
+        k = int.from_bytes(data[i : i + 4], "little")
+        k = (k * m) & mask
+        k ^= k >> 24
+        k = (k * m) & mask
+        h = ((h * m) & mask) ^ k
+    tail, rem = length & ~3, length % 4
+    if rem == 3:
+        h ^= data[tail + 2] << 16
+    if rem >= 2:
+        h ^= data[tail + 1] << 8
+    if rem >= 1:
+        h ^= data[tail]
+        h = (h * m) & mask
+    h ^= h >> 13
+    h = (h * m) & mask
+    return h ^ (h >> 15)
+
+
+def java_partition(key: str, partitions: int) -> int:
+    return (murmur2(key.encode("utf-8")) & 0x7FFFFFFF) % partitions
+
+
+def test_murmur2_port_matches_kafka_java_vectors() -> None:
+    # vectors from Kafka's UtilsTest.testMurmur2 (signed int results)
+    vectors = {"21": -973932308, "foobar": -790332482, "a-little-bit-long-string": -985981536}
+    for text, expected in vectors.items():
+        got = murmur2(text.encode())
+        assert (got - (1 << 32) if got >= 1 << 31 else got) == expected, text
 
 
 def test_partition_check_detects_a_key_split_across_partitions() -> None:
