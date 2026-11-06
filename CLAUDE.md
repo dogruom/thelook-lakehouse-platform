@@ -17,7 +17,8 @@ Status: **re-planned 2026-11-05; Milestone 1 starts at W1.D1. Most components ar
   over-engineering check, classify → route agents → task cards → verify → review). Trivial asks: answer directly.
 - **End of a planned day / week / milestone:** `checkpoint` skill (evidence → [docs/PORTFOLIO_NOTES.md](docs/PORTFOLIO_NOTES.md)
   → `tutor` learning gate). **Git:** `git-workflow` skill.
-- **End of session:** `session-handoff` skill (updates `Current State`, no chat logs).
+- **End of session:** `session-handoff` skill (updates `Current State`; appends a git-derived entry to
+  [docs/SESSION_LOG.md](docs/SESSION_LOG.md) — commits, files, decision IDs, learning items; no chat logs).
 - **Decisions:** every change to a contract, rate/threshold, default, boundary, tool or plan gets a
   row in [docs/DECISION_LOG.md](docs/DECISION_LOG.md) in the same commit (architecture-level → also an ADR).
 
