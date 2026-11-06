@@ -106,7 +106,7 @@ Every entity carries a mandatory, non-null tenant identifier `brand_id`, which i
 Rates are acceptance bands; the generator injects `round_half_even(n × rate)` defects exactly and records them in the manifest.
 
 ### 2.0 Common Kafka event envelope
-Applies to `customer_cdc` and `clickstream_events` (rationale: ADR-0002, planned).
+Applies to `customer_cdc` and `clickstream_events` (rationale: [ADR-0002](adr/0002-event-interface-kafka-envelope.md)).
 
 | Element | Value | Purpose |
 |---|---|---|
@@ -118,9 +118,9 @@ Applies to `customer_cdc` and `clickstream_events` (rationale: ADR-0002, planned
 | Null `session_id` (clickstream) | key `{brand_id}:` | Such events land in Bronze and are rejected to the DLQ downstream |
 | Money (orders, items, products) | JSON string with exactly 2 decimals, e.g. `"12.50"` | Avoids binary-float rounding; parsed into `DECIMAL(10,2)` |
 | Unknown fields | producers reject, consumers ignore (within one `schema_version`) | This is what makes additive changes non-breaking |
+| Producer | `enable.idempotence=true`, `acks=all` (settings: D-036) | Limits retry duplicates; delivery remains at-least-once |
 
 Identifiers (`event_id`, `customer_id`, `session_id`, `order_id`, `item_id`) are lowercase UUIDv4 strings. The key/header helpers in `lakehouse.contracts` do not validate the content of `brand_id`, because injected-defect payloads bypass the models; they only refuse a missing or empty `brand_id`. The `brand_id` format is enforced by the contract gate.
-| Producer | `enable.idempotence=true`, `acks=all` | Limits retry duplicates; delivery remains at-least-once |
 
 ### 2.1 `customers` (Streaming CDC)
 - **Ingestion Mode**: Streaming via Kafka topic `customer_cdc`
@@ -246,6 +246,11 @@ All injected defects are recorded in the ground-truth manifest, **not** in the p
 - **Duplicate Event Tokens**: 4.0% ± 0.5% (same `event_id` re-sent) → removed by Silver dedup and counted
 - **Corrupted Session**: 1.0% ± 0.3% (null `session_id`) → DLQ
 - **Malformed JSON**: 0.5% default → stored in Bronze with `_parse_error`
+
+#### 2.5.1 Ground-truth manifest (`clickstream_manifest.json`)
+- `counts`: `base`, `late`, `duplicate`, `null_session`, `malformed_json`, `emitted` (= `base + duplicate`); every defect count is `round_half_even(base × rate)` exactly. Defects are disjoint; duplicates are byte-identical copies of clean events.
+- `entries` (defective messages only, sorted by `index`): `index` (emission order, **not** a Kafka offset), `event_id`, `brand_id`, `defect`, `expected_outcome` — `late → ACCEPT`, `duplicate → DUPLICATE`, `null_session → DLQ`, `malformed_json → PARSE_ERROR`.
+- `PARSE_ERROR` events stay in Bronze only (raw value + `_parse_error`); they are neither DLQ nor Silver. Their manifest `event_id` is the original one (D-035), which Silver cannot read, so they are reconciled by count per `brand_id`, not by `event_id`.
 
 #### 2.1.1 Ground-truth manifest (`cdc_manifest.json`)
 Written next to `cdc_events.ndjson` by `python -m lakehouse.generator cdc`; it is the test oracle for Silver.
