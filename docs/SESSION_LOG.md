@@ -23,10 +23,29 @@ to add a missing link. File lines are clickable repo-relative links.
 
 ---
 
+## 2026-11-06 · W1.D4 customer CDC generator + ground-truth manifest
+
+- **Tasks**: W1.D4.1–D4.3 ✅ ([PROGRESS D4](PROGRESS.md)) · W1.D2 follow-up compose policy test ✅
+- **Commits / PR**: `f72c2aa` test(infra) · `848d9c8` feat(generator) · day-close docs commit · PR pending owner go
+- **Decisions**: D-021 glossary + senior Q&A (owner) · D-022…D-027 oracle semantics, feasibility, determinism (design review) · D-028 new config · D-029 DUPLICATE vs Bronze history · D-030 known limitation · D-031 fictional phones ([DECISION_LOG](DECISION_LOG.md))
+- **Files**
+  - [src/lakehouse/generator/cdc.py](../src/lakehouse/generator/cdc.py) — new: lifecycle engine, exact defects, `InfeasibleDefectPlan`
+  - [src/lakehouse/generator/manifest.py](../src/lakehouse/generator/manifest.py) — new: `Outcome`, `CdcDefect`, `classify_outcomes`, `Manifest`
+  - [src/lakehouse/generator/determinism.py](../src/lakehouse/generator/determinism.py) — new: string-seeded sub-streams, sim clock, per-locale Faker
+  - [src/lakehouse/generator/io.py](../src/lakehouse/generator/io.py), [\_\_main\_\_.py](../src/lakehouse/generator/__main__.py) — new: canonical NDJSON writer, `cdc --dry-run` CLI
+  - [src/lakehouse/generator/config.py](../src/lakehouse/generator/config.py) — edited: `cdc_max_updates`, `cdc_delete_rate`, `sim_start`
+  - [tests/unit/generator/](../tests/unit/generator/) — new: `_reference.py`, `test_cdc.py`, `test_manifest.py`, `test_determinism.py`, `test_cli.py`
+  - [tests/unit/infra/test_compose_policy.py](../tests/unit/infra/test_compose_policy.py) — new
+  - [DATA_CONTRACTS.md](DATA_CONTRACTS.md) v7.3 (§2.1.1 manifest, §4.1 gate order + precedence) · [DECISION_LOG.md](DECISION_LOG.md) · [PROGRESS.md](PROGRESS.md) · [PORTFOLIO_NOTES.md](PORTFOLIO_NOTES.md)
+  - `requirements/base.txt` (faker 40.44.0), `requirements/dev.txt` (pyyaml 6.0.3), `pyproject.toml`, `.env.example`, [CLAUDE.md](../CLAUDE.md), tutor skill
+- **Verification**: unit 709 passed · generator coverage 98 % · CLI seed 42 twice → identical hashes · reconciliation 880+70+20+50+0 = 1020
+- **Learning (batched)**: 3 concept notes + 6 questions for D4; glossary 25 → 29 entries (+ data reconciliation, idempotent MERGE, largest-remainder apportionment, test oracle)
+- **Portfolio**: + deterministic CDC generator with ground-truth oracle
+
 ## 2026-11-06 · W1.D3 data contracts (+ W1.D2 close earlier the same day)
 
 - **Tasks**: W1.D3.1–D3.3 ✅ ([PROGRESS D3](PROGRESS.md)) · W1.D2 follow-up compose policy test → D4
-- **Commits / PR**: `6889317` feat(contracts) · `2eaa8d5` docs(progress) · [PR #3](https://github.com/dogruom/thelook-lakehouse-platform/pull/3) (CI pending at time of writing)
+- **Commits / PR**: `6889317` feat(contracts) · `2eaa8d5` docs(progress) · [PR #3](https://github.com/dogruom/thelook-lakehouse-platform/pull/3) · `ba79036` docs(traceability) · CI green (run 42141296077) · merged to `main` as `6b0a0fa`
 - **Decisions**: D-001…D-018 ([DECISION_LOG](DECISION_LOG.md)); owner-approved: D-001 batched tutor, D-002 CDC duplicate rate, D-014 reply format
 - **Files**
   - [src/lakehouse/contracts/models.py](../src/lakehouse/contracts/models.py) — new: envelope + 4 contract models, Money

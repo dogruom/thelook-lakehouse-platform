@@ -13,6 +13,7 @@
 | 2026-11-06 | Enforced component boundaries: import-linter contracts in CI, proven by a negative probe that breaks the contract | commit `00df04e`; PROGRESS W1.D1 Evidence | ARCH |
 | 2026-11-06 | Supply-chain-aware CI: SHA-pinned actions, read-only token, checksum-verified gitleaks full-history scan with reviewed exceptions | commit `00df04e` (CI run link pending) | DE |
 | 2026-11-06 | Versioned event contracts (Pydantic v2 + committed JSON Schema snapshots) with a breaking-change gate proven by a negative test; PII-safe validation errors | commit `6889317`; PROGRESS W1.D3 Evidence | DE |
+| 2026-11-06 | Deterministic multi-tenant CDC generator with an exact-count ground-truth manifest (expected outcome per emission, batch-aware `classify_outcomes`, reconciliation equation) validated against an independent reference MERGE | commit `848d9c8`; PROGRESS W1.D4 Evidence | DE |
 
 Competency tags: **DE** = Senior Data Engineer · **ARCH** = Data Architect.
 
@@ -24,6 +25,7 @@ Competency tags: **DE** = Senior Data Engineer · **ARCH** = Data Architect.
 | Runtime parity | Python 3.11 / Spark 3.5 / Delta 3.3 locally, on Glue 5.0 and Databricks | one codebase across three runtimes vs newest Spark 4 features | ADR-0007, ADR-0011 |
 | Service boundaries | data contracts between independently deployable components, enforced by import-linter | microservice benefits without synchronous coupling | ADR-0009 |
 | Schema evolution | strict producer (`extra="forbid"`), tolerant consumer; any constraint change = breaking | safety vs friction of version bumps on harmless tightening | DECISION_LOG D-006, D-015; W1.D3 |
+| CDC correctness | outcome precedence DLQ → DUPLICATE → NOOP → ACCEPT, gate before dedup, sequence not wall clock | batch-local dedup drops intermediate versions (SCD2 needs them) vs simpler MERGE | DECISION_LOG D-022…D-024, D-029; W1.D4 |
 | Cloud cost | serverless, ephemeral, budget-tracked | always-on convenience vs cost; measured spend per run | ADR-0008, ADR-0011 |
 
 ## 3. Drafts (not yet verified — never copy to README before evidence exists)

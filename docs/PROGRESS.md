@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-05 (v9.0: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W1.D3** (3/3 ✅; push/PR pending) → next **W1.D4**
+> **Active**: **W1.D4** (3/3 ✅; push/PR pending) → next **W1.D5**
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,16 +13,16 @@
 
 ## Current State
 
-- **Updated**: 2026-11-06 (W1.D3 closed) · **Branch**: `feat/w1-contracts` (commit `6889317`, not pushed) — W1.D1 (PR #1) and W1.D2 (PR #2) merged to `main`
-- **Last delivered**: W1.D3.1–D3.3 ✅ — `lakehouse.contracts` v1 (4 models + envelope, JSON Schema snapshots, `classify_change`, `safe_errors`, Kafka key/header helpers), `GeneratorConfig` v2, DATA_CONTRACTS v7.2, DECISION_LOG D-001…D-018 (see D3 Evidence).
-- **Unfinished**: push + PR + merge of `feat/w1-contracts` (owner go needed); W1.D2 follow-up static compose policy test → carried to D4; learning gates deferred to the W1 week gate (batched mode).
-- **Tests & results**: unit 470 passed; contracts coverage 96 %; ruff/mypy clean; import-linter 2 kept; pre-commit all passed; design + code review findings applied.
-- **Owner action**: approve push + PR for `feat/w1-contracts`; optionally list unknown D3 terms ("tutora ekle").
-- **Decisions to remember** (full list with reasons: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; HMS + dbt-spark/Thrift (spike W2.D11); **AWS Glue 5.0** (ADR-0011); **Databricks Free Edition W6.D32–D33** (ADR-0012); budget ≤ USD 50; AWS Free plan ends ≈ 2027-03-22; contracts: strict producer / tolerant consumer, money as 2-decimal string, `safe_errors()` only in DLQ.
-- **Risks / blockers**: IAM Identity Center unavailable (CLI access decided W5.D25.1); 7.6 GB Docker memory (core stack ≈ 0.9 GiB idle); native PostgreSQL 18 on host port 5432 (container uses 15432); `gh` CLI logged in as `dogruom`; Spark string→DECIMAL parsing of money unverified (W2 Spark test).
-- **Way of working (owner 2026-11-06)**: W1 tutor **batched** (notes + question bank per day, one learning session at D6); every decision logged in DECISION_LOG in the same commit; replies carry executive summary, technical summary and clickable file list (CLAUDE.md).
-- **Next task ("Start today's task")**: **W1.D4** — customer CDC generator and ground-truth manifest (DELIVERY_PLAN D4 card) + carried-over static compose policy test. Use seeded ids/clock (D-010), `defect_count` (D-003), disjoint defect index sets and largest-remainder tenant apportionment (design-review notes).
-- **Next mode**: coordinator plans; `implementer` + `test-author` in parallel (🔺 determinism/manifest); `reviewer` design review first.
+- **Updated**: 2026-11-06 (W1.D4 closed) · **Branch**: `feat/w1-cdc-generator` (commits `f72c2aa`, `848d9c8` + day-close docs; **not pushed**) — W1.D1–D3 merged to `main` (PR #1–#3)
+- **Last delivered**: W1.D4.1–D4.3 ✅ — seeded customer CDC generator, ground-truth manifest with `classify_outcomes`, CLI `--dry-run`; carried-over compose policy test ✅ (see D4 Evidence).
+- **Unfinished**: push + PR + merge of `feat/w1-cdc-generator` (owner go needed); learning gates deferred to the W1 week gate (batched mode).
+- **Tests & results**: unit 709 passed; generator coverage 98 %; CLI byte-identical (seed 42); ruff/mypy clean; import-linter 2 kept; design + code review findings applied.
+- **Owner action**: approve push/PR/merge (or give a standing "merge when CI is green" approval).
+- **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; Glue 5.0 (ADR-0011); Databricks Free Edition W6 (ADR-0012); budget ≤ USD 50; contracts strict producer / tolerant consumer; Silver gate order DLQ → dedup → MERGE (D-022); outcome precedence DLQ → DUPLICATE (vs valid Bronze history) → NOOP → ACCEPT (D-023/D-029).
+- **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); Spark string→DECIMAL parsing unverified (W2); generator does not produce intermediate-late CDC or `late_beyond_window` (D-030, extend before SCD2 tests); `confluent-kafka` wheel on Windows untested (D5).
+- **Way of working**: W1 tutor batched (D6 learning session); every decision in DECISION_LOG; per-session trace in [SESSION_LOG.md](SESSION_LOG.md); replies with executive/technical summary, file links, senior Q&A; personal glossary `.claude/learning/GLOSSARY.md`.
+- **Next task ("Start today's task")**: **W1.D5** — clickstream generator + keyed idempotent producer + produce→consume round trip (DELIVERY_PLAN D5 card). Reuse `lakehouse.contracts` key/header helpers and the D4 determinism module; integration test needs the `core` stack.
+- **Next mode**: coordinator plans; `reviewer` design review → `implementer` ‖ `test-author`; integration test runs against the local broker (owner: stack must be startable).
 
 ---
 
@@ -49,7 +49,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 ## 📊 Macro Status (count of ✅ tasks / planned tasks)
 
 ```
-M1 (D1–D12)   [██████░░░░░░░░░░░░░░] 11 / 37
+M1 (D1–D12)   [████████░░░░░░░░░░░░] 14 / 37
 M2 (D13–D24)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 ```
@@ -107,11 +107,17 @@ M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  
 #### D4 · Customer CDC generator and manifest
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
-| W1.D4.1 | CDC lifecycle engine | first event `I`, `D` terminal; `_cdc_sequence` strictly increasing per `(brand_id, customer_id)` | `pytest tests/unit/generator/test_cdc.py -q -k lifecycle` | ⏳ |
-| W1.D4.2 | Exact-count defects + manifest | counts equal config exactly; manifest maps every defective `event_id` → defect + expected outcome; defects not in payload | `pytest tests/unit/generator/test_cdc.py -q -k manifest` | ⏳ |
-| W1.D4.3 | Determinism | same seed + config → byte-identical output (hash) | `pytest tests/unit/generator -q -k determinism` | ⏳ |
+| W1.D4.1 | CDC lifecycle engine | first event `I`, `D` terminal; `_cdc_sequence` strictly increasing per `(brand_id, customer_id)` | `pytest tests/unit/generator/test_cdc.py -q -k lifecycle` | ✅ |
+| W1.D4.2 | Exact-count defects + manifest | counts equal config exactly; manifest maps every defective `event_id` → defect + expected outcome; defects not in payload | `pytest tests/unit/generator/test_cdc.py -q -k manifest` | ✅ |
+| W1.D4.3 | Determinism | same seed + config → byte-identical output (hash) | `pytest tests/unit/generator -q -k determinism` | ✅ |
 
-**Evidence**: _—_
+**Evidence** (2026-11-06, commits `f72c2aa` compose policy test, `848d9c8` generator; branch `feat/w1-cdc-generator`):
+- D4.1: `-k lifecycle` → 2 passed; D4.2: `-k manifest` → 2 passed (the `-k` filters select few tests — full files `test_cdc.py` + `test_manifest.py` → 161 passed); D4.3: `-k determinism` → 6 passed (incl. subprocess runs with different `PYTHONHASHSEED`).
+- CLI `python -m lakehouse.generator cdc --brands 3 --events 1000 --seed 42 --dry-run` twice → identical file hashes; counts: invalid_email 30, null_email 20, future_signup 20, out_of_order 50, duplicate 20, collision 1 → accepted 880 + dlq 70 + duplicates 20 + stale 50 + late 0 = emitted 1020 = bronze (late is 0 by construction — CDC lateness not generated, D-030). Day-close audit (`evidence-auditor`): D4.1–D4.3 + compose OK, CLI hashes identical, counts match.
+- Oracle: independent test reference MERGE agrees with `expected_final`; `classify_outcomes` with batch sizes 1/7/50/all keeps the reconciliation sum and last-ACCEPT = `expected_final`.
+- Gates: `pytest tests/unit -q` → 709 passed; `lakehouse.generator` coverage 98 %; ruff/format/mypy (21 files) clean; `lint-imports` 2 kept. Carried-over W1.D2 compose policy test: `pytest tests/unit/infra -q` → 48 passed.
+- Reviews: design CHANGES REQUIRED (6 must-fix → D-022…D-027 applied); code APPROVE WITH NITS (1 MAJOR doc wording → D-029; nits applied; D-030 known limitation; D-031 fictional phones).
+- Done-when: manifest counts = configured counts exactly ✔; lifecycle + sequence invariants tested ✔.
 
 #### D5 · Clickstream and keyed idempotent producer
 | ID | Task | Acceptance | Verify | Status |
