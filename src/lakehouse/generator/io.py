@@ -10,10 +10,13 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from lakehouse.generator.cdc import CdcRun
+    from lakehouse.generator.clickstream import ClickstreamRun
 
 
 EVENTS_FILE = "cdc_events.ndjson"
 MANIFEST_FILE = "cdc_manifest.json"
+CLICKSTREAM_EVENTS_FILE = "clickstream_events.ndjson"
+CLICKSTREAM_MANIFEST_FILE = "clickstream_manifest.json"
 
 
 def canonical_json(obj: Any) -> str:
@@ -29,6 +32,18 @@ def write_run(run: CdcRun, out_dir: Path) -> tuple[Path, Path]:
     # Bytes, not text mode: Windows text mode would turn "\n" into "\r\n".
     events_path.write_bytes(
         "".join(canonical_json(line) + "\n" for line in run.lines).encode("utf-8")
+    )
+    manifest_path.write_bytes((canonical_json(run.manifest.to_dict()) + "\n").encode("utf-8"))
+    return events_path, manifest_path
+
+
+def write_clickstream_run(run: ClickstreamRun, out_dir: Path) -> tuple[Path, Path]:
+    """Write ``clickstream_events.ndjson`` (one message value per line) and its manifest."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    events_path = out_dir / CLICKSTREAM_EVENTS_FILE
+    manifest_path = out_dir / CLICKSTREAM_MANIFEST_FILE
+    events_path.write_bytes(
+        "".join(message.value.decode("utf-8") + "\n" for message in run.messages).encode("utf-8")
     )
     manifest_path.write_bytes((canonical_json(run.manifest.to_dict()) + "\n").encode("utf-8"))
     return events_path, manifest_path

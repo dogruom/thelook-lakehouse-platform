@@ -50,6 +50,11 @@ jobs:
       - name: Unit tests with coverage gate
         run: pytest tests/unit -q --cov=lakehouse --cov-report=term-missing --cov-fail-under=80
 
+      - name: Coverage gate per core package (generator, contracts)
+        run: |
+          coverage report --include="*/lakehouse/generator/*" --fail-under=80
+          coverage report --include="*/lakehouse/contracts/*" --fail-under=80
+
   secrets:
     name: secret scan (gitleaks, full history)
     runs-on: ubuntu-latest

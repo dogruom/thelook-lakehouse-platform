@@ -23,6 +23,15 @@ to add a missing link. File lines are clickable repo-relative links.
 
 ---
 
+## 2026-11-06 · W1.D5 producer + W1.D6 week-1 consolidation
+
+- **Tasks**: W1.D5.1–D5.3 ✅ · W1.D6.2–D6.3 ✅ · W1.D6.1 🔄 (CI link) ([PROGRESS D5/D6](PROGRESS.md))
+- **Commits / PR**: `03d02b4` feat(generator) · `12ac263` docs (ADR-0002, runbook, CI gate) · checkpoint docs commit · PR to `main` under D-032
+- **Decisions**: D-034 clickstream constants · D-035 malformed manifest identity · D-036 producer settings · D-037 per-package coverage · D-038 ADR-0002 ([DECISION_LOG](DECISION_LOG.md))
+- **Files**: [clickstream.py](../src/lakehouse/generator/clickstream.py), [producer.py](../src/lakehouse/generator/producer.py), [messages.py](../src/lakehouse/generator/messages.py), [__main__.py](../src/lakehouse/generator/__main__.py), [io.py](../src/lakehouse/generator/io.py); tests in [tests/unit/generator/](../tests/unit/generator/) and [test_producer_roundtrip.py](../tests/integration/test_producer_roundtrip.py); [ADR-0002](adr/0002-event-interface-kafka-envelope.md), [week1-demo.md](runbooks/week1-demo.md), [ci.yml](../.github/workflows/ci.yml), [DATA_CONTRACTS.md](DATA_CONTRACTS.md) §2.0/§2.5.1
+- **Agents**: implementer ‖ test-author ‖ docs drafter (Sonnet) → reviewer code (Sonnet) → evidence-auditor (Haiku)
+- **Learning**: key-hash partitioning, idempotent producer vs transactions, delivery callbacks, consumer lag; W1 learning summary + senior questions delivered in chat
+
 ## 2026-11-06 · W1.D4 customer CDC generator + ground-truth manifest
 
 - **Tasks**: W1.D4.1–D4.3 ✅ ([PROGRESS D4](PROGRESS.md)) · W1.D2 follow-up compose policy test ✅

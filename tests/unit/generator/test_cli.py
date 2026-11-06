@@ -103,3 +103,45 @@ def test_stdout_has_no_ansi_and_logs_go_to_stderr(tmp_path: Path) -> None:
     assert "\x1b[" not in proc.stdout
     assert "cdc.generated" not in proc.stdout
     assert "cdc.generated" in proc.stderr  # structured logs are on stderr
+
+
+# --- clickstream (W1.D5) -----------------------------------------------------------------
+
+
+def test_clickstream_dry_run_writes_events_and_manifest(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    proc = cli(
+        tmp_path, "clickstream", "--brands", "3", "--events", "5000", "--seed", "42",
+        "--dry-run", "--out-dir", str(out),
+    )  # fmt: skip
+    assert proc.returncode == 0, proc.stderr[-500:]
+    lines = (out / "clickstream_events.ndjson").read_text(encoding="utf-8").splitlines()
+    manifest = json.loads((out / "clickstream_manifest.json").read_text(encoding="utf-8"))
+    counts = manifest.get("counts", manifest)
+    assert counts["base"] == 5000
+    assert counts["emitted"] == len(lines) == 5200
+    assert "\x1b[" not in proc.stdout
+
+
+def test_clickstream_brands_out_of_range_is_an_error_and_writes_nothing(tmp_path: Path) -> None:
+    out = tmp_path / "o"
+    proc = cli(
+        tmp_path, "clickstream", "--brands", "4", "--events", "100", "--dry-run",
+        "--out-dir", str(out),
+    )  # fmt: skip
+    assert proc.returncode != 0
+    assert proc.stderr.strip()
+    assert not out.exists() or not any(out.iterdir())
+
+
+def test_clickstream_usage_error_exits_with_code_2(tmp_path: Path) -> None:
+    assert cli(tmp_path, "clickstream", "--dry-run").returncode == 2
+    assert cli(tmp_path, "produce", "--brands", "x").returncode == 2
+
+
+def test_produce_with_too_few_events_fails_cleanly_before_connecting(tmp_path: Path) -> None:
+    # unreachable broker: the generation error must be reported before any producer is created
+    proc = cli(tmp_path, "produce", "--events", "3", "--bootstrap-servers", "127.0.0.1:1")
+    assert proc.returncode == 2
+    assert "error:" in proc.stderr
+    assert "Traceback" not in proc.stderr
