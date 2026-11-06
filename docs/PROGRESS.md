@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-05 (v9.0: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W1 closed except the D6.1 CI link** (D5 3/3 ✅, D6 2/3 ✅) → next **W2.D7**
+> **Active**: **W1 closed** (D5 3/3 ✅, D6 3/3 ✅; merged `3da43d1`) → next **W2.D7**
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,13 +13,13 @@
 
 ## Current State
 
-- **Updated**: 2026-11-06 (Week 1 closed except the D6.1 CI link; evidence audit: no MISMATCH) · **Branch**: `feat/w1-producer` (commits `03d02b4` D5, `12ac263` D6 + checkpoint docs) → PR to `main` under D-032
+- **Updated**: 2026-11-06 (Week 1 closed; evidence audit: no MISMATCH) · **Branch**: `main` — W1 merged (PR #5 → `3da43d1`, CI green); this block + D6.1 row + merge lines are edited on local `main`, uncommitted → commit with the W2.D7 branch
 - **Last delivered**: W1.D5.1–D5.3 ✅ — clickstream generator + manifest, keyed idempotent producer + `produce` CLI, live round-trip test; W1.D6.2–D6.3 ✅ — ADR-0002, week-1 runbook, week checkpoint.
-- **Unfinished**: W1.D6.1 CI run link (per-package coverage gate, green locally); tutor week-gate answers from the owner (learning summary + senior questions delivered in chat 2026-11-06).
+- **Unfinished**: tutor week-gate answers from the owner (learning summary + senior questions delivered in chat 2026-11-06).
 - **Tests & results**: unit 797 passed; coverage total 95.6 % / generator 95 % / contracts 96 %; integration 3 passed (live broker); smoke 24/24; `produce` 6220/6220 delivered; ruff/mypy/pre-commit clean; import-linter 2 kept.
-- **Owner action**: answer the W1 senior questions (tutor gate); stop the stack when done (`docker compose stop`).
+- **Owner action**: study `.claude/learning/W1_REHBER.md` + the three W1 artifacts (index `.claude/learning/artifacts/INDEX.md`), then take the W1 tutor re-test. Stack stopped (`docker compose --profile core stop`, verified 0 running).
 - **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; Glue 5.0 (ADR-0011); Databricks Free Edition W6 (ADR-0012); budget ≤ USD 50; contracts strict producer / tolerant consumer; Silver gate order DLQ → dedup → MERGE (D-022); outcome precedence DLQ → DUPLICATE (vs valid Bronze history) → NOOP → ACCEPT (D-023/D-029).
-- **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); Spark string→DECIMAL parsing unverified (W2); generator does not produce intermediate-late CDC or `late_beyond_window` (D-030, extend before SCD2 tests); producer under broker outage untested.
+- **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); Spark string→DECIMAL parsing unverified (W2); generator does not produce intermediate-late CDC or `late_beyond_window` (D-030, extend before SCD2 tests); broker failing mid-run untested (fully unreachable broker is tested); Kafka container got SIGKILL (exit 137) on one stop — default 10 s grace may be short for a clean KRaft shutdown (check in W2 with `stop_grace_period`).
 - **Way of working**: W1 tutor batched (D6 learning session); every decision in DECISION_LOG; per-session trace in [SESSION_LOG.md](SESSION_LOG.md); replies with executive/technical summary, file links, senior Q&A; personal glossary `.claude/learning/GLOSSARY.md`.
 - **Next task ("Start today's task")**: **W2.D7** — Spark job framework (DELIVERY_PLAN D7 card); Spark tests run inside the image (`tools` profile).
 - **Next mode**: coordinator plans; `reviewer` design review → `implementer` ‖ `test-author` → code review.
@@ -49,7 +49,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 ## 📊 Macro Status (count of ✅ tasks / planned tasks)
 
 ```
-M1 (D1–D12)   [██████████░░░░░░░░░░] 19 / 37
+M1 (D1–D12)   [███████████░░░░░░░░░] 20 / 37
 M2 (D13–D24)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 ```
@@ -137,7 +137,7 @@ M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  
 #### D6 · Week 1 consolidation
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
-| W1.D6.1 | Coverage + typing gates | ≥ 80% on `generator` + `contracts` in CI; mypy clean; import-linter active | CI run link | 🔄 `12ac263` — local gates green; CI link after push |
+| W1.D6.1 | Coverage + typing gates | ≥ 80% on `generator` + `contracts` in CI; mypy clean; import-linter active | CI run link | ✅ `12ac263` — CI runs 42218324701, 42218357517 success (PR #5, incl. per-package coverage step); merged `3da43d1` |
 | W1.D6.2 | ADR-0002 | Kafka vs Kinesis, envelope, keys vs headers, JSON + schema vs registry, retention | file review | ✅ `12ac263` |
 | W1.D6.3 | Week-1 demo + checkpoint | demo steps run; week checkpoint report below | `checkpoint week 1` | ✅ `12ac263` |
 
@@ -145,9 +145,10 @@ M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  
 
 **Week 1 checkpoint** (2026-11-06):
 - Regression set: `pytest tests/unit -q` 797 passed · `python scripts/smoke_test.py` 24/24 · `pre-commit run --all-files` exit 0 · `lint-imports` 2 kept · integration round trip 3 passed.
-- Acceptance: same seed → byte-identical output (CDC D4, clickstream D5) ✔ · manifest exact (CDC + clickstream) ✔ · ≥ 5,000 clickstream and ≥ 1,000 CDC events for 3 brands round-trip ✔ · per-key partition affinity asserted ✔ · CI job 1 green on `main` — after the W1.D5/D6 merge (D6.1 link).
-- Demo: steps 1–7 of the runbook run individually; end-to-end timing not recorded.
-- Carry-overs: W1.D6.1 CI link (after push); D-030 CDC lateness limitation (before SCD2 tests); tutor week gate (batched W1 learning session — summary delivered in chat 2026-11-06, quiz answers by the owner pending).
+- Acceptance: same seed → byte-identical output (CDC D4, clickstream D5) ✔ · manifest exact (CDC + clickstream) ✔ · ≥ 5,000 clickstream and ≥ 1,000 CDC events for 3 brands round-trip ✔ · per-key partition affinity asserted ✔ · CI job 1 green ✔ (PR #5 runs 42218324701 / 42218357517; merged `3da43d1`).
+- Demo: steps 1–6 run end to end from a stopped stack in 105 s (see follow-ups); step 7 = stop.
+- Week-gate follow-ups (2026-11-06, branch `fix/w1-week-gate`): **partitioner parity** — librdkafka default CRC32 ≠ Java murmur2 (live probe 157/200 keys on a different partition) → `partitioner=murmur2_random`, round trip asserts partition = Java murmur2 for every record (port validated with Kafka test vectors; probe 0/200) (D-039) · **broker outage** — unreachable broker → 20/20 `failed` via callbacks in 60.6 s, `ok=False` (`test_producer_failure_modes.py`) · **CLI end to end** — `produce` into fresh topics, topic counts = emitted (`test_produce_cli.py`) · accounting invariant on every exit path (D-040) · **demo timed from a stopped stack**: 6/6 steps, 105 s · **stop command defect**: plain `docker compose stop` skips profiled services (earlier "stack stopped" claims were wrong) → `docker compose --profile core stop` in CLAUDE.md, rules, runbook. Gates: unit 799 passed, coverage 95.6 %; integration 6 passed. Review: `reviewer` (code, data) APPROVE WITH NITS — nits applied (queue-full unit test, comment, D-log order, runbook wording).
+- Carry-overs: D-030 CDC lateness limitation (before SCD2 tests); tutor week gate (batched W1 learning session — summary delivered in chat 2026-11-06, quiz answers by the owner pending).
 
 ### Week 2
 

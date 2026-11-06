@@ -16,7 +16,7 @@ paths:
 - Secrets come from `.env` via `${VAR:?message}` — no secret fallback values in compose files.
 - Image rebuilds cost time and bandwidth: change Dockerfiles only with a stated reason; mount
   config files (e.g. `spark-defaults.conf`) instead of baking them where possible.
-- Stop with `docker compose stop`; never delete volumes, images or containers.
+- Stop with `docker compose --profile <name> stop` (plain `docker compose stop` skips profiled services); never delete volumes, images or containers.
 
 ## Terraform (AWS)
 - `terraform fmt -check`, `validate`, `tflint` and `trivy config` must pass before `plan`.

@@ -57,16 +57,24 @@ filled from recorded evidence.
 
 6. Round-trip integration test
    ```powershell
-   pytest tests/integration/test_producer_roundtrip.py -q
+   pytest tests/integration/test_producer_roundtrip.py tests/integration/test_produce_cli.py -q
    ```
    Expected: all tests pass (counts, key format, `brand_id` header = key prefix, one partition per
-   key, every record consumed, no extra records). Recorded: `3 passed`.
+   key, partition = Java murmur2 of the key (D-039), every record consumed, no extra records, CLI
+   end to end). Recorded: `5 passed` = CDC + clickstream round trips and the CLI run against the broker,
+   plus two broker-free checks (murmur2 vectors, partition-split detector). The broker-outage test
+   (`tests/integration/test_producer_failure_modes.py`, ~61 s, needs no broker) is run separately.
 
 7. Stop (never `down -v`)
    ```powershell
-   docker compose stop
+   docker compose --profile core stop
    ```
-   Expected: containers stopped, volumes kept.
+   Expected: containers stopped, volumes kept. Plain `docker compose stop` does **not** stop services
+   that belong to a profile — check with `docker ps`.
+
+**Recorded end-to-end run (2026-11-06, from a stopped stack, steps 1–6):** compose up 18.6 s · smoke
+test 56.3 s (24/24) · CDC dry-run 1.9 s · produce 2.8 s (6220 delivered) · console consumer 6.0 s ·
+round-trip tests 19.3 s (5 passed) · **total 105 s**.
 
 ## Troubleshooting
 - **Port 5432 conflict** (local PostgreSQL): the host port is `POSTGRES_HOST_PORT`, which defaults
