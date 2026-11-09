@@ -37,8 +37,9 @@ logs and reports sanitise them. The gate rescans all of Bronze on every run (O(n
 an incremental gate would need a watermark.
 
 Single-writer assumption (as for the Bronze stream, D9): run one gate at a time per namespace.
-Two concurrent gates could still not duplicate rows (the MERGE condition is evaluated on commit)
-but their ``dlq_inserted`` metrics would be unreliable.
+Concurrent gates are unsupported and untested: Delta may reject one with a concurrent-modification
+error, and the ``dlq_inserted`` metric and post-write checks are only meaningful for a single
+writer (VERIFICATION_REGISTER V-05).
 """
 
 from __future__ import annotations
