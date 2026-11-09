@@ -250,9 +250,11 @@ services:
       SPARK_MASTER_PORT: "7077"
       SPARK_MASTER_WEBUI_PORT: "8181"
       LAKEHOUSE_BUCKET: ${LAKEHOUSE_BUCKET:-lakehouse}
+      ENVIRONMENT: local   # job drivers run here (client mode): JSON logs, not console colours
     volumes:
       - *spark-conf
       - ./src:/opt/spark-apps/src:ro
+      - ./dist:/opt/spark-apps/dist:ro   # built by scripts/submit_job.py (driver-side files only)
       - spark_logs:/opt/spark/logs
     ports:
       - "127.0.0.1:8181:8181"   # Master UI (7077 stays inside the compose network)
@@ -332,6 +334,7 @@ services:
 
   # pytest inside the Spark image (PySpark tests never run on the Windows host):
   #   docker compose --profile tools run --rm spark-test pytest tests/spark -q
+  # Tests use local[2]: no master, worker or object storage has to be running.
   spark-test:
     <<: *spark-common
     profiles: ["tools"]
@@ -346,9 +349,6 @@ services:
       - ./src:/opt/spark-apps/src:ro
       - ./tests:/workspace/tests:ro
       - ./pyproject.toml:/workspace/pyproject.toml:ro
-    depends_on:
-      spark-master:
-        condition: service_healthy
     restart: "no"
 
   # ===========================================================================
