@@ -203,6 +203,26 @@ def test_run_submit_returns_the_exit_code_of_a_finished_command_without_killing(
     assert killed == []
 
 
+class _FinishedAtDeadline(_FakeProc):
+    """wait() times out, but the command has exited by the time poll() is called."""
+
+    def wait(self, timeout: float | None = None) -> int:
+        raise subprocess.TimeoutExpired("docker", timeout or 0)
+
+    def poll(self) -> int | None:
+        return 3
+
+
+def test_run_submit_keeps_the_real_code_when_the_command_ends_at_the_deadline(
+    submit: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    killed: list[str] = []
+    monkeypatch.setattr(submit.subprocess, "Popen", lambda *_a, **_k: _FinishedAtDeadline("x"))
+    monkeypatch.setattr(submit, "kill_driver", lambda m: killed.append(m) or True)
+    assert submit.run_submit(["docker", "exec"], "m1", 1.0) == 3
+    assert killed == []
+
+
 # ---- pruning ---------------------------------------------------------------------------------
 
 

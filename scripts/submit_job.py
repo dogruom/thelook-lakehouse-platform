@@ -391,6 +391,8 @@ def run_submit(cmd: Sequence[str], marker: str, timeout_seconds: float | None) -
     try:
         return proc.wait(timeout=timeout_seconds)
     except subprocess.TimeoutExpired:
+        if (finished := proc.poll()) is not None:  # ended on its own right at the deadline
+            return finished
         print(
             f"submit_job: timeout after {timeout_seconds}s; stopping the driver in {CONTAINER}",
             file=sys.stderr,
@@ -518,7 +520,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     code, ps_output = _preflight(ns.job, ns.job_args)
     if code:
-        return code  # a refused submit changes nothing in dist/
+        return code  # a refused submit prunes nothing (it may have built the current zip)
     _prune_zips(DIST_DIR, app_zip, ps_output)
 
     marker = uuid.uuid4().hex
