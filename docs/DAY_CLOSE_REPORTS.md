@@ -24,7 +24,7 @@ in the middle of a run is not proven yet; that is the D9 gate.
 - **Risks**: a job waits without a timeout when no worker is up; `seaweedfs` and `spark-worker` were found exited once after `up -d`, cause not diagnosed; Kafka and SeaweedFS exit 137 on stop; `submit_job.py` is not safe to run concurrently (two exit-2 failures while two agents built `dist/`; each passed on the immediate retry, consistent with this cause but not proven).
 - **Learning queued**: Kafka source options, `foreachBatch` vs sink, checkpoints, Delta transaction log and `txnAppId`. Tutor gate deferred to the Learning queue (D-046).
 - **Next**: W2.D9 🔺 (restart and checkpoint loss).
-- **Merge status**: pending at the time of this commit.
+- **Merge status**: [PR #9](https://github.com/dogruom/thelook-lakehouse-platform/pull/9) · CI green (runs 42634087351, 42634101850: lint/types/boundaries/unit tests + coverage + gitleaks; CI runs no Spark or integration tests) · code review APPROVE WITH NITS, no must-fix · `evidence-auditor` one MISMATCH, fixed · merged under D-032 once this commit's CI is green.
 
 ## W2.D7 · Spark job framework — closed 2026-11-09
 
