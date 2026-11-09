@@ -49,7 +49,7 @@ only server-side control for the D-032 merge gate.
 | W2.D7.1 | `lakehouse.common.spark` SparkSession factory + environment adapter (local/aws) + job CLI base with run IDs | done | — | 0 | `e82f91b`, `44b5ea7` (interactive session) |
 | W2.D7.2 | `spark-test` service (tools profile) running pytest in the Spark image; first Spark tests | done | W2.D7.1 | 0 | `5836709` (no image rebuild needed) |
 | W2.D7.3 | Wheel build + `scripts/submit_job.py` (spark-submit in the master container) | done | W2.D7.2 | 0 | `80a6e63` |
-| W2.D7.close | Day close W2.D7 (checkpoint, report, D-032 merge gate) | todo | W2.D7.3 | 0 | |
+| W2.D7.close | Day close W2.D7 (checkpoint, report, D-032 merge gate) | done | W2.D7.3 | 0 | `879cd9e`, PR #8 |
 | W2.D8.1 | `ingestion.bronze_stream` (both topics, raw value, key, headers, source ref, availableNow, one checkpoint per query) | todo | W2.D7.close | 0 | |
 | W2.D8.2 | Spark tests for the parse function (valid, malformed, missing tenant) | todo | W2.D8.1 | 0 | |
 | W2.D8.3 | Integration: Bronze rows = produced messages | todo | W2.D8.2 | 0 | |

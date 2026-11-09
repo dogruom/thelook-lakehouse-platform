@@ -25,6 +25,7 @@ not the source mount, is what runs. Bronze (D8) can build on this.
 - **Risks**: `.env` project name until the owner fixes it. Kafka and SeaweedFS exited 137 on the last stop (`stop_grace_period` check still open).
 - **Learning queued**: driver vs executor code shipping, config layering, run IDs, `from_json` leniency. Lab: `.claude/learning/labs/W2_LAB.md`. Tutor gate deferred to the Learning queue (needs the owner).
 - **Next**: W2.D8 (Kafka → Bronze).
+- **Merge status**: [PR #8](https://github.com/dogruom/thelook-lakehouse-platform/pull/8) · code review APPROVE WITH NITS, all applied or carried over · `evidence-auditor` no MISMATCH (3 wording fixes applied) · D-032 merge once CI is green; CI runs and the merge commit are on the PR page.
 
 ## W1.D6 · Week 1 consolidation and week checkpoint — closed 2026-11-06
 
