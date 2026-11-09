@@ -18,7 +18,7 @@
 #   python scripts/check_env.py                    # lists missing keys (names only)
 #   docker compose --profile core up -d            # first run builds the Spark image (~2-3 GB)
 #   python scripts/smoke_test.py
-#   docker compose stop                            # never `down -v`
+#   docker compose --profile core stop             # never `down -v`
 #
 # Local UIs (127.0.0.1 only): SeaweedFS filer :9001, Spark master :8181, worker :8182.
 # SeaweedFS is S3-compatible, not AWS S3; differences go to docs/LOCAL_VS_CLOUD.md.
@@ -131,6 +131,7 @@ services:
     image: chrislusf/seaweedfs:4.52
     profiles: ["core"]
     container_name: crm_seaweedfs
+    stop_grace_period: 60s
     entrypoint: ["/bin/sh", "/config/entrypoint.sh"]
     environment:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?S3_ACCESS_KEY missing - run scripts/bootstrap_env.py}
@@ -182,6 +183,7 @@ services:
     image: apache/kafka:3.7.1
     profiles: ["core"]
     container_name: crm_kafka
+    stop_grace_period: 60s
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller

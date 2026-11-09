@@ -115,10 +115,15 @@ def main(
     name, rest = args_in[0], args_in[1:]
 
     try:
-        job = resolve_job(name)()
-    except UnknownJobError as exc:
-        log.error("job.unknown", job=name, reason=str(exc))
+        job_cls = resolve_job(name)
+    except (UnknownJobError, TypeError) as exc:  # TypeError: the module's JOB is not a valid job
+        log.error(
+            "job.unknown" if isinstance(exc, UnknownJobError) else "job.invalid",
+            job=name,
+            reason=str(exc),
+        )
         return _EXIT_USAGE
+    job = job_cls()
 
     parser = argparse.ArgumentParser(prog=name)
     job.add_arguments(parser)

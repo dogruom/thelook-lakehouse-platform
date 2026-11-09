@@ -1,12 +1,13 @@
 """Smoke job: write a small Delta table, read it back and compare counts.
 
 ``--expect-packaged`` additionally proves that the application code reached the driver and the
-executors through ``--py-files`` (``lakehouse_app.zip``) and not through the source mount.
+executors through ``--py-files`` (``lakehouse_app-<sha12>.zip``) and not through the source mount.
 PySpark and Delta are imported lazily so this module imports on hosts without them.
 """
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 from lakehouse.common.jobs import SparkJob
@@ -21,7 +22,9 @@ if TYPE_CHECKING:
 
     from lakehouse.common.jobs import JobContext
 
-PACKAGE_MARKER = "lakehouse_app.zip"
+PACKAGE_MARKER = "lakehouse_app-<hash>.zip"
+# The zip is content-addressed (``lakehouse_app-<sha12>.zip``); the origin must be inside one.
+_PACKAGED_ORIGIN = re.compile(r"lakehouse_app-[0-9a-f]+\.zip/lakehouse/")
 _log = get_logger(__name__)
 
 
@@ -49,7 +52,7 @@ def assert_packaged(origins: Iterable[str]) -> None:
     found = sorted(set(origins))
     if not found:
         raise RuntimeError("no code origins reported; cannot prove the code was packaged")
-    bad = [origin for origin in found if f"{PACKAGE_MARKER}/lakehouse/" not in origin]
+    bad = [origin for origin in found if _PACKAGED_ORIGIN.search(origin) is None]
     if bad:
         raise RuntimeError(f"code not loaded from {PACKAGE_MARKER}: {bad}")
 
@@ -65,7 +68,7 @@ class HelloDeltaJob(SparkJob):
         parser.add_argument(
             "--expect-packaged",
             action="store_true",
-            help="fail unless driver and executors load the code from lakehouse_app.zip",
+            help="fail unless driver and executors load the code from lakehouse_app-<hash>.zip",
         )
 
     def run(

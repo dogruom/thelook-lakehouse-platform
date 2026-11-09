@@ -21,8 +21,9 @@ import re
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
+from urllib.parse import urlsplit
 
-from pydantic import AliasChoices, Field, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from lakehouse.contracts.models import CONTRACT_MODELS
@@ -41,6 +42,7 @@ Layer = Literal["landing", "bronze", "silver", "gold", "dead_letter", "ops", "ch
 
 JOB_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,62}\Z")
 _TOKEN_PATTERN = re.compile(r"^[0-9a-f]{8}\Z")
+_PATH_PART_PATTERN = re.compile(r"^[A-Za-z0-9._=-]+\Z")
 _BUCKET_PATTERN = r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
 _ALLOWED_CREDENTIAL_KEY = "spark.hadoop.fs.s3a.aws.credentials.provider"
 _CREDENTIAL_MARKERS = (
@@ -59,7 +61,10 @@ class SparkSettings(BaseSettings):
     """Spark/storage profile read from ``LAKEHOUSE_*`` environment variables (no secrets)."""
 
     model_config = SettingsConfigDict(
-        env_prefix="LAKEHOUSE_", extra="ignore", populate_by_name=True
+        env_prefix="LAKEHOUSE_",
+        extra="ignore",
+        populate_by_name=True,
+        hide_input_in_errors=True,
     )
 
     env: Literal["local", "aws"] = "local"
@@ -76,6 +81,14 @@ class SparkSettings(BaseSettings):
         default="kafka:9092",
         validation_alias=AliasChoices("LAKEHOUSE_KAFKA_BOOTSTRAP", "kafka_bootstrap_servers"),
     )
+
+    @field_validator("s3_endpoint")
+    @classmethod
+    def _endpoint_without_userinfo(cls, value: str) -> str:
+        # Never echo the value: it is exactly the string that would carry the credentials.
+        if "@" in urlsplit(value).netloc:
+            raise ValueError("s3_endpoint must not contain credentials (userinfo)")
+        return value
 
     @model_validator(mode="after")
     def _glue_needs_aws(self) -> SparkSettings:
@@ -98,13 +111,7 @@ class SparkSettings(BaseSettings):
     def layer_uri(self, layer: Layer, *parts: str) -> str:
         """URI of a bucket layer, optionally with path parts (each one a single safe segment)."""
         for part in parts:
-            if (
-                not part
-                or part in {".", ".."}
-                or "/" in part
-                or "\\" in part
-                or any(ch.isspace() for ch in part)
-            ):
+            if part in {".", ".."} or not _PATH_PART_PATTERN.match(part):
                 raise ValueError(f"invalid path part {part!r}")
         suffix = "".join(f"/{p}" for p in parts)
         return f"{self.storage_scheme}://{self.bucket}/{layer}{suffix}"

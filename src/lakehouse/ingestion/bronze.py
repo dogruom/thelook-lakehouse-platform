@@ -27,6 +27,16 @@ the write and replay the same batch. Replays are idempotent through Delta's ``tx
 ``txnVersion``: the app id must be stable for one checkpoint lineage (the job uses the streaming
 query id, which is stored in the checkpoint) and the version is the micro-batch id.
 
+That key is only safe while the checkpoint and the table agree. If the checkpoint's ``offsets/``
+and ``commits/`` are lost but its ``metadata`` (query id) survives, batch ids restart at 0 and
+Delta would silently skip *new* data whose (app id, batch id) is already recorded, while the offsets
+move on: permanent data loss. ``write_bronze_batch`` therefore checks every skipped write (table
+version unchanged by the save): the distinct ``_source_ref`` set of the incoming batch must equal
+the set already stored for that ``_batch_id``. Equal means a true replay (crash between the Delta
+commit and the offset commit) and passes; different raises :class:`CheckpointRewoundError`, which
+fails the query before the offset commit. Normal writes cost no extra table scan. A single writer
+per table is assumed.
+
 PySpark is imported lazily so this module imports on hosts without it.
 """
 
@@ -39,7 +49,7 @@ from lakehouse.common.spark import struct_type_for
 
 
 if TYPE_CHECKING:
-    from pyspark.sql import DataFrame
+    from pyspark.sql import DataFrame, SparkSession
 
 
 PARSE_NULL_VALUE = "null_value"
@@ -47,6 +57,10 @@ PARSE_INVALID_UTF8 = "invalid_utf8"
 PARSE_MALFORMED_JSON = "malformed_json"
 
 _BRAND_HEADER = "brand_id"
+
+
+class CheckpointRewoundError(RuntimeError):
+    """The checkpoint no longer matches the Bronze lineage: Delta skipped a batch with new data."""
 
 
 @dataclass(frozen=True)
@@ -151,13 +165,49 @@ def to_bronze_rows(kafka_df: DataFrame, target: BronzeTarget, batch_id: str) -> 
     return base.select(*columns)
 
 
+def _table_version(spark: SparkSession, path: str) -> int | None:
+    """Latest Delta version of the table at ``path``; ``None`` when there is no table yet."""
+    from delta.tables import DeltaTable
+
+    if not DeltaTable.isDeltaTable(spark, path):
+        return None
+    return int(DeltaTable.forPath(spark, path).history(1).collect()[0]["version"])
+
+
+def _check_skipped_write_is_replay(
+    spark: SparkSession, rows: DataFrame, path: str, *, app_id: str, batch_id: int
+) -> None:
+    """Raise unless the skipped write is a true replay of the stored batch (same message set)."""
+    from pyspark.sql import functions as F
+
+    incoming = rows.select("_source_ref").distinct()
+    stored = (
+        spark.read.format("delta")
+        .load(path)
+        .where(F.col("_batch_id") == f"{app_id}:{batch_id}")
+        .select("_source_ref")
+        .distinct()
+    )
+    if incoming.exceptAll(stored).isEmpty() and stored.exceptAll(incoming).isEmpty():
+        return
+    raise CheckpointRewoundError(
+        f"checkpoint rewound: Delta skipped batch {batch_id} of app {app_id} for {path} because "
+        f"it is already recorded, but the incoming batch ({incoming.count()} distinct "
+        f"_source_ref) differs from the stored one ({stored.count()} distinct _source_ref). "
+        "The checkpoint no longer matches the Bronze lineage; the new rows were NOT written and "
+        "the offsets were not committed. Restore the checkpoint or start a new lineage "
+        "(fresh checkpoint path); do not delete only its offsets/commits."
+    )
+
+
 def write_bronze_batch(
     batch_df: DataFrame, path: str, *, target: BronzeTarget, app_id: str, batch_id: int
 ) -> BatchCounts:
     """Append one micro-batch (a raw Kafka frame) to the Bronze Delta table at ``path``.
 
     ``app_id`` and ``batch_id`` form Delta's idempotent-write key: the same pair is written once.
-    No ``mergeSchema``: a schema drift must fail loudly.
+    No ``mergeSchema``: a schema drift must fail loudly. A write that Delta skipped (version
+    unchanged) must be a true replay of the stored batch, else :class:`CheckpointRewoundError`.
     """
     from pyspark import StorageLevel
     from pyspark.sql import functions as F
@@ -173,7 +223,11 @@ def write_bronze_batch(
         )
         if target.partition_by:
             writer = writer.partitionBy(*target.partition_by)
+        spark = batch_df.sparkSession
+        version_before = _table_version(spark, path)
         writer.save(path)
+        if _table_version(spark, path) == version_before:
+            _check_skipped_write_is_replay(spark, rows, path, app_id=app_id, batch_id=batch_id)
         counts = rows.agg(
             F.count(F.lit(1)).alias("seen"), F.count(F.col("_parse_error")).alias("errors")
         ).first()

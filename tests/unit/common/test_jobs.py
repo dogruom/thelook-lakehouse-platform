@@ -153,6 +153,26 @@ def test_unknown_job_returns_2_without_creating_a_session() -> None:
     assert f.sessions == []
 
 
+def test_invalid_job_attribute_returns_2_and_logs_job_invalid(
+    add_module: Callable[..., None], capsys: pytest.CaptureFixture[str]
+) -> None:
+    add_module("silver", "broken_attr_job", JOB=int)  # not a SparkJob subclass
+    f = Factory()
+    rc = jobs.main(["broken_attr_job"], session_factory=f, settings=SparkSettings())
+    assert rc == 2
+    assert f.sessions == []
+    events = [r["event"] for r in _records(capsys.readouterr().out)]
+    assert "job.invalid" in events
+
+
+def test_job_name_mismatch_returns_2_not_an_exception(
+    add_module: Callable[..., None],
+) -> None:
+    add_module("silver", "mismatch_main_job", JOB=_job_named("other_name"))
+    rc = jobs.main(["mismatch_main_job"], session_factory=Factory(), settings=SparkSettings())
+    assert rc == 2
+
+
 @pytest.mark.usefixtures("fake_resolver")
 def test_bad_job_arguments_return_2_without_creating_a_session() -> None:
     f = Factory()
