@@ -52,7 +52,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 ## 📊 Macro Status (count of ✅ tasks / planned tasks)
 
 ```
-M1 (D1–D12)   [████████████████░░░░] 29 / 37
+M1 (D1–D12)   [██████████████████░░] 34 / 37
 M2 (D13–D24)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 ```
@@ -213,7 +213,7 @@ M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
 | W2.D11.1 | Hive metastore on Postgres | Bronze/DLQ tables registered; jobs use table names | `SHOW TABLES IN bronze` | ✅ |
-| W2.D11.2 | Thrift Server + dbt probe | `dbt debug` ok; probes for incremental merge, composite key, contracts, persist_docs | `dbt build --select spike` | ✅ |
+| W2.D11.2 | Thrift Server + dbt probe | `dbt debug` ok; probes for incremental merge, composite key, contracts, persist_docs | `dbt build --select spike --full-refresh`, then `--vars "{spike_round: 2}"` (selects the singular test via `ref`) | ✅ |
 | W2.D11.3 | Decision recorded | ADR-0004 spike table with observed results; fallback chosen if needed | file review | ✅ |
 
 **Evidence**:

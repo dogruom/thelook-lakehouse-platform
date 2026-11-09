@@ -1,7 +1,7 @@
 # ADR-0004: Spark vs. dbt ownership boundary and dbt adapter capabilities
 
-- **Status:** Draft. Spike section proposed in W2.D11 (2026-11-10), accepted at the W2.D11 day
-  close; the ownership section is finalised in W3.D15.3 after the Silver/SCD2 work.
+- **Status:** Accepted for the spike section (W2.D11, 2026-11-10); the ownership section stays
+  Draft until W3.D15.3 (after the Silver/SCD2 work).
 - **Date:** 2026-11-10
 - **Related:** ADR-0007 (runtime, catalog, Gold engine), ADR-0009 (component boundaries),
   D-060 (catalog wiring), D-061 (dbt toolchain and workarounds)
@@ -62,8 +62,9 @@ Workarounds (each one recorded in D-060 / D-061 and removable when upstream chan
   `not_null` constraints are not used on Delta in this project.
 
 ## Decision (W2.D11.3)
-- **Keep the Thrift method.** Every capability Gold needs works through the Spark Thrift Server;
-  the `session` fallback is not needed. Reasons to stay: one long-lived SQL endpoint shared by dbt,
+- **Keep the Thrift method.** Every capability probed in the spike (C1–C7, C10–C12) works through
+  the Spark Thrift Server; not yet verified at volume or under concurrent job and dbt use (V-15).
+  The `session` fallback is not needed. Reasons to stay: one long-lived SQL endpoint shared by dbt,
   beeline and later BI tools; the same metastore as the jobs; matches the Spark + Kyuubi/Thrift +
   dbt pattern of ADR-0007.
 - **Gold contract style:** enforced contracts for column names and types; NOT NULL and other

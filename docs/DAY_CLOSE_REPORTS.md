@@ -14,12 +14,12 @@
 **Executive summary.** The tables written by the Spark jobs now have names (`bronze.raw_customers`,
 `dead_letter.dlq_customers`, …) in a catalog stored in PostgreSQL, and the gate and reports read
 them by name. dbt connects to Spark through the Thrift Server and every feature the Gold layer
-needs was tried on real Delta tables: incremental merge, a composite tenant key, enforced
+is planned to use was tried on small probe tables: incremental merge, a composite tenant key, enforced
 contracts and documentation comments. Two dbt-spark gaps were found and worked around; the
 decision is to keep the Thrift Server, no fallback needed.
 - **Delivered**: W2.D11.1 ✅ metastore + `register_tables` + reads by name · W2.D11.2 ✅ Thrift Server + dbt probes · W2.D11.3 ✅ ADR-0004 spike table and decision.
 - **Evidence**: commit `f2f07f9`; `register_tables` → 3 registered + 1 exists, rerun all exists; `dlq_gate` by name → 3060 / 15600 rows, DLQ 210 / 150, inserted 0; Thrift `SHOW TABLES IN bronze` / `dead_letter` → 4 tables, `count(*)` 3060; `dbt debug` OK; `dbt build --select spike` PASS=8 in round 1 and round 2; negatives fail as designed (wrong expectation FAIL 3, contract mismatch, NULL insert rejected). Full suite: unit 1195 → 1203 after fixes, Spark 269, integration 34 passed / 1 skipped (71 min), lint/types/boundaries clean.
-- **Reviews / audit**: code review APPROVE WITH NITS — 2 major (registration failure after a committed ingest hid the counters; D-061 overclaimed "all capabilities") and 5 nits, all applied. `evidence-auditor`: see merge status.
+- **Reviews / audit**: code review APPROVE WITH NITS — 2 major (registration failure after a committed ingest hid the counters; D-061 overclaimed "all capabilities") and 5 nits, all applied. `evidence-auditor`: 4 MISMATCH (stale M1 macro count 29 → 34/37, dbt verify command, ADR-0004 status wording, "every capability Gold needs" overclaim), all fixed in the follow-up docs commit; stack-run evidence classed as not re-verifiable offline, internally consistent.
 - **Decisions**: D-060 catalog wiring and naming rules · D-061 dbt toolchain, Thrift kept, contract style, macro override.
 - **Found by the spike (not in the plan)**: DataNucleus FK auto-creation self-deadlocks on PostgreSQL at the first `CREATE TABLE` (lock wait seen in `pg_stat_activity` + thread dump) → FK-less schema; a container restarted with an older rendered `hive-site.xml` reproduced it once (all Hive clients must restart after a config change); OSS Delta rejects `SET NOT NULL` after CTAS; dbt-spark's column-comment macro fails over PyHive.
 - **Not verified / limitations**: V-13 FK-less metastore · V-14 dbt-spark workarounds to re-test on upgrades · V-15 job and dbt on the metastore at the same time (W3) · V-16 Thrift Server without auth (local only) · Hive DDL behaviour on Glue/Databricks (W5/W6).
