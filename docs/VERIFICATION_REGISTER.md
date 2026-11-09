@@ -18,7 +18,7 @@ Classes: **Closed** (verified, evidence linked) · **Planned** (has a task and a
 | V-03 | Delta commit safety on AWS S3 / Glue (local SeaweedFS has no put-if-absent; single writer assumed) | Planned | W5 (Glue run) | Concurrent writers on S3 could corrupt the log; ADR-0006 results must not be carried over untested |
 | V-04 | AWS profile / short-lived credentials on the owner's machine | Planned | W5.D1 | First cloud day blocked |
 | V-05 | Two writers on one Bronze table at the same time | Known limit | ADR-0006 §single writer; `submit_job.py` refuses an identical running driver (best effort) | A second scheduler could double-write; no lock exists locally |
-| V-06 | Spark worker dies in the middle of a batch (task retry path) | Known limit | Covered indirectly by S3 (driver SIGKILL); not tested separately | Low: Spark retries the task, the batch commit is unchanged |
+| V-06 | Spark worker dies in the middle of a batch (task retry path) | Known limit | Not covered: S3 kills the driver, not a worker | Low: Spark retries the task, the batch commit is unchanged |
 | V-07 | Trailing content after a JSON object is not flagged as a parse error (D-047) | Known limit | Revisit if a producer ever emits it | A malformed record could pass Bronze parsing; D10 rules still check the contract |
 | V-08 | `test_bronze_rows_equal_produced_messages…` failed once (`raw_customers 1 == 0`) and passed on rerun | Planned | Watch in W2.D10 integration runs; investigate on a second failure | A flaky test hides real regressions |
 | V-09 | Owner's local environment file holds a stale `COMPOSE_PROJECT_NAME` | Owner action | Owner edits the value (do not print the file) | Plain `docker compose` targets the wrong project |

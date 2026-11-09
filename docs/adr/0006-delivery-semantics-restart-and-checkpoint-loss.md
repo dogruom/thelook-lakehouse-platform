@@ -36,7 +36,7 @@ watermarks per partition (`min`, `max`, `rows` and `distinct` offset), not with 
 | S4 | Exception in the batch callback | Exit 1; restart resumes at that batch; each offset once |
 | S5 | Whole checkpoint lost | New query id, full re-read: `rows = 2 × messages`, `distinct_source_refs = messages`, 2 lineages. Bronze holds duplicates; nothing is lost |
 | S6 | Records deleted past the checkpointed offset | Non-zero exit, `failOnDataLoss` in the error, Bronze unchanged; no silent skip |
-| S7 | Broker stopped mid-run (opt-in, `RUN_BROKER_CHAOS=1`) | Two runs: the job ended by itself with exit 1 after 75 s and 77 s, no hang; rerun after recovery gives each offset once |
+| S7 | Broker stopped mid-run (opt-in, `RUN_BROKER_CHAOS=1`) | Recorded final run: the job ended by itself with exit 1 after 77 s, no hang; rerun after recovery gives each offset once |
 | S8 | Empty topics on the first run | One zero-row batch; Delta creates the table with its schema and no rows; a second run plans nothing; later data arrives once |
 | S9 | Partial checkpoint loss: `offsets/` and `commits/` gone, `metadata` kept | See below |
 
