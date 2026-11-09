@@ -84,4 +84,5 @@ Tutor gates deferred by the unattended run (D-041). Each row → one tutor sessi
 |---|---|---|---|
 | W1 | Kafka key/partition/headers, idempotent producer, contracts | [.claude/learning/labs/W1_LAB.md](../.claude/learning/labs/W1_LAB.md) | open |
 | W2.D7 | Driver vs executor code shipping, config layering, run IDs, `from_json` leniency | [.claude/learning/labs/W2_LAB.md](../.claude/learning/labs/W2_LAB.md) | open |
+| W2.D9 | Checkpoint anatomy (`offsets/`, `commits/`, `metadata`), Delta idempotent writes and their blind spot (S9), `failOnDataLoss`, fault injection, "offset committed once per checkpoint lineage" | [ADR-0006](adr/0006-delivery-semantics-restart-and-checkpoint-loss.md); `python scripts/submit_job.py bronze_report` (`offsets_by_partition`, `distinct_lineages`) | open |
 | W2.D8 | Kafka source options, `foreachBatch` vs Delta sink, checkpoints, Delta `txnAppId`/`txnVersion`, parse errors vs contract failures | `python scripts/submit_job.py bronze_report`; [DATA_FLOW.md](DATA_FLOW.md) step 9 | open |

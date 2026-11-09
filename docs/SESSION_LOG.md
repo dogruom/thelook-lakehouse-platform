@@ -23,6 +23,16 @@ to add a missing link. File lines are clickable repo-relative links.
 
 ---
 
+## 2026-11-09 · W2.D9 Restart and checkpoint loss
+
+- **Tasks**: W2.D9.1–D9.2 ✅ ([PROGRESS D9](PROGRESS.md))
+- **Commits / PR**: `c23e322` feat(ingestion) · day-close docs commit · PR to `main` under D-032
+- **Decisions**: D-049 … D-055 ([DECISION_LOG](DECISION_LOG.md)); [ADR-0006](adr/0006-delivery-semantics-restart-and-checkpoint-loss.md) draft
+- **Files**: [bronze.py](../src/lakehouse/ingestion/bronze.py), [bronze_stream.py](../src/lakehouse/ingestion/jobs/bronze_stream.py), [bronze_stream_fault.py](../src/lakehouse/ingestion/jobs/bronze_stream_fault.py), [bronze_report.py](../src/lakehouse/ops/jobs/bronze_report.py), [submit_job.py](../scripts/submit_job.py), [spark.py](../src/lakehouse/common/spark.py), [jobs.py](../src/lakehouse/common/jobs.py), [docker-compose.yml](../docker-compose.yml), [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md), [LOCAL_VS_CLOUD.md](LOCAL_VS_CLOUD.md); tests [test_stream_restart.py](../tests/integration/test_stream_restart.py), [test_submit_guards.py](../tests/integration/test_submit_guards.py), [spark_jobs.py](../tests/integration/spark_jobs.py), [test_bronze_rewound.py](../tests/spark/test_bronze_rewound.py), [tests/unit/scripts/](../tests/unit/scripts/)
+- **Agents**: reviewer design (Sonnet) → implementer ‖ test-author (Sonnet) → reviewer code (Sonnet) → evidence-auditor (Haiku)
+- **Finding**: partial checkpoint loss caused silent Bronze data loss; now refused (D-050)
+- **Learning**: checkpoint anatomy, Delta idempotent writes and their blind spot, `failOnDataLoss`, fault injection; tutor gate queued
+
 ## 2026-11-09 · W2.D8 Kafka → Bronze streaming
 
 - **Tasks**: W2.D8.1–D8.3 ✅ ([PROGRESS D8](PROGRESS.md))
