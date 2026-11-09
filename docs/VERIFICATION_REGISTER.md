@@ -1,6 +1,6 @@
 # Verification register
 
-> **Version**: 1.0 · **Last updated**: 2026-11-09 (W2.D9) · Decision: D-055
+> **Version**: 1.1 · **Last updated**: 2026-11-09 (W2.D10) · Decision: D-055
 
 One list of every statement that a day report marked "not verified". Each row has a class and an
 owner day, so nothing stays as an unowned caveat. Update this file whenever a day report names a
@@ -24,6 +24,7 @@ Classes: **Closed** (verified, evidence linked) · **Planned** (has a task and a
 | V-09 | Owner's local environment file holds a stale `COMPOSE_PROJECT_NAME` | Owner action | Owner edits the value (do not print the file) | Plain `docker compose` targets the wrong project |
 | V-10 | Legacy containers of the earlier incident and anonymous volume `5b2af2ca…` | Owner action | Owner decides keep or remove | Disk use only |
 | V-11 | Tutor learning gates W1, W2.D7, W2.D8, W2.D9 | Owner action | Learning queue in [TASKS.md](TASKS.md) | Owner cannot explain the work in interviews |
+| V-12 | Spark rules accept a JSON number in a string field (`first_name: 5`) and differ from Pydantic on rare timestamp/integer forms (D-058, `rules.KNOWN_DIVERGENCES`) | Known limit | Revisit if a producer outside the Pydantic contracts is added | A non-conforming producer could pass a few wrong-typed values into Silver |
 
 ## Closed (2026-11-09, W2.D9)
 

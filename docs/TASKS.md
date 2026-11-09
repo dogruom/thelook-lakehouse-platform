@@ -54,9 +54,9 @@ only server-side control for the D-032 merge gate.
 | W2.D8.2 | Spark tests for the parse function (valid, malformed, missing tenant) | done | W2.D8.1 | 0 | `78f3d60` |
 | W2.D8.3 | Integration: Bronze rows = produced messages | done | W2.D8.2 | 0 | `78f3d60` |
 | W2.D8.close | Day close W2.D8 | done | W2.D8.3 | 0 | day-close docs, interactive session |
-| W2.D9.1 | Restart tests: kill mid-stream → each offset once; delete checkpoint → replay quantified | todo | W2.D8.close | 0 | |
-| W2.D9.2 | ADR-0006 draft with measured outcomes | todo | W2.D9.1 | 0 | |
-| W2.D9.close | Day close W2.D9 (🔺 gate for M2) | todo | W2.D9.2 | 0 | |
+| W2.D9.1 | Restart tests: kill mid-stream → each offset once; delete checkpoint → replay quantified | done | W2.D8.close | 0 | `c23e322` |
+| W2.D9.2 | ADR-0006 draft with measured outcomes | done | W2.D9.1 | 0 | `c23e322` |
+| W2.D9.close | Day close W2.D9 (🔺 gate for M2) | done | W2.D9.2 | 0 | PR #10, merge `30a8f5c` |
 | W2.D10.1 | `quality.rules` + DLQ writer | todo | W2.D9.close | 0 | |
 | W2.D10.2 | Spark tests per rule incl. negatives | todo | W2.D10.1 | 0 | |
 | W2.D10.3 | Integration: DLQ set = manifest DLQ-expected set (exact) | todo | W2.D10.2 | 0 | |
@@ -69,6 +69,7 @@ only server-side control for the D-032 merge gate.
 | W2.D12.2 | Full regression | todo | W2.D12.1 | 0 | |
 | W2.D12.3 | Milestone review (reviewer + evidence-auditor), README status, can/cannot-claim note | todo | W2.D12.2 | 0 | `v0.1.0` tag is owner-only |
 | W2.D12.close | Week/milestone close W2 (tutor deferred to owner session) | todo | W2.D12.3 | 0 | |
+| Q-001 | Run several Spark steps in one SparkSession / one submit (e.g. `bronze_stream` → `dlq_gate` → reports) to cut the ~30–60 s submit and JVM start per step in tests and demos | todo | W2.D12.close | 0 | Owner, 2026-11-09 (D-059): queued, not before D10; changes the job framework (D-044), so plan it with a design review |
 
 ## Owner approvals
 Open items the unattended run could not decide. The agent adds a row and stops that branch of
