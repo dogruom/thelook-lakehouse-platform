@@ -25,7 +25,7 @@ listed with an owner day in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md)
 - **Risks**: Bronze now refuses to run after a partial checkpoint loss; recovery is a documented manual step (new checkpoint path, then Silver dedup), see ADR-0006 operating rules.
 - **Learning queued**: checkpoint anatomy (`offsets/`, `commits/`, `metadata`), Delta idempotent writes and their blind spot, `failOnDataLoss`, fault injection, delivery vocabulary.
 - **Next**: W2.D10 (validation gate and DLQ).
-- **Merge status**: pending (this report is updated with the PR, CI and audit result).
+- **Merge status**: [PR #10](https://github.com/dogruom/thelook-lakehouse-platform/pull/10) · CI green on the code commits (runs 42665055877, 42665043767; lint/types/boundaries/unit tests + coverage + gitleaks; CI runs no Spark or integration tests) · code review re-check APPROVE WITH NITS, no must-fix · `evidence-auditor` no MISMATCH, 4 wording fixes applied · merged under D-032 once this commit's CI is green.
 
 ## W2.D8 · Kafka → Bronze streaming — closed 2026-11-09
 
