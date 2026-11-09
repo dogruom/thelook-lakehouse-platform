@@ -79,3 +79,15 @@ def test_configure_without_force_keeps_existing_configuration(
     get_logger("tests.logging").info("still.json")
 
     assert _last_json_line(capsys.readouterr().out)["event"] == "still.json"
+
+
+def test_logged_exception_text_reaches_the_json_line(capsys: pytest.CaptureFixture[str]) -> None:
+    configure_logging(level="INFO", environment="local", force=True)
+
+    try:
+        raise RuntimeError("the failure reason")
+    except RuntimeError:
+        get_logger("tests.logging").exception("job.failed")
+
+    record = _last_json_line(capsys.readouterr().out)
+    assert "the failure reason" in str(record["exception"])
