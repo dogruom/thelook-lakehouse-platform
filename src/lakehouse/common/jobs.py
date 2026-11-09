@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import structlog
+from pydantic import ValidationError
 
 from lakehouse.common.logging import configure_logging, get_logger
 from lakehouse.common.spark import JOB_NAME_PATTERN, SparkSettings, get_spark_session, new_run_id
@@ -126,7 +127,13 @@ def main(
     except SystemExit as exc:  # argparse already printed usage; no traceback for bad input
         return exc.code if isinstance(exc.code, int) else _EXIT_USAGE
 
-    settings = settings or SparkSettings()
+    try:
+        settings = settings or SparkSettings()
+    except ValidationError as exc:
+        # Field names only: a rejected value could be an endpoint with embedded credentials.
+        fields = [".".join(str(part) for part in err["loc"]) for err in exc.errors()]
+        log.error("job.invalid_settings", job=name, fields=fields)
+        return _EXIT_USAGE
     run_id = new_run_id(name)
     factory = session_factory or get_spark_session
     structlog.contextvars.bind_contextvars(job=name, run_id=run_id, env=settings.env)
@@ -145,7 +152,10 @@ def main(
         return 1
     finally:
         if session is not None and stop_session:
-            session.stop()
+            try:
+                session.stop()
+            except Exception:  # must not replace the job's own result
+                log.exception("job.stop_failed")
         structlog.contextvars.unbind_contextvars("job", "run_id", "env")
 
 

@@ -49,7 +49,7 @@ def assert_packaged(origins: Iterable[str]) -> None:
     found = sorted(set(origins))
     if not found:
         raise RuntimeError("no code origins reported; cannot prove the code was packaged")
-    bad = [origin for origin in found if PACKAGE_MARKER not in origin]
+    bad = [origin for origin in found if f"{PACKAGE_MARKER}/lakehouse/" not in origin]
     if bad:
         raise RuntimeError(f"code not loaded from {PACKAGE_MARKER}: {bad}")
 

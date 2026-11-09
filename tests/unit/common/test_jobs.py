@@ -160,6 +160,35 @@ def test_bad_job_arguments_return_2_without_creating_a_session() -> None:
     assert f.sessions == []
 
 
+@pytest.mark.usefixtures("fake_resolver")
+def test_invalid_settings_return_2_without_leaking_the_value(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("LAKEHOUSE_ENV", "user:hunter2@nowhere")
+    f = Factory()
+    assert jobs.main(["fake_ok"], session_factory=f) == 2
+    assert f.sessions == []
+    out = capsys.readouterr().out
+    assert "job.invalid_settings" in out
+    assert "hunter2" not in out
+
+
+@pytest.mark.usefixtures("fake_resolver")
+def test_failing_session_stop_does_not_replace_the_job_result(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class BadStop(FakeSession):
+        def stop(self) -> None:
+            raise RuntimeError("stop failed")
+
+    rc = jobs.main(
+        ["fake_ok"], session_factory=lambda *_, **__: BadStop(), settings=SparkSettings()
+    )
+    assert rc == 0
+    events = {r["event"] for r in _records(capsys.readouterr().out)}
+    assert {"job.succeeded", "job.stop_failed"} <= events
+
+
 # ---- resolve_job -----------------------------------------------------------------------------
 
 

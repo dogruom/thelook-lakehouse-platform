@@ -34,6 +34,25 @@ def _conf(
     return build_spark_conf(settings or SparkSettings(), app_name="app", run_id=RUN_ID, extra=extra)
 
 
+@pytest.mark.parametrize("key", ["spark.x.token", "spark.x.apikey", "spark.x.session.token"])
+def test_token_and_api_key_conf_keys_are_refused(key: str) -> None:
+    with pytest.raises(ValueError, match="credentials"):
+        _conf(extra={key: "x"})
+
+
+def test_run_id_rejects_trailing_newline_in_job_and_token() -> None:
+    with pytest.raises(ValueError, match="job name"):
+        new_run_id("job\n")
+    with pytest.raises(ValueError, match="token"):
+        new_run_id("job", token="abcdef12\n")
+
+
+def test_legacy_master_env_var_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MASTER", "spark://wrong:7077")
+    assert SparkSettings().master is None
+    assert SparkSettings(master="local[2]").master == "local[2]"
+
+
 # ---- layer_uri -------------------------------------------------------------------------------
 
 

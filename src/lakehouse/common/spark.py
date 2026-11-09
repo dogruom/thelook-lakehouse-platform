@@ -39,8 +39,8 @@ if TYPE_CHECKING:
 
 Layer = Literal["landing", "bronze", "silver", "gold", "dead_letter", "ops", "checkpoints"]
 
-JOB_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,62}$")
-_TOKEN_PATTERN = re.compile(r"^[0-9a-f]{8}$")
+JOB_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,62}\Z")
+_TOKEN_PATTERN = re.compile(r"^[0-9a-f]{8}\Z")
 _BUCKET_PATTERN = r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
 _ALLOWED_CREDENTIAL_KEY = "spark.hadoop.fs.s3a.aws.credentials.provider"
 _CREDENTIAL_MARKERS = (
@@ -48,7 +48,8 @@ _CREDENTIAL_MARKERS = (
     "password",
     "access.key",
     "accesskey",
-    "session.token",
+    "apikey",
+    "token",
     "credential",
 )
 _GLUE_FACTORY = "com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory"
@@ -67,9 +68,8 @@ class SparkSettings(BaseSettings):
         default="http://seaweedfs:9000",
         validation_alias=AliasChoices("S3_ENDPOINT", "LAKEHOUSE_S3_ENDPOINT", "s3_endpoint"),
     )
-    master: str | None = Field(
-        default=None, validation_alias=AliasChoices("LAKEHOUSE_SPARK_MASTER", "master")
-    )
+    # Single alias on purpose: a bare "master" alias would also read Spark's legacy MASTER env var.
+    master: str | None = Field(default=None, validation_alias="LAKEHOUSE_SPARK_MASTER")
     catalog: Literal["in_memory", "hive", "glue"] | None = None
 
     @model_validator(mode="after")

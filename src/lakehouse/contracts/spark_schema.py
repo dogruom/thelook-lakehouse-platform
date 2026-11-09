@@ -12,6 +12,9 @@ Design notes:
   A plain ``cast("decimal(10,2)")`` does **not** enforce "exactly two decimals": it rounds
   ``12.505`` to ``12.51``, trims whitespace, accepts ``1e2`` and returns null on overflow or
   garbage. The Silver quality gate must therefore validate the money pattern *before* casting.
+* Timestamps stay ``"string"`` for the same reason: the wire form is an ISO string, and typing it
+  as ``TIMESTAMP`` (DATA_CONTRACTS) is a Silver step, so a bad value can be seen before a cast
+  turns it into null.
 * ``from_json`` makes every parsed field nullable regardless of the schema, so required-ness is
   enforced by the quality gate, not by the ``StructType``. ``nullable`` here documents the
   contract; it is not a runtime guarantee.
