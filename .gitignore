@@ -17,6 +17,7 @@ build/
 # ==========================
 .venv/
 venv/
+.venv-dbt/
 ENV/
 
 # ==========================
@@ -135,3 +136,4 @@ docs/_archive/
 CLAUDE.local.md
 # Unattended run logs, STOP file and transcripts (scripts/autonomous/run_queue.py)
 .claude/runs/
+dbt_project/profiles/.user.yml

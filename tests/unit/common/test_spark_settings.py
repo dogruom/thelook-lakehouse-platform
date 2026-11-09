@@ -229,6 +229,21 @@ def test_hive_catalog_sets_hive_without_glue_factory() -> None:
     assert "spark.hadoop.hive.metastore.client.factory.class" not in c
 
 
+def test_hive_catalog_sets_the_shared_warehouse_dir() -> None:
+    c = _conf(SparkSettings(catalog="hive"))
+    assert c["spark.sql.warehouse.dir"] == "s3a://lakehouse/warehouse"
+
+
+def test_warehouse_dir_follows_the_bucket() -> None:
+    c = _conf(SparkSettings(catalog="hive", bucket="other-bucket"))
+    assert c["spark.sql.warehouse.dir"] == "s3a://other-bucket/warehouse"
+
+
+def test_in_memory_and_glue_catalogs_do_not_set_the_warehouse_dir() -> None:
+    assert "spark.sql.warehouse.dir" not in _conf()
+    assert "spark.sql.warehouse.dir" not in _conf(SparkSettings(env="aws"))
+
+
 def test_extra_overrides_profile_values() -> None:
     c = _conf(extra={"spark.sql.session.timeZone": "Europe/Berlin", "spark.custom": "1"})
     assert c["spark.sql.session.timeZone"] == "Europe/Berlin"

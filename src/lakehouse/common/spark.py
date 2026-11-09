@@ -38,7 +38,9 @@ if TYPE_CHECKING:
     from pyspark.sql.types import StructType
 
 
-Layer = Literal["landing", "bronze", "silver", "gold", "dead_letter", "ops", "checkpoints"]
+Layer = Literal[
+    "landing", "bronze", "silver", "gold", "dead_letter", "ops", "checkpoints", "warehouse"
+]
 
 JOB_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,62}\Z")
 _TOKEN_PATTERN = re.compile(r"^[0-9a-f]{8}\Z")
@@ -98,7 +100,7 @@ class SparkSettings(BaseSettings):
 
     @property
     def effective_catalog(self) -> Literal["in_memory", "hive", "glue"]:
-        """Explicit catalog, else in-memory locally (Hive metastore lands in W2.D11) / Glue on AWS."""
+        """Explicit catalog, else in-memory locally / Glue on AWS (compose sets ``hive``, D-060)."""
         if self.catalog is not None:
             return self.catalog
         return "in_memory" if self.env == "local" else "glue"
@@ -164,6 +166,10 @@ def build_spark_conf(
 
     catalog = settings.effective_catalog
     conf["spark.sql.catalogImplementation"] = "in-memory" if catalog == "in_memory" else "hive"
+    if catalog == "hive":
+        # Same warehouse as the Thrift Server: whichever client creates a database first fixes
+        # its location in the metastore, and a container-local path would be invisible elsewhere.
+        conf["spark.sql.warehouse.dir"] = settings.layer_uri("warehouse")
     if catalog == "glue":
         conf["spark.hadoop.hive.metastore.client.factory.class"] = _GLUE_FACTORY
 

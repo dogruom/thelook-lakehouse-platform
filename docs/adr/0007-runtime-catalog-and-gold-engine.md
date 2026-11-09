@@ -49,3 +49,5 @@ Spark 4.x / Delta 4.x is the documented upgrade path once EMR offers it as GA.
   `dbt-core 1.12.6`, `dbt-adapters >=1.24.5,<1.25`, `dbt-spark[PyHive] 1.11.0` (thrift method),
   `dbt-databricks 1.13.0` (W6, requires `dbt-core <1.12.7`). Delta `merge` behaviour through the
   Thrift Server is verified in the W2.D11 spike before pinning.
+- W2.D11 spike result (2026-11-10): Thrift method kept; capabilities, workarounds and observed
+  failures in [ADR-0004](0004-spark-dbt-ownership-and-adapter-capabilities.md) (D-060, D-061).

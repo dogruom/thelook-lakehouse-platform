@@ -48,6 +48,15 @@ from typing import TYPE_CHECKING, Any
 
 from lakehouse.common.jobs import SparkJob
 from lakehouse.common.logging import get_logger
+from lakehouse.common.tables import (
+    CATALOG_TABLES,
+    ResolvedTable,
+    read_delta,
+    register_table,
+    resolve,
+    table_exists,
+    verify_location,
+)
 from lakehouse.contracts.models import BRAND_ID_PATTERN
 from lakehouse.quality.rules import RULES_BY_TABLE, apply_rules
 
@@ -218,14 +227,14 @@ def _write_and_check(
 
 
 def _gate_table(
-    spark: SparkSession, *, table: str, bronze_path: str, dlq_path: str, run_id: str
+    spark: SparkSession, *, table: str, bronze: ResolvedTable, dlq_path: str, run_id: str
 ) -> tuple[dict[str, Any], list[str]]:
     """Gate one Bronze table; returns the log record and the failed-check messages."""
     from pyspark import StorageLevel
     from pyspark.sql import functions as F
 
     source_table = f"bronze.{table}"
-    checked = apply_rules(spark.read.format("delta").load(bronze_path), RULES_BY_TABLE[table]())
+    checked = apply_rules(read_delta(spark, bronze), RULES_BY_TABLE[table]())
     failing = F.size("_rejection_codes") > 0
     totals = checked.agg(
         F.count(F.lit(1)).alias("rows_read"),
@@ -236,7 +245,7 @@ def _gate_table(
         F.countDistinct("_source_ref").alias("distinct_refs"),
     ).first()
     if totals is None:  # an aggregate without grouping always returns one row
-        raise RuntimeError(f"no aggregate row for {bronze_path}")
+        raise RuntimeError(f"no aggregate row for {bronze.location}")
     if int(totals["null_refs"]) > 0:
         raise ReconciliationError(
             f"{source_table}: {int(totals['null_refs'])} rows without _source_ref; "
@@ -294,26 +303,32 @@ class DlqGateJob(SparkJob):
     def run(
         self, spark: SparkSession, args: argparse.Namespace, ctx: JobContext
     ) -> Mapping[str, Any]:
-        from delta.tables import DeltaTable
-
-        ns_parts = [args.namespace] if args.namespace else []
         tables: list[str] = list(dict.fromkeys(args.table or DEFAULT_TABLES))
-        sources = {t: ctx.settings.layer_uri("bronze", *ns_parts, t) for t in tables}
-        for path in sources.values():  # fail before writing anything
-            if not DeltaTable.isDeltaTable(spark, path):
-                raise RuntimeError(f"no Bronze table at {path}; stream never ran for it")
+        sources = {t: resolve(ctx.settings, CATALOG_TABLES[t], args.namespace) for t in tables}
+        for source in sources.values():  # fail before writing anything
+            if not table_exists(spark, source):
+                if source.name is not None:
+                    raise RuntimeError(
+                        f"Bronze table {source.name} is not registered in the catalog; "
+                        "run the register_tables job (or the stream never ran for it)"
+                    )
+                raise RuntimeError(f"no Bronze table at {source.location}; stream never ran for it")
+        for table, source in sources.items():  # a named read must hit the configured location
+            verify_location(spark, CATALOG_TABLES[table], source)
 
         report: dict[str, Any] = {}
         for table in tables:
+            dlq_spec = CATALOG_TABLES[DLQ_TABLE_BY_BRONZE[table]]
+            dlq = resolve(ctx.settings, dlq_spec, args.namespace)
             record, problems = _gate_table(
                 spark,
                 table=table,
-                bronze_path=sources[table],
-                dlq_path=ctx.settings.layer_uri(
-                    "dead_letter", *ns_parts, DLQ_TABLE_BY_BRONZE[table]
-                ),
+                bronze=sources[table],
+                dlq_path=dlq.location,
                 run_id=ctx.run_id,
             )
+            if dlq.name is not None:  # the DLQ table now exists; make it visible in the catalog
+                record["dlq_catalog"] = register_table(spark, dlq_spec, dlq)
             report[table] = record
             _log.info("dlq_gate.table", table=table, **record)
             if problems:

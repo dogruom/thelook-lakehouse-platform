@@ -1,0 +1,27 @@
+# dbt project for the Gold layer (ADR-0007). dbt owns Gold only; Silver/SCD2 are Spark-owned.
+# W2.D11: only the capability spike (models/spike) exists; Gold models start in W3.
+name: crm_lakehouse
+version: "0.1.0"
+config-version: 2
+profile: crm_lakehouse
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+target-path: target
+clean-targets: [target, dbt_packages]
+
+vars:
+  # Spike round: 1 = first (full) build, 2 = incremental re-run. Drives the expected state.
+  spike_round: 1
+
+models:
+  crm_lakehouse:
+    +file_format: delta
+    spike:
+      +schema: spike
+      +persist_docs:
+        relation: true
+        columns: true
