@@ -56,6 +56,49 @@ Every concept is taught in this order:
    retries" → duplicate → how Bronze counts it, how Silver removes it).
 5. **Interview angle:** the one-minute explanation and one senior question with a model answer.
 
+## 0.0a Flow-first, two-level explanations (owner feedback 2026-11-06, D-043)
+The owner's complaint: replies "throw terms into the air" ("CDC and sequence ordering … source LSN
+simulation") as if everything were already known. The fix is **not** metaphors from other domains
+(no guards, safes, post offices) — the owner knows what Kafka and Spark are. The fix is walking the
+**real system** step by step. Every explanation of a mechanism follows this shape:
+
+1. **Sade anlatım (non-technical, 3–5 sentences, zero jargon).** What happens and why anyone
+   cares, the way you would tell a product manager or a recruiter.
+2. **Adım adım akış (the real system, numbered).** Start from the human action and follow the data
+   hop by hop: phone app → brand's backend API → its OLTP database → the database's change log →
+   the CDC connector → Kafka topic → Spark → Delta table. At **every** step answer explicitly:
+   - *Who does it* (which program/service, running where)?
+   - *Where is the data physically now* (phone memory, a Postgres row, the WAL file, a Kafka
+     partition + offset, an S3 object)?
+   - *Push or pull, and what triggers it* (an HTTP request, a commit, a connector polling a log
+     every N ms, a scheduled job)? Always running or scheduled?
+   - *What can fail here*, and what happens to the data then?
+3. **Teknik anlatım.** Now the terms, each defined in one plain sentence on first use; at most one
+   new term per sentence; numbers and config names where they matter.
+4. **Bu repoda.** What this project really runs vs what it simulates, said plainly (e.g. "we do
+   not run Debezium; the generator writes CDC-shaped events and `_cdc_sequence` plays the role of
+   the database log position"), with the file/table to look at.
+5. **Interview line + one senior question with a model answer.**
+
+Self-check before sending: could a smart non-engineer follow part 1? Does part 2 say who
+initiates each hop (push vs pull) and where the data sits? Is any sentence a stack of undefined
+terms? If yes, rewrite it.
+
+## 0.0b CV and interview defence (owner request 2026-11-06)
+Hiring managers ask follow-ups on every CV bullet: *which tool, how was it deployed, how big, how
+was the problem found, what stopped it from happening again, what does the data product contain,
+what makes the pipeline robust (retries with backoff? fail vs DLQ?)*. When the owner brings a CV
+bullet or recruiter feedback:
+- List the questions a hiring manager will ask about it (CI/CD platform, deployment, data volume,
+  detection tool/framework, prevention, business content of the data product, failure handling).
+- For each: a **two-level answer draft** — non-technical (30 s) and technical (2 min) — built
+  only from facts the owner confirms. **Never invent experience, numbers, tools or regulations**;
+  mark unknowns as `[owner: fill in]` and ask. Where this project demonstrates the skill, link the
+  evidence (file, test, ADR) so the owner can say "here is how I would do it, and here is the code".
+- Vague words to replace with specifics: "governance standards" → which controls (PII masking,
+  access model, data contracts, retention); "robust" → which failure modes are handled and how;
+  "data products" → which tables/metrics for which consumer and decision.
+
 **Hands-on labs:** every day close (batched or not) and every week gate maintains
 `.claude/learning/labs/W<w>_LAB.md` (+ `W<w>_lab.ipynb` built from its ```sql blocks): story →
 mapping table → Mermaid flow → numbered tasks the owner runs **manually** (command/SQL, what to
