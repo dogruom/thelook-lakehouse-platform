@@ -3,7 +3,7 @@
 # =============================================================================
 # Profiles (start only what the task needs):
 #   core           postgres, seaweedfs (+init), kafka (+init), spark-master, spark-worker
-#   sql            spark-thrift  (Spark Thrift Server for dbt-spark; ADR-0007, verified in W2.D11)
+#   sql            spark-thrift  (Spark Thrift Server for dbt-spark; ADR-0007, ADR-0004 spike W2.D11)
 #   orchestration  airflow-*     (placeholder until the Airflow 3 image lands in Milestone 2)
 #   tools          spark-test    (pytest inside the Spark image; tests/spark from W2.D7)
 #
@@ -45,6 +45,19 @@ x-spark-common: &spark-common
 
 # Read-only mount: config is not baked into the image and carries no credentials.
 x-spark-conf: &spark-conf ./docker/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+
+# Hive metastore client (W2.D11, D-060): the entrypoint renders hive-site.xml (mode 600) into
+# HADOOP_CONF_DIR from these variables at container start; Spark's launcher puts that directory on
+# the classpath, also for `docker exec ... spark-submit`. The password never enters a file in the
+# repository, the image, spark-defaults.conf or a command line.
+x-hive-client-env: &hive-client-env
+  HADOOP_CONF_DIR: /tmp/hive-conf
+  HIVE_METASTORE_DB_HOST: postgres:5432
+  HIVE_METASTORE_DB_NAME: ${HIVE_METASTORE_DB_NAME:-hive_metastore}
+  HIVE_METASTORE_DB_USER: ${HIVE_METASTORE_DB_USER:-hive}
+  HIVE_METASTORE_DB_PASSWORD: ${HIVE_METASTORE_DB_PASSWORD:?HIVE_METASTORE_DB_PASSWORD missing - run scripts/bootstrap_env.py}
+x-hive-entrypoint: &hive-entrypoint ["python3", "/opt/lakehouse-docker/render_hive_site.py"]
+x-hive-render-mount: &hive-render-mount ./docker/spark/render_hive_site.py:/opt/lakehouse-docker/render_hive_site.py:ro
 
 x-airflow-common: &airflow-common
   # Placeholder: Airflow 3 image and DAG layout are built in Milestone 2.
@@ -245,9 +258,12 @@ services:
     <<: *spark-common
     profiles: ["core"]
     container_name: crm_spark_master
+    entrypoint: *hive-entrypoint
     command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
     environment:
-      <<: *s3-credentials
+      <<: [*s3-credentials, *hive-client-env]
+      # Job drivers run here: tables are registered in and read from the Hive metastore (D-060).
+      LAKEHOUSE_CATALOG: hive
       SPARK_MASTER_HOST: spark-master
       SPARK_MASTER_PORT: "7077"
       SPARK_MASTER_WEBUI_PORT: "8181"
@@ -257,6 +273,7 @@ services:
       - *spark-conf
       - ./src:/opt/spark-apps/src:ro
       - ./dist:/opt/spark-apps/dist:ro   # built by scripts/submit_job.py (driver-side files only)
+      - *hive-render-mount
       - spark_logs:/opt/spark/logs
     ports:
       - "127.0.0.1:8181:8181"   # Master UI (7077 stays inside the compose network)
@@ -293,12 +310,13 @@ services:
       retries: 5
       start_period: 30s
 
-  # Spark Thrift Server for dbt-spark (thrift method). Metastore wiring (Postgres-backed Hive
-  # metastore) and the dbt capability spike are W2.D11; here it only exposes the SQL endpoint.
+  # Spark Thrift Server for dbt-spark (thrift method), sharing the Postgres-backed Hive metastore
+  # with the job drivers (W2.D11, ADR-0004 spike). Start: --profile core --profile sql.
   spark-thrift:
     <<: *spark-common
     profiles: ["sql"]
     container_name: crm_spark_thrift
+    entrypoint: *hive-entrypoint
     command:
       - /opt/spark/bin/spark-submit
       - --class
@@ -311,20 +329,25 @@ services:
       - spark.cores.max=1
       - --conf
       - spark.executor.memory=512m
+      - --conf
+      - spark.sql.warehouse.dir=s3a://lakehouse/warehouse
       - spark-internal
       - --hiveconf
       - hive.server2.thrift.port=10000
       - --hiveconf
       - hive.server2.thrift.bind.host=0.0.0.0
     environment:
-      <<: *s3-credentials
+      <<: [*s3-credentials, *hive-client-env]
       LAKEHOUSE_BUCKET: ${LAKEHOUSE_BUCKET:-lakehouse}
     volumes:
       - *spark-conf
+      - *hive-render-mount
       - ./src:/opt/spark-apps/src:ro
     ports:
       - "127.0.0.1:10000:10000"
     depends_on:
+      postgres:
+        condition: service_healthy
       spark-master:
         condition: service_healthy
     healthcheck:
@@ -351,6 +374,8 @@ services:
       - ./src:/opt/spark-apps/src:ro
       - ./tests:/workspace/tests:ro
       - ./pyproject.toml:/workspace/pyproject.toml:ro
+      # POSIX file-mode tests of the entrypoint script (skipped on the Windows host)
+      - ./docker/spark/render_hive_site.py:/workspace/docker/spark/render_hive_site.py:ro
     restart: "no"
 
   # ===========================================================================

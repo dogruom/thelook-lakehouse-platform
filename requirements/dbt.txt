@@ -1,0 +1,9 @@
+# dbt toolchain (ADR-0007, W2.D11 spike, D-060). Separate virtualenv on purpose: dbt-core pins
+# its own dependency tree (protobuf, jsonschema, mashumaro) and must not constrain the pipeline
+# packages in .venv. Install:
+#   py -3.11 -m venv .venv-dbt; .\.venv-dbt\Scripts\python -m pip install -r requirements/dbt.txt
+# dbt-spark connects to the Spark Thrift Server (`sql` compose profile) with the thrift method;
+# the PyHive extra uses pure-sasl (no native SASL build on Windows).
+dbt-core==1.12.6
+dbt-adapters>=1.24.5,<1.25
+dbt-spark[PyHive]==1.11.0

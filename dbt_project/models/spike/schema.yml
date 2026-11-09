@@ -1,0 +1,58 @@
+version: 2
+
+models:
+  - name: spike_bronze_by_name
+    description: Probe - Bronze read by catalog name; events per brand.
+    columns:
+      - name: brand_id
+        description: Tenant id.
+        data_tests: [not_null, unique]
+
+  - name: spike_merge_composite
+    description: Probe - incremental merge on Delta with composite unique_key (brand_id, customer_id).
+    columns:
+      - name: brand_id
+        description: Tenant id; part of every business key.
+      - name: customer_id
+        description: Customer id, unique only within a brand.
+      - name: version
+        description: Payload version; round 2 updates brand_a/c1 to v2.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, customer_id]
+
+  - name: spike_contract
+    description: Probe - enforced contract and persist_docs (table and column comments).
+    config:
+      contract:
+        enforced: true
+    # Observed W2.D11: a column-level `not_null` constraint fails on OSS Delta 3.3.3 (dbt-spark
+    # adds it after CTAS with ALTER ... SET NOT NULL, which Delta rejects); a column-level
+    # `check` is ignored with a warning. A model-level CHECK becomes a Delta table constraint.
+    constraints:
+      - type: check
+        name: brand_id_not_null
+        expression: "brand_id is not null"
+    columns:
+      - name: brand_id
+        description: Tenant id.
+        data_type: string
+        data_tests: [not_null]
+      - name: customer_id
+        description: Customer id within the brand.
+        data_type: string
+      - name: order_count
+        description: Number of orders.
+        data_type: bigint
+
+  - name: spike_contract_violation
+    description: Negative probe - type mismatch against an enforced contract (disabled by default).
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: brand_id
+        data_type: string
+      - name: order_count
+        data_type: bigint

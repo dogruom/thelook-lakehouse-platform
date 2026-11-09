@@ -1,0 +1,14 @@
+# Committed on purpose: no credentials. The local Thrift Server has no authentication and listens
+# on 127.0.0.1 only. Run from dbt_project/: dbt <cmd> --profiles-dir profiles
+crm_lakehouse:
+  target: local
+  outputs:
+    local:
+      type: spark
+      method: thrift
+      host: "{{ env_var('DBT_SPARK_HOST', '127.0.0.1') }}"
+      port: "{{ env_var('DBT_SPARK_PORT', '10000') | int }}"
+      schema: gold
+      threads: 1
+      connect_retries: 3
+      connect_timeout: 30

@@ -33,6 +33,12 @@ from typing import TYPE_CHECKING, Any
 
 from lakehouse.common.jobs import SparkJob
 from lakehouse.common.logging import get_logger
+from lakehouse.common.tables import (
+    CATALOG_TABLES,
+    delta_exists_at_location,
+    register_table,
+    resolve,
+)
 from lakehouse.ingestion.bronze import CLICKSTREAM, CUSTOMERS, BronzeTarget, write_bronze_batch
 
 
@@ -183,7 +189,38 @@ class BronzeStreamJob(SparkJob):
                 parse_errors=c.parse_errors,
                 batches=c.batches,
             )
-        return {"queries": result}
+        # After the counters are logged: a registration failure must not hide the ingest evidence.
+        catalog = register_bronze_tables(spark, ctx.settings, [t.table for t in targets], namespace)
+        return {"queries": result, **({"catalog": catalog} if catalog else {})}
+
+
+class CatalogRegistrationError(RuntimeError):
+    """Bronze data is committed, but the catalog registration afterwards failed."""
+
+
+def register_bronze_tables(
+    spark: SparkSession, settings: SparkSettings, tables: list[str], namespace: str | None
+) -> dict[str, str]:
+    """Register every existing Bronze table of the run (writes stay path-based, D-060).
+
+    Namespaced runs (test isolation) and the in-memory catalog resolve to no name: skipped.
+    Any failure is re-raised as :class:`CatalogRegistrationError`, stating that the ingest itself
+    is committed; a rerun is safe (checkpoints skip the data, registration is idempotent).
+    """
+    catalog: dict[str, str] = {}
+    for table in tables:
+        spec = CATALOG_TABLES[table]
+        resolved = resolve(settings, spec, namespace)
+        if resolved.name is None:
+            continue
+        try:
+            if delta_exists_at_location(spark, resolved):
+                catalog[table] = register_table(spark, spec, resolved)
+        except Exception as exc:
+            raise CatalogRegistrationError(
+                f"Bronze ingest committed; catalog registration of {resolved.name} failed: {exc}"
+            ) from exc
+    return catalog
 
 
 def _start_query(

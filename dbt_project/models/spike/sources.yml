@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: Bronze Delta tables registered in the Hive metastore by `register_tables` (W2.D11).
+    schema: bronze
+    tables:
+      - name: raw_customers
+        description: Customer CDC events as received from Kafka (append-only).

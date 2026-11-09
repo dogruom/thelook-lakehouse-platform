@@ -90,7 +90,7 @@ Personal communication preferences live in `~/.claude/CLAUDE.md`; this file hold
 | Path | Content |
 |---|---|
 | `src/generator/config.py`, `src/utils/logging.py` | Only code so far; moves to `src/lakehouse/` in W1.D1 (ADR-0009) |
-| `dbt_project/` | dbt skeleton (no `dbt_project.yml` yet) |
+| `dbt_project/` | dbt project; only the W2.D11 capability spike (`models/spike/`, ADR-0004) |
 | `docker/`, `docker-compose.yml`, `scripts/` | Local stack (rebuild in W1.D2), init scripts, `smoke_test.py` |
 | `tests/` | Empty — no tests exist yet |
 | `.claude/hooks/guard_commands.py` | Blocks secret reads and destructive shell commands (`--self-test`) |
@@ -102,6 +102,9 @@ ruff check src tests scripts; ruff format --check src tests scripts; mypy src
 pytest tests/unit -q
 docker compose --profile core up -d; python scripts/smoke_test.py; docker compose --profile core stop
 docker compose --profile tools run --rm spark-test pytest tests/spark -q        # from W2.D7
+docker compose --profile core --profile sql up -d                              # + Thrift Server (W2.D11)
+py -3.11 -m venv .venv-dbt; .\.venv-dbt\Scripts\python -m pip install -r requirements/dbt.txt
+cd dbt_project; ..\.venv-dbt\Scripts\dbt build --select spike --profiles-dir profiles  # D-061
 ```
 
 ## Non-negotiable engineering rules

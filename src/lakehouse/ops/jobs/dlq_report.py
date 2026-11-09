@@ -10,8 +10,9 @@ a rejected message can be located in Bronze (``_bronze_ref`` = ``topic/partition
 table itself keeps the raw value).
 A missing table (the gate never ran for this namespace) fails the job with a clear message.
 
-This job reads the tables by path and imports nothing from ``lakehouse.quality`` (component
-independence, ADR-0009); the column names are the DLQ contract.
+This job reads the tables by catalog name when the run has a catalog and no namespace
+(otherwise by path, see ``lakehouse.common.tables``) and imports nothing from
+``lakehouse.quality`` (component independence, ADR-0009); the column names are the DLQ contract.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from lakehouse.common.jobs import SparkJob
 from lakehouse.common.logging import get_logger
+from lakehouse.common.tables import TableSpec, read_delta, resolve, table_exists
 from lakehouse.contracts.models import BRAND_ID_PATTERN, UUID_V4_PATTERN
 
 
@@ -91,17 +93,19 @@ class DlqReportJob(SparkJob):
     def run(
         self, spark: SparkSession, args: argparse.Namespace, ctx: JobContext
     ) -> Mapping[str, Any]:
-        from delta.tables import DeltaTable
         from pyspark.sql import functions as F
 
-        ns_parts = [args.namespace] if args.namespace else []
         tables: list[str] = list(dict.fromkeys(args.table or DEFAULT_TABLES))
         report: dict[str, Any] = {}
         for table in tables:
-            path = ctx.settings.layer_uri("dead_letter", *ns_parts, table)
-            if not DeltaTable.isDeltaTable(spark, path):
-                raise RuntimeError(f"no DLQ table at {path}; the gate never ran for it")
-            df = spark.read.format("delta").load(path)
+            source = resolve(
+                ctx.settings, TableSpec("dead_letter", "dead_letter", table), args.namespace
+            )
+            path = source.location
+            if not table_exists(spark, source):
+                hint = "; run register_tables" if source.name is not None else ""
+                raise RuntimeError(f"no DLQ table at {path}; the gate never ran for it{hint}")
+            df = read_delta(spark, source)
             row = df.agg(
                 F.count(F.lit(1)).alias("rows"),
                 F.countDistinct("_dlq_id").alias("distinct_dlq_ids"),

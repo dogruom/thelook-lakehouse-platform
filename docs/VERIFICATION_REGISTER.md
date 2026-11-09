@@ -1,6 +1,6 @@
 # Verification register
 
-> **Version**: 1.1 · **Last updated**: 2026-11-09 (W2.D10) · Decision: D-055
+> **Version**: 1.2 · **Last updated**: 2026-11-10 (W2.D11) · Decision: D-055
 
 One list of every statement that a day report marked "not verified". Each row has a class and an
 owner day, so nothing stays as an unowned caveat. Update this file whenever a day report names a
@@ -25,6 +25,10 @@ Classes: **Closed** (verified, evidence linked) · **Planned** (has a task and a
 | V-10 | Legacy containers of the earlier incident and anonymous volume `5b2af2ca…` | Owner action | Owner decides keep or remove | Disk use only |
 | V-11 | Tutor learning gates W1, W2.D7, W2.D8, W2.D9 | Owner action | Learning queue in [TASKS.md](TASKS.md) | Owner cannot explain the work in interviews |
 | V-12 | Spark rules accept a JSON number in a string field (`first_name: 5`) and differ from Pydantic on rare timestamp/integer forms (D-058, `rules.KNOWN_DIVERGENCES`) | Known limit | Revisit if a producer outside the Pydantic contracts is added | A non-conforming producer could pass a few wrong-typed values into Silver |
+| V-13 | Local Hive metastore schema has no foreign keys (DataNucleus auto-create without constraints, ADR-0004 W1) | Known limit | Replace with the official Hive 2.3 PostgreSQL schema script if the owner approves the download | Orphan metadata rows possible after a crash mid-DDL; local single-user catalog only |
+| V-14 | dbt-spark gaps carried in the project: `spark__alter_column_comment` override, column-level `not_null` unusable on Delta (ADR-0004 W2/W3) | Known limit | Re-test on every dbt-spark upgrade (`dbt build --select spike`) | Override may drift from upstream; a removed workaround would break `persist_docs` |
+| V-15 | A running Spark job and dbt using the metastore at the same time (two embedded clients on one database) | Planned | W3 (first Gold models on Silver) | Lock waits or a stale table schema seen by one side |
+| V-16 | Spark Thrift Server has no authentication (published on 127.0.0.1 only; reachable from every container on the compose network) | Known limit | Local only; cloud targets use IAM/Glue or Databricks SQL auth (W5/W6) | A compromised local container could read/write the catalog and S3 data |
 
 ## Closed (2026-11-09, W2.D9)
 

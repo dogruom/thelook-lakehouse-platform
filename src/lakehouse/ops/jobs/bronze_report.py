@@ -12,7 +12,8 @@ reject). ``offsets_by_partition`` (min/max/rows/distinct offset per partition) a
 fails the job with a clear message instead of a raw Spark error. An empty topic is not a missing
 table: its first run commits a zero-row batch, which creates the table with its schema.
 
-This job reads the table by path and imports nothing from ``lakehouse.ingestion`` (component
+This job reads the table by catalog name when the run has a catalog and no namespace (otherwise by
+path, see ``lakehouse.common.tables``) and imports nothing from ``lakehouse.ingestion`` (component
 independence, ADR-0009); the column names are the Bronze contract.
 """
 
@@ -22,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 from lakehouse.common.jobs import SparkJob
 from lakehouse.common.logging import get_logger
+from lakehouse.common.tables import TableSpec, read_delta, resolve, table_exists
 from lakehouse.contracts.models import BRAND_ID_PATTERN
 
 
@@ -70,17 +72,17 @@ class BronzeReportJob(SparkJob):
     def run(
         self, spark: SparkSession, args: argparse.Namespace, ctx: JobContext
     ) -> Mapping[str, Any]:
-        from delta.tables import DeltaTable
         from pyspark.sql import functions as F
 
-        ns_parts = [args.namespace] if args.namespace else []
         tables: list[str] = list(dict.fromkeys(args.table or DEFAULT_TABLES))
         report: dict[str, Any] = {}
         for table in tables:
-            path = ctx.settings.layer_uri("bronze", *ns_parts, table)
-            if not DeltaTable.isDeltaTable(spark, path):
-                raise RuntimeError(f"no Bronze table at {path}; stream never ran for it")
-            df = spark.read.format("delta").load(path)
+            source = resolve(ctx.settings, TableSpec("bronze", "bronze", table), args.namespace)
+            path = source.location
+            if not table_exists(spark, source):
+                hint = "; run register_tables" if source.name is not None else ""
+                raise RuntimeError(f"no Bronze table at {path}; stream never ran for it{hint}")
+            df = read_delta(spark, source)
             aggregates = [
                 F.count(F.lit(1)).alias("rows"),
                 F.countDistinct("_source_ref").alias("distinct_source_refs"),
