@@ -9,6 +9,22 @@
 
 ---
 
+## W2.D10 🔺 · Validation gate and DLQ — closed 2026-11-09
+
+**Executive summary.** Bronze rows that break the data contract now go to dead-letter tables, one
+row per rejected message, with a fixed rule code, an error category and a link back to the Bronze
+row. Unparseable messages stay in Bronze, as designed. The rejected set matches the generator's
+expected set exactly, and a second run adds nothing.
+- **Delivered**: W2.D10.1 ✅ rules + `dlq_gate` + `dlq_report` · W2.D10.2 ✅ per-rule Spark tests · W2.D10.3 ✅ DLQ reconciliation integration test.
+- **Evidence**: commits `5f64ad4`, `c91e03f`; default run: CDC 3060 read / 210 DLQ, clickstream 15600 read / 75 parse errors (Bronze only) / 150 DLQ; rerun inserts 0; Spark 178 (`test_rules.py`), 258 total; integration 14 (DLQ module), day-close full run on `5f64ad4` 34 passed, 1 skipped (broker chaos opt-in, D-059); unit 1146 at `5f64ad4`, 1154 after `c91e03f`, coverage 79 %; ruff, format, mypy, lint-imports clean. Details: PROGRESS D10 Evidence.
+- **Reviews / audit**: design review before implementation; code review must-fix: vacuous reconciliation check (MERGE metric compared with itself) → independent post-write checks with a negative unit test; `duplicates_removed` reserved for Silver (renamed `rejected_duplicates`, `bronze_duplicate_rows`); canonical `produced_at` in the signup rule; `event_id` masked in report logs. Re-check APPROVE WITH NITS; nits fixed in `c91e03f` (no concurrency guarantee in the docstring, masking and constant-parity tests). Carried over: mapping of gate log terms to `ops.pipeline_metrics` terms (W3.D18).
+- **Decisions**: D-056 rules and codes · D-057 gate design, checks, tenant attribution, masking · D-058 Spark-vs-Pydantic divergences, frozen fixtures · D-059 test cadence; Q-001 queued.
+- **Not verified / limitations**: Spark rules differ from Pydantic in documented cases (V-12, e.g. a JSON number in a string field passes); the gate rescans all of Bronze per run (O(n), watermark later); one gate at a time per namespace (V-05); tables are path-based until W2.D11 (V-02). V-08 did not recur.
+- **Risks**: none new.
+- **Learning queued**: validation as data, error taxonomies, quarantine patterns, insert-only MERGE, null-safe join.
+- **Next**: W2.D11 (catalog and dbt capability spike).
+- **Merge status**: PR to `main` · code review re-check APPROVE WITH NITS, no must-fix · `evidence-auditor` no MISMATCH, 2 commit-tie wording fixes applied · merged under D-032 once CI is green.
+
 ## W2.D9 🔺 · Restart and checkpoint loss — closed 2026-11-09
 
 **Executive summary.** Bronze survives crashes before and after the write, a killed driver, an

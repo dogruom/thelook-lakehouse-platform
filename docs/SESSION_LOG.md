@@ -23,6 +23,16 @@ to add a missing link. File lines are clickable repo-relative links.
 
 ---
 
+## 2026-11-09 · W2.D10 Validation gate and DLQ
+
+- **Tasks**: W2.D10.1–D10.3 ✅ ([PROGRESS D10](PROGRESS.md))
+- **Commits / PR**: `5f64ad4` feat(quality) · `c91e03f` fix(quality) · day-close docs commit · PR to `main` under D-032
+- **Decisions**: D-056 … D-059 ([DECISION_LOG](DECISION_LOG.md)); TASKS Q-001 queued
+- **Files**: [rules.py](../src/lakehouse/quality/rules.py), [dlq_gate.py](../src/lakehouse/quality/jobs/dlq_gate.py), [dlq_report.py](../src/lakehouse/ops/jobs/dlq_report.py), [DATA_FLOW.md](DATA_FLOW.md), [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md), [TASKS.md](TASKS.md); tests [test_rules.py](../tests/spark/test_rules.py), [test_dlq_reconciliation.py](../tests/integration/test_dlq_reconciliation.py), [test_rules_fixture.py](../tests/unit/quality/test_rules_fixture.py), [test_dlq_gate_checks.py](../tests/unit/quality/test_dlq_gate_checks.py), [test_dlq_report_masking.py](../tests/unit/ops/test_dlq_report_masking.py), [tests/fixtures/rules_diff/](../tests/fixtures/rules_diff/)
+- **Agents**: reviewer design (Sonnet) → implementer ‖ test-author (Sonnet) → reviewer code + re-check (Sonnet) → evidence-auditor (Haiku)
+- **Finding**: the first reconciliation check compared the MERGE metric with itself (vacuous); replaced by independent post-write checks with a negative unit test
+- **Learning**: validation as data, error taxonomies, quarantine patterns, insert-only MERGE, null-safe join; tutor gate queued
+
 ## 2026-11-09 · W2.D9 Restart and checkpoint loss
 
 - **Tasks**: W2.D9.1–D9.2 ✅ ([PROGRESS D9](PROGRESS.md))

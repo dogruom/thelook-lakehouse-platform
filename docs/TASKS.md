@@ -57,10 +57,10 @@ only server-side control for the D-032 merge gate.
 | W2.D9.1 | Restart tests: kill mid-stream → each offset once; delete checkpoint → replay quantified | done | W2.D8.close | 0 | `c23e322` |
 | W2.D9.2 | ADR-0006 draft with measured outcomes | done | W2.D9.1 | 0 | `c23e322` |
 | W2.D9.close | Day close W2.D9 (🔺 gate for M2) | done | W2.D9.2 | 0 | PR #10, merge `30a8f5c` |
-| W2.D10.1 | `quality.rules` + DLQ writer | todo | W2.D9.close | 0 | |
-| W2.D10.2 | Spark tests per rule incl. negatives | todo | W2.D10.1 | 0 | |
-| W2.D10.3 | Integration: DLQ set = manifest DLQ-expected set (exact) | todo | W2.D10.2 | 0 | |
-| W2.D10.close | Day close W2.D10 | todo | W2.D10.3 | 0 | |
+| W2.D10.1 | `quality.rules` + DLQ writer | done | W2.D9.close | 0 | `5f64ad4` |
+| W2.D10.2 | Spark tests per rule incl. negatives | done | W2.D10.1 | 0 | `5f64ad4`; 178 passed |
+| W2.D10.3 | Integration: DLQ set = manifest DLQ-expected set (exact) | done | W2.D10.2 | 0 | `5f64ad4`; 14 passed |
+| W2.D10.close | Day close W2.D10 | done | W2.D10.3 | 0 | DAY_CLOSE_REPORTS W2.D10 |
 | W2.D11.1 | Postgres-backed Hive metastore; register Bronze/DLQ tables | todo | W2.D10.close | 0 | |
 | W2.D11.2 | Spark Thrift Server (`sql` profile); `dbt debug`; probe models | todo | W2.D11.1 | 0 | |
 | W2.D11.3 | Decision recorded (Thrift or `session` fallback) in ADR-0004 spike section | todo | W2.D11.2 | 0 | |
@@ -87,3 +87,4 @@ Tutor gates deferred by the unattended run (D-041). Each row → one tutor sessi
 | W2.D7 | Driver vs executor code shipping, config layering, run IDs, `from_json` leniency | [.claude/learning/labs/W2_LAB.md](../.claude/learning/labs/W2_LAB.md) | open |
 | W2.D9 | Checkpoint anatomy (`offsets/`, `commits/`, `metadata`), Delta idempotent writes and their blind spot (S9), `failOnDataLoss`, fault injection, "offset committed once per checkpoint lineage" | [ADR-0006](adr/0006-delivery-semantics-restart-and-checkpoint-loss.md); `python scripts/submit_job.py bronze_report` (`offsets_by_partition`, `distinct_lineages`) | open |
 | W2.D8 | Kafka source options, `foreachBatch` vs Delta sink, checkpoints, Delta `txnAppId`/`txnVersion`, parse errors vs contract failures | `python scripts/submit_job.py bronze_report`; [DATA_FLOW.md](DATA_FLOW.md) step 9 | open |
+| W2.D10 | Validation as data (rules as columns), error taxonomies (code → category → retryable), quarantine/DLQ patterns, insert-only MERGE, null-safe join (`<=>`), independent post-write checks, log masking | `python scripts/submit_job.py dlq_report --list-refs`; [DATA_FLOW.md](DATA_FLOW.md) step 10 | open |

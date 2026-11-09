@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-05 (v9.0: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W2.D9 closed** (2/2 ✅) → next **W2.D10**
+> **Active**: **W2.D10 closed** (3/3 ✅) → next **W2.D11**
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,16 +13,17 @@
 
 ## Current State
 
-- **Updated**: 2026-11-09 (W2.D9 closed) · **Branch**: `feat/w2-d9-restart`; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
-- **Last delivered**: W2.D9.1–D9.2 ✅ — restart and checkpoint-loss suite S1–S9 (every offset once per table after crash, kill, callback exception, broker outage); partial checkpoint loss, which silently lost data, now fails with `CheckpointRewoundError` (D-050); submit guards; ADR-0006 draft; [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) holds every open "not verified" item with an owner day (D-055).
-- **Unfinished**: W1 tutor re-test and W2.D7–D9 learning gates (Learning queue of [TASKS.md](TASKS.md)).
-- **Tests & results**: unit 1137 passed; Spark 80 passed (container); integration 21 passed with `RUN_BROKER_CHAOS=1`, no skip; ruff/mypy/import-linter clean.
+- **Updated**: 2026-11-09 (W2.D10 closed) · **Branch**: `feat/w2-d10-dlq`; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
+- **Last delivered**: W2.D10.1–D10.3 ✅ — contract rules with fixed codes and categories (D-056), insert-only DLQ gate with independent post-write checks and masked tenant/event logging (D-057), `dlq_report`; DLQ set equals the manifest set exactly. Earlier: W2.D9 restart suite S1–S9 and `CheckpointRewoundError` (D-050); [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) (D-055).
+- **Unfinished**: W1 tutor re-test and W2.D7–D10 learning gates (Learning queue of [TASKS.md](TASKS.md)).
+- **Tests & results**: unit 1154 passed (HEAD `c91e03f`); day-close full suite on `5f64ad4`: unit 1146, Spark 258 (container), integration 34 passed, 1 skipped (broker chaos opt-in, D-059); ruff/mypy/import-linter clean.
+- **Test cadence (D-059)**: only the relevant tests while developing, full suite once per day close; rules proven in the Spark container, integration keeps reconciliation scenarios; broker chaos opt-in (`RUN_BROKER_CHAOS=1`). Single-SparkSession multi-step runner queued as TASKS Q-001.
 - **Owner action**: register rows V-09 (stale `COMPOSE_PROJECT_NAME` in the local environment file), V-10 (legacy containers, anonymous volume `5b2af2ca…`), V-11 (tutor gates). None blocking.
 - **Stack**: stopped (`docker compose --profile core stop`).
 - **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; Glue 5.0 (ADR-0011); Databricks Free Edition W6 (ADR-0012); budget ≤ USD 50; contracts strict producer / tolerant consumer; Silver gate order DLQ → dedup → MERGE (D-022); outcome precedence DLQ → DUPLICATE (vs valid Bronze history) → NOOP → ACCEPT (D-023/D-029); jobs resolved by convention, code shipped as zip via `--py-files` (D-044); money and timestamps stay strings until Silver (D-045); Bronze keeps headers, Delta app id = streaming query id, stable parse codes (D-047); exception text in logs (D-048).
 - **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); open items with owner days in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) (D-030 late CDC → W3.D14.0; Delta commit safety on S3 → W5; single writer is a known limit).
 - **Way of working**: Claude implements everything, priority is speed, every pipeline step is mapped in [DATA_FLOW.md](DATA_FLOW.md) (D-046); W1 tutor batched (D6 learning session); every decision in DECISION_LOG; per-session trace in [SESSION_LOG.md](SESSION_LOG.md); replies with executive/technical summary, file links, senior Q&A; personal glossary `.claude/learning/GLOSSARY.md`.
-- **Next task ("Start today's task")**: **W2.D10** — validation gate and DLQ (DELIVERY_PLAN D10 card). The gate must handle empty Bronze tables (D-053) and `__invalid__` brand values (D-054).
+- **Next task ("Start today's task")**: **W2.D11** — catalog and dbt capability spike (DELIVERY_PLAN D11 card); closes register row V-02.
 - **Next mode**: coordinator plans; `reviewer` design review → `implementer` ‖ `test-author` → code review → `evidence-auditor`.
 - **Autonomous run**: not started (setup on `chore/autonomous-run`, D-041/D-042; pre-flight verified: refuses to start with uncommitted guardrail files)
 
@@ -197,11 +198,16 @@ M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  
 #### D10 · Validation gate and DLQ (stream entities)
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
-| W2.D10.1 | Rules + DLQ writer | rules per contract → `_error_category`; DLQ envelope incl. `_bronze_ref`, `_retryable`, `_replay_status` | job run | ⏳ |
-| W2.D10.2 | Rule tests | one positive + one negative per rule | `pytest tests/spark/test_rules.py -q` | ⏳ |
-| W2.D10.3 | DLQ reconciliation | DLQ set = manifest DLQ set exactly; no duplicates/late events in DLQ | `pytest tests/integration/test_dlq_reconciliation.py -q` | ⏳ |
+| W2.D10.1 | Rules + DLQ writer | rules per contract → `_error_category`; DLQ envelope incl. `_bronze_ref`, `_retryable`, `_replay_status` | job run | ✅ |
+| W2.D10.2 | Rule tests | one positive + one negative per rule | `pytest tests/spark/test_rules.py -q` | ✅ |
+| W2.D10.3 | DLQ reconciliation | DLQ set = manifest DLQ set exactly; no duplicates/late events in DLQ | `pytest tests/integration/test_dlq_reconciliation.py -q` | ✅ |
 
-**Evidence**: _—_
+**Evidence**:
+- W2.D10.1: commit `5f64ad4` (+ `c91e03f` docstring/test nit); `python scripts/submit_job.py dlq_gate` on the default namespace → CDC 3060 rows read, 210 dead-lettered (`email_invalid` 90, `email_null_or_wrong_type` 60, `signup_after_produced` 60); clickstream 15600 rows read, 75 parse errors kept in Bronze (not in the DLQ, D-056), 150 dead-lettered (`session_id_null_or_wrong_type`); rerun → `dlq_inserted=0`. Insert-only MERGE on `_dlq_id` + null-safe `brand_id`, independent post-write checks (`post_write_problems`, unit-tested to fail one by one) (D-057).
+- W2.D10.2: Spark container `pytest tests/spark/test_rules.py -q` → **178 passed** (positive + negative per rule, plus frozen generator fixtures `seed_1`/`seed_42` and documented Spark-vs-Pydantic divergences, D-058).
+- W2.D10.3: `pytest tests/integration/test_dlq_reconciliation.py -q` → **14 passed** (22.5 min): DLQ `(brand_id, _bronze_ref)` set = manifest DLQ set exactly, no duplicate/late/parse-error event in the DLQ, rerun inserts 0, NULL/invalid brand and invalid `event_id` handled null-safe and masked in logs.
+- Day-close full suite on `5f64ad4`: ruff/format/mypy (38 files) clean; lint-imports 2 kept, 0 broken; unit **1146 passed** (coverage 79 %); Spark **258 passed**; integration **34 passed, 1 skipped** (`RUN_BROKER_CHAOS` opt-in, D-059) in 74 min; V-08 flaky count test did not recur. After `c91e03f`: unit **1154 passed**.
+- Review: APPROVE WITH NITS after re-check; must-fix applied in `5f64ad4`, nits 1–3 in `c91e03f`.
 
 #### D11 · Catalog and dbt capability spike
 | ID | Task | Acceptance | Verify | Status |
