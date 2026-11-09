@@ -23,6 +23,16 @@ to add a missing link. File lines are clickable repo-relative links.
 
 ---
 
+## 2026-11-09 · W2.D7 Spark job framework
+
+- **Tasks**: W2.D7.1–D7.3 ✅ ([PROGRESS D7](PROGRESS.md))
+- **Commits / PR**: `306701c` docs(learning) · `e82f91b` feat(spark) · `5836709` test(spark) · `80a6e63` feat(spark) · `44b5ea7` fix(spark) · day-close docs commit · PR to `main` under D-032
+- **Decisions**: D-043 explanation style · D-044 job framework and packaging · D-045 strings until Silver ([DECISION_LOG](DECISION_LOG.md))
+- **Files**: [spark.py](../src/lakehouse/common/spark.py), [jobs.py](../src/lakehouse/common/jobs.py), [spark_schema.py](../src/lakehouse/contracts/spark_schema.py), [hello_delta.py](../src/lakehouse/ops/jobs/hello_delta.py), [submit_job.py](../scripts/submit_job.py), [job_entry.py](../scripts/spark/job_entry.py), [docker-compose.yml](../docker-compose.yml); tests in [tests/spark/](../tests/spark/), [tests/unit/common/](../tests/unit/common/), [tests/unit/ops/](../tests/unit/ops/), [tests/unit/scripts/](../tests/unit/scripts/)
+- **Agents**: implementer (Sonnet) → reviewer code (Sonnet) → evidence-auditor (Haiku)
+- **Incident**: stale `COMPOSE_PROJECT_NAME` removed the legacy `thelook_spark_master` container ([DAY_CLOSE_REPORTS](DAY_CLOSE_REPORTS.md))
+- **Learning**: driver vs executor code shipping, config layering, run IDs, `from_json` leniency; tutor gate queued
+
 ## 2026-11-06 · W1.D5 producer + W1.D6 week-1 consolidation
 
 - **Tasks**: W1.D5.1–D5.3 ✅ · W1.D6.2–D6.3 ✅ · W1.D6.1 🔄 (CI link) ([PROGRESS D5/D6](PROGRESS.md))

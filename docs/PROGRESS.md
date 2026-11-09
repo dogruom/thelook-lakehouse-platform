@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-05 (v9.0: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W1 closed** (D5 3/3 ✅, D6 3/3 ✅; merged `3da43d1`) → next **W2.D7**
+> **Active**: **W2.D7 closed** (3/3 ✅) → next **W2.D8**
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,16 +13,17 @@
 
 ## Current State
 
-- **Updated**: 2026-11-06 (Week 1 closed; evidence audit: no MISMATCH) · **Branch**: `main` — W1 merged (PR #5 → `3da43d1`; week-gate follow-ups PR #6 → `0c283c5`, CI green); the PR #6 merge line in DAY_CLOSE_REPORTS is edited on local `main`, uncommitted → commit with the W2.D7 branch
-- **Last delivered**: W1.D5.1–D5.3 ✅ — clickstream generator + manifest, keyed idempotent producer + `produce` CLI, live round-trip test; W1.D6.2–D6.3 ✅ — ADR-0002, week-1 runbook, week checkpoint.
-- **Unfinished**: tutor week-gate answers from the owner (learning summary + senior questions delivered in chat 2026-11-06).
-- **Tests & results**: unit 797 passed; coverage total 95.6 % / generator 95 % / contracts 96 %; integration 3 passed (live broker); smoke 24/24; `produce` 6220/6220 delivered; ruff/mypy/pre-commit clean; import-linter 2 kept.
-- **Owner action**: study `.claude/learning/W1_REHBER.md` + the three W1 artifacts (index `.claude/learning/artifacts/INDEX.md`), then take the W1 tutor re-test. Stack stopped (`docker compose --profile core stop`, verified 0 running).
-- **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; Glue 5.0 (ADR-0011); Databricks Free Edition W6 (ADR-0012); budget ≤ USD 50; contracts strict producer / tolerant consumer; Silver gate order DLQ → dedup → MERGE (D-022); outcome precedence DLQ → DUPLICATE (vs valid Bronze history) → NOOP → ACCEPT (D-023/D-029).
-- **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); Spark string→DECIMAL parsing unverified (W2); generator does not produce intermediate-late CDC or `late_beyond_window` (D-030, extend before SCD2 tests); broker failing mid-run untested (fully unreachable broker is tested); Kafka container got SIGKILL (exit 137) on one stop — default 10 s grace may be short for a clean KRaft shutdown (check in W2 with `stop_grace_period`).
+- **Updated**: 2026-11-09 (W2.D7 closed) · **Branch**: `feat/w2-d7-spark-framework` → PR to `main` under D-032; see the W2.D7 report in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md) for the merge status
+- **Last delivered**: W2.D7.1–D7.3 ✅ — SparkSession factory and job framework with run IDs, contract-derived StructTypes, `spark-test` in the image, wheel → zip → `spark-submit` via `scripts/submit_job.py`, `hello_delta` on the standalone cluster.
+- **Unfinished**: W1 tutor re-test and W2.D7 learning gate (both in the Learning queue of [TASKS.md](TASKS.md)).
+- **Tests & results**: unit 1045 passed; coverage 93 %; Spark 22 passed (container); integration 6 passed; smoke 24/24; `hello_delta` exit 0 with shipped code on driver and executor, negative run exit 1; ruff/mypy clean; import-linter clean.
+- **Owner action**: (1) set `COMPOSE_PROJECT_NAME=crm_lakehouse` in `.env`: it holds a stale value and compose then uses the legacy `thelook_lakehouse` project. (2) Decide on the leftovers of the 2026-11-09 incident (W2.D7 report, "Incident"). (3) Run `.claude/learning/labs/W2_LAB.md`, then the tutor sessions.
+- **Stack**: stopped (`docker compose --profile core stop`).
+- **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; Glue 5.0 (ADR-0011); Databricks Free Edition W6 (ADR-0012); budget ≤ USD 50; contracts strict producer / tolerant consumer; Silver gate order DLQ → dedup → MERGE (D-022); outcome precedence DLQ → DUPLICATE (vs valid Bronze history) → NOOP → ACCEPT (D-023/D-029); jobs resolved by convention, code shipped as zip via `--py-files` (D-044); money and timestamps stay strings until Silver (D-045).
+- **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); until `.env` is fixed every `docker compose` command needs `$env:COMPOSE_PROJECT_NAME='crm_lakehouse'` first, otherwise `up` recreates legacy containers; generator does not produce intermediate-late CDC or `late_beyond_window` (D-030, extend before SCD2 tests); broker failing mid-run untested (fully unreachable broker is tested); Kafka container got SIGKILL (exit 137) on one stop — default 10 s grace may be short for a clean KRaft shutdown (check in W2 with `stop_grace_period`).
 - **Way of working**: W1 tutor batched (D6 learning session); every decision in DECISION_LOG; per-session trace in [SESSION_LOG.md](SESSION_LOG.md); replies with executive/technical summary, file links, senior Q&A; personal glossary `.claude/learning/GLOSSARY.md`.
-- **Next task ("Start today's task")**: **W2.D7** — Spark job framework (DELIVERY_PLAN D7 card); Spark tests run inside the image (`tools` profile).
-- **Next mode**: coordinator plans; `reviewer` design review → `implementer` ‖ `test-author` → code review. Unattended option (D-041): queue in [TASKS.md](TASKS.md), runner `scripts/autonomous/run_queue.ps1`; pilot = W2.D7.1 with `--max-iterations 1` while the owner is present.
+- **Next task ("Start today's task")**: **W2.D8** — Kafka → Bronze Structured Streaming (DELIVERY_PLAN D8 card).
+- **Next mode**: coordinator plans; `reviewer` design review → `implementer` ‖ `test-author` → code review. Unattended option (D-041): queue in [TASKS.md](TASKS.md), runner `scripts/autonomous/run_queue.ps1`; pilot with `--max-iterations 1` while the owner is present.
 - **Autonomous run**: not started (setup on `chore/autonomous-run`, D-041/D-042; pre-flight verified: refuses to start with uncommitted guardrail files)
 
 ---
@@ -50,7 +51,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 ## 📊 Macro Status (count of ✅ tasks / planned tasks)
 
 ```
-M1 (D1–D12)   [███████████░░░░░░░░░] 20 / 37
+M1 (D1–D12)   [████████████░░░░░░░░] 23 / 37
 M2 (D13–D24)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 ```
@@ -156,11 +157,16 @@ M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  
 #### D7 · Spark job framework
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
-| W2.D7.1 | SparkSession factory + env adapter | `local`/`aws` profiles from settings; no credentials in code; run IDs in logs | `pytest tests/spark/test_session.py -q` (in container) | ⏳ |
-| W2.D7.2 | `spark-test` runner | pytest runs inside the Spark image; StructType derived from contracts tested | `docker compose --profile tools run --rm spark-test pytest tests/spark -q` | ⏳ |
-| W2.D7.3 | Wheel + submit script | `scripts/submit_job.py hello_delta` writes/reads Delta | command output | ⏳ |
+| W2.D7.1 | SparkSession factory + env adapter | `local`/`aws` profiles from settings; no credentials in code; run IDs in logs | `pytest tests/spark/test_session.py -q` (in container) | ✅ |
+| W2.D7.2 | `spark-test` runner | pytest runs inside the Spark image; StructType derived from contracts tested | `docker compose --profile tools run --rm spark-test pytest tests/spark -q` | ✅ |
+| W2.D7.3 | Wheel + submit script | `scripts/submit_job.py hello_delta` writes/reads Delta | command output | ✅ |
 
-**Evidence**: _—_
+**Evidence**:
+- W2.D7.1: commits `e82f91b`, `44b5ea7`; `tests/spark/test_session.py` is part of the in-container run below; unit `pytest tests/unit` → 1045 passed, coverage 93 %. The `aws` profile is unit-tested as conf only and has never run on AWS (W5).
+- W2.D7.2: commit `5836709`; `docker compose --profile tools run --rm spark-test pytest tests/spark -q` → 22 passed, exit 0, with the `core` profile not required.
+- W2.D7.3: commit `80a6e63`; `python scripts/submit_job.py hello_delta --expect-packaged --rows 7` → exit 0, `rows_written` 7, `rows_read` 7, `delta_version` 0, on `s3a://lakehouse/ops/hello_delta/<run_id>`; `driver_code` and `executor_code` both inside `lakehouse_app.zip`. Negative: same run without `--py-files` → `RuntimeError: code not loaded from lakehouse_app.zip`, exit 1.
+- Gates: ruff, ruff format, mypy (29 files), lint-imports clean; smoke 24/24; integration 6 passed (run before `44b5ea7`, which touches no Kafka code). Host venv has no PySpark.
+- Limits: `--expect-packaged` proves code location on one executor (`spark.cores.max=1`), not freshness with `--skip-build`. W2.D7 review carry-overs are listed in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md).
 
 #### D8 · Kafka → Bronze streaming
 | ID | Task | Acceptance | Verify | Status |
