@@ -23,6 +23,15 @@ to add a missing link. File lines are clickable repo-relative links.
 
 ---
 
+## 2026-11-09 · W2.D8 Kafka → Bronze streaming
+
+- **Tasks**: W2.D8.1–D8.3 ✅ ([PROGRESS D8](PROGRESS.md))
+- **Commits / PR**: `b67f155` feat(ingestion) · `78f3d60` test(ingestion) · `0792283` fix(logging) · day-close docs commit · PR to `main` under D-032
+- **Decisions**: D-047 Bronze columns, idempotent batch key, parse codes · D-048 exception text in logs ([DECISION_LOG](DECISION_LOG.md))
+- **Files**: [bronze.py](../src/lakehouse/ingestion/bronze.py), [bronze_stream.py](../src/lakehouse/ingestion/jobs/bronze_stream.py), [bronze_report.py](../src/lakehouse/ops/jobs/bronze_report.py), [spark.py](../src/lakehouse/common/spark.py), [logging.py](../src/lakehouse/common/logging.py), [.env.example](../.env.example), [DATA_CONTRACTS.md](DATA_CONTRACTS.md) §2.0/§3.1, [ADR-0002](adr/0002-event-interface-kafka-envelope.md), [DATA_FLOW.md](DATA_FLOW.md); tests [test_bronze_parse.py](../tests/spark/test_bronze_parse.py), [test_bronze_stream.py](../tests/integration/test_bronze_stream.py), [tests/unit/ingestion/](../tests/unit/ingestion/), [test_logging.py](../tests/unit/common/test_logging.py)
+- **Agents**: reviewer design (Sonnet) → implementer ‖ test-author (Sonnet) → reviewer code (Sonnet) → evidence-auditor (Haiku)
+- **Learning**: Kafka source options, `foreachBatch` vs sink, checkpoints, Delta `txnAppId`; tutor gate queued
+
 ## 2026-11-09 · W2.D7 Spark job framework
 
 - **Tasks**: W2.D7.1–D7.3 ✅ ([PROGRESS D7](PROGRESS.md))

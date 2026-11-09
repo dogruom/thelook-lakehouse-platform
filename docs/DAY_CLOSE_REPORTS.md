@@ -9,6 +9,23 @@
 
 ---
 
+## W2.D8 · Kafka → Bronze streaming — closed 2026-11-09
+
+**Executive summary.** Kafka messages now land in Bronze Delta tables, one row per message, including
+the ones that cannot be parsed. Counts match the generated messages and manifest per topic, parse-error
+code and tenant, and a second run from the same checkpoint adds nothing. What happens after a crash
+in the middle of a run is not proven yet; that is the D9 gate.
+- **Delivered**: W2.D8.1 ✅ `bronze_stream` + `bronze_report` · W2.D8.2 ✅ parse tests · W2.D8.3 ✅ count integration test incl. rerun.
+- **Evidence**: commits `b67f155`, `78f3d60`, `0792283`; Spark 71 passed; integration 7 passed, no skip; unit 1066 passed, coverage 88 %; default run: 3060 and 15600 rows, 75 `malformed_json`, `distinct_source_refs` equal to rows, metadata null counts 0. Details: PROGRESS D8 Evidence.
+- **Reviews / audit**: design review APPROVE WITH CHANGES, 9 items applied, one replaced by measurement: the suggested `cast` round trip does not detect invalid UTF-8 in Spark 3.5, so `decode`/`encode` is used. Code review (data + security) APPROVE WITH NITS, no must-fix; rerun test, `_await_all` tests, clear missing-table error and the docstring fix applied. `evidence-auditor`: re-ran unit 1066, Spark 71, ruff, mypy; one MISMATCH (W2.D8.2 Verify command could not run on the host), fixed. Integration, job runs, coverage, ruff format and lint-imports were run by the coordinator, not re-run in the audit.
+- **Decisions**: D-047 (headers persisted, ADR-0002 and DATA_CONTRACTS amended; app id = query id; stable parse codes; `event_date` from Kafka time as fallback; no `mergeSchema`), D-048 (exception text in logs, a D7 defect found through the negative run).
+- **Not verified / limitations**: replay after a real mid-stream failure (D9). `_await_all` failure path with fake queries only. Trailing garbage after a JSON object is not flagged. Empty first run has no integration case; a missing table is covered by a manual negative run. Tables are path-based until W2.D11.
+- **Carry-overs (none blocking)**: D10 gate should compare payload `brand_id` with key and header, and reject NULL `brand_id` · `rows_by_brand` keys for parse-error rows come from an unvalidated header (unbounded in logs) · integration runs leave `bronze/it_*` and `checkpoints/bronze_stream/it_*` in SeaweedFS · D7 `layer_uri` character nits still open · guard hook false positive: `--rm` followed later by a flag containing `r` (`-rs`, `-Pattern`) reads as recursive deletion.
+- **Risks**: a job waits without a timeout when no worker is up; `seaweedfs` and `spark-worker` were found exited once after `up -d`, cause not diagnosed; Kafka and SeaweedFS exit 137 on stop; `submit_job.py` is not safe to run concurrently (two exit-2 failures while two agents built `dist/`; each passed on the immediate retry, consistent with this cause but not proven).
+- **Learning queued**: Kafka source options, `foreachBatch` vs sink, checkpoints, Delta transaction log and `txnAppId`. Tutor gate deferred to the Learning queue (D-046).
+- **Next**: W2.D9 🔺 (restart and checkpoint loss).
+- **Merge status**: [PR #9](https://github.com/dogruom/thelook-lakehouse-platform/pull/9) · CI green (runs 42634087351, 42634101850: lint/types/boundaries/unit tests + coverage + gitleaks; CI runs no Spark or integration tests) · code review APPROVE WITH NITS, no must-fix · `evidence-auditor` one MISMATCH, fixed · merged under D-032 once this commit's CI is green.
+
 ## W2.D7 · Spark job framework — closed 2026-11-09
 
 **Executive summary.** Spark jobs now have one way to start: a session built from settings, a run ID

@@ -29,6 +29,8 @@ SHARED_PROCESSORS: list[structlog.types.Processor] = [
     structlog.stdlib.PositionalArgumentsFormatter(),
     structlog.processors.TimeStamper(fmt="iso", utc=True),
     structlog.processors.StackInfoRenderer(),
+    # Turns `exc_info` into an `exception` text field; without it a failed job logs no reason.
+    structlog.processors.format_exc_info,
 ]
 
 

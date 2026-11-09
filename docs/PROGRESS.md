@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-05 (v9.0: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W2.D7 closed** (3/3 ✅) → next **W2.D8**
+> **Active**: **W2.D8 closed** (3/3 ✅) → next **W2.D9** 🔺
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,17 +13,17 @@
 
 ## Current State
 
-- **Updated**: 2026-11-09 (W2.D7 closed) · **Branch**: `feat/w2-d7-spark-framework` → PR to `main` under D-032; see the W2.D7 report in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md) for the merge status
-- **Last delivered**: W2.D7.1–D7.3 ✅ — SparkSession factory and job framework with run IDs, contract-derived StructTypes, `spark-test` in the image, wheel → zip → `spark-submit` via `scripts/submit_job.py`, `hello_delta` on the standalone cluster.
-- **Unfinished**: W1 tutor re-test and W2.D7 learning gate (both in the Learning queue of [TASKS.md](TASKS.md)).
-- **Tests & results**: unit 1045 passed; coverage 93 %; Spark 22 passed (container); integration 6 passed; smoke 24/24; `hello_delta` exit 0 with shipped code on driver and executor, negative run exit 1; ruff/mypy clean; import-linter clean.
-- **Owner action**: (1) set `COMPOSE_PROJECT_NAME=crm_lakehouse` in `.env`: it holds a stale value and compose then uses the legacy `thelook_lakehouse` project. (2) Decide on the leftovers of the 2026-11-09 incident (W2.D7 report, "Incident"). (3) Run `.claude/learning/labs/W2_LAB.md`, then the tutor sessions.
+- **Updated**: 2026-11-09 (W2.D8 closed) · **Branch**: `feat/w2-d8-bronze`; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
+- **Last delivered**: W2.D8.1–D8.3 ✅ — `bronze_stream` writes `customer_cdc` and `clickstream_events` to Bronze Delta tables, one row per message with raw value, key, headers, lineage and a stable parse-error code; `bronze_report` for counts; a clean rerun adds nothing.
+- **Unfinished**: W1 tutor re-test and W2.D7, W2.D8 learning gates (Learning queue of [TASKS.md](TASKS.md)).
+- **Tests & results**: unit 1066 passed; coverage 88 %; Spark 71 passed (container); integration 7 passed, no skip; ruff/mypy/import-linter clean.
+- **Owner action**: none blocking. One anonymous volume of unknown origin (`5b2af2ca…`, 2026-03-15) is kept until the owner decides. Labs and tutor sessions are optional (D-046).
 - **Stack**: stopped (`docker compose --profile core stop`).
-- **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; Glue 5.0 (ADR-0011); Databricks Free Edition W6 (ADR-0012); budget ≤ USD 50; contracts strict producer / tolerant consumer; Silver gate order DLQ → dedup → MERGE (D-022); outcome precedence DLQ → DUPLICATE (vs valid Bronze history) → NOOP → ACCEPT (D-023/D-029); jobs resolved by convention, code shipped as zip via `--py-files` (D-044); money and timestamps stay strings until Silver (D-045).
-- **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); until `.env` is fixed every `docker compose` command needs `$env:COMPOSE_PROJECT_NAME='crm_lakehouse'` first, otherwise `up` recreates legacy containers; generator does not produce intermediate-late CDC or `late_beyond_window` (D-030, extend before SCD2 tests); broker failing mid-run untested (fully unreachable broker is tested); Kafka container got SIGKILL (exit 137) on one stop — default 10 s grace may be short for a clean KRaft shutdown (check in W2 with `stop_grace_period`).
-- **Way of working**: W1 tutor batched (D6 learning session); every decision in DECISION_LOG; per-session trace in [SESSION_LOG.md](SESSION_LOG.md); replies with executive/technical summary, file links, senior Q&A; personal glossary `.claude/learning/GLOSSARY.md`.
-- **Next task ("Start today's task")**: **W2.D8** — Kafka → Bronze Structured Streaming (DELIVERY_PLAN D8 card).
-- **Next mode**: coordinator plans; `reviewer` design review → `implementer` ‖ `test-author` → code review. Unattended option (D-041): queue in [TASKS.md](TASKS.md), runner `scripts/autonomous/run_queue.ps1`; pilot with `--max-iterations 1` while the owner is present.
+- **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; Glue 5.0 (ADR-0011); Databricks Free Edition W6 (ADR-0012); budget ≤ USD 50; contracts strict producer / tolerant consumer; Silver gate order DLQ → dedup → MERGE (D-022); outcome precedence DLQ → DUPLICATE (vs valid Bronze history) → NOOP → ACCEPT (D-023/D-029); jobs resolved by convention, code shipped as zip via `--py-files` (D-044); money and timestamps stay strings until Silver (D-045); Bronze keeps headers, Delta app id = streaming query id, stable parse codes (D-047); exception text in logs (D-048).
+- **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); generator does not produce intermediate-late CDC or `late_beyond_window` (D-030, extend before SCD2 tests); broker failing mid-run untested; Kafka and SeaweedFS exit 137 on stop, again on 2026-11-09 (`stop_grace_period` check open); a job waits without a timeout when no worker is up, and `seaweedfs` + `spark-worker` were found exited once after `up -d` (cause not diagnosed); `scripts/submit_job.py` rebuilds `dist/` and is not safe to run concurrently.
+- **Way of working**: Claude implements everything, priority is speed, every pipeline step is mapped in [DATA_FLOW.md](DATA_FLOW.md) (D-046); W1 tutor batched (D6 learning session); every decision in DECISION_LOG; per-session trace in [SESSION_LOG.md](SESSION_LOG.md); replies with executive/technical summary, file links, senior Q&A; personal glossary `.claude/learning/GLOSSARY.md`.
+- **Next task ("Start today's task")**: **W2.D9** 🔺 — restart and checkpoint-loss semantics (DELIVERY_PLAN D9 card).
+- **Next mode**: coordinator plans; `reviewer` design review → `implementer` ‖ `test-author` → code review → `evidence-auditor`. `write_bronze_batch` is separately callable so the test can inject a failure after the write.
 - **Autonomous run**: not started (setup on `chore/autonomous-run`, D-041/D-042; pre-flight verified: refuses to start with uncommitted guardrail files)
 
 ---
@@ -51,7 +51,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 ## 📊 Macro Status (count of ✅ tasks / planned tasks)
 
 ```
-M1 (D1–D12)   [████████████░░░░░░░░] 23 / 37
+M1 (D1–D12)   [██████████████░░░░░░] 26 / 37
 M2 (D13–D24)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 ```
@@ -171,11 +171,16 @@ M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  
 #### D8 · Kafka → Bronze streaming
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
-| W2.D8.1 | `ingestion.bronze_stream` | both topics; `_raw_value`, key, headers, `_source_ref`, `_ingest_ts`, `_batch_id`, `brand_id`, `_parse_error`; `availableNow`; one checkpoint per query | job run log | ⏳ |
-| W2.D8.2 | Parse-function tests | valid, malformed, missing tenant → expected columns | `pytest tests/spark/test_bronze_parse.py -q` | ⏳ |
-| W2.D8.3 | Count integration test | Bronze rows = produced messages incl. parse errors | `pytest tests/integration/test_bronze_stream.py -q` | ⏳ |
+| W2.D8.1 | `ingestion.bronze_stream` | both topics; `_raw_value`, key, headers, `_source_ref`, `_ingest_ts`, `_batch_id`, `brand_id`, `_parse_error`; `availableNow`; one checkpoint per query | job run log | ✅ |
+| W2.D8.2 | Parse-function tests | valid, malformed, missing tenant → expected columns | `docker compose --profile tools run --rm spark-test pytest tests/spark/test_bronze_parse.py -q` | ✅ |
+| W2.D8.3 | Count integration test | Bronze rows = produced messages incl. parse errors | `pytest tests/integration/test_bronze_stream.py -q` | ✅ |
 
-**Evidence**: _—_
+**Evidence**:
+- W2.D8.1: commit `b67f155`; `python scripts/submit_job.py bronze_stream` → exit 0, run `bronze_stream_20261109T135757Z_76361045`: `raw_customers` rows_seen 3060, parse_errors 0; `raw_clickstream` rows_seen 15600, parse_errors 75; distinct query ids and one checkpoint per query under `checkpoints/bronze_stream/`. `bronze_report` → rows 3060 and 15600, `distinct_source_refs` equal to rows, all metadata null counts 0, parse errors `malformed_json` 75. These two counts come from whatever the topics held; the oracle comparison is W2.D8.3.
+- W2.D8.2: commit `78f3d60`; `docker compose --profile tools run --rm spark-test pytest tests/spark -q` → 71 passed (22 before this day; includes `test_bronze_parse.py`).
+- W2.D8.3: commit `78f3d60`; `pytest tests/integration -q -rs` → 7 passed, no skip. `test_bronze_stream.py` compares rows, per-code parse errors and per-brand counts with the generated messages and manifest, on throw-away topics. A second run from the same checkpoint: exit 0, 0 rows seen, 0 batches, same query ids, rows unchanged.
+- Gates (final code, `0792283`): ruff, ruff format, mypy (33 files), lint-imports (2 kept) clean; unit 1066 passed, coverage 88 % (CI gate 80 %; the Spark-only code runs in the container and is not counted, which is why the figure fell from 93 %). Negative: `bronze_report` on a missing namespace → exit 1, reason visible in `job.failed` (D-048).
+- Limits: tables are addressed by path until the metastore (W2.D11). Replay after a real mid-stream failure is D9 work: idempotence is proven at `write_bronze_batch` level and for a clean rerun. `_await_all` failure path is tested with fake queries only. Trailing garbage after a JSON object is not flagged (D-047).
 
 #### D9 · 🔺 Restart and checkpoint loss
 | ID | Task | Acceptance | Verify | Status |

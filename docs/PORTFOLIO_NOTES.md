@@ -16,6 +16,7 @@
 | 2026-11-06 | Deterministic multi-tenant CDC generator with an exact-count ground-truth manifest (expected outcome per emission, batch-aware `classify_outcomes`, reconciliation equation) validated against an independent reference MERGE | commit `848d9c8`; PROGRESS W1.D4 Evidence | DE |
 | 2026-11-06 | Keyed idempotent Kafka producer (`acks=all`, idempotence, delivery accounting per tenant) with a live round-trip test proving per-key partition affinity and no extra records; clickstream generator with exact defect manifest | commit `03d02b4`; PROGRESS W1.D5 Evidence | DE |
 | 2026-11-09 | PySpark job framework: settings-driven session profiles, run ID on every log line, wheel-based packaging submitted to a standalone cluster, with a negative run proving the driver and the one executor in use (`spark.cores.max=1`) load the shipped code rather than a source mount; Spark tests run in the image, no PySpark on the host | commits `e82f91b`, `5836709`, `80a6e63`; PROGRESS W2.D7 Evidence | DE |
+| 2026-11-09 | Kafka → Bronze Structured Streaming on Delta: one row per message including unparseable ones, lineage per offset, per-lineage idempotent batch writes; counts verified per topic, parse-error code and tenant against a generator manifest, and a rerun from the checkpoint adds no rows | commits `b67f155`, `78f3d60`; PROGRESS W2.D8 Evidence | DE |
 
 Competency tags: **DE** = Senior Data Engineer · **ARCH** = Data Architect.
 
@@ -30,6 +31,7 @@ Competency tags: **DE** = Senior Data Engineer · **ARCH** = Data Architect.
 | Schema evolution | strict producer (`extra="forbid"`), tolerant consumer; any constraint change = breaking | safety vs friction of version bumps on harmless tightening | DECISION_LOG D-006, D-015; W1.D3 |
 | CDC correctness | outcome precedence DLQ → DUPLICATE → NOOP → ACCEPT, gate before dedup, sequence not wall clock | batch-local dedup drops intermediate versions (SCD2 needs them) vs simpler MERGE | DECISION_LOG D-022…D-024, D-029; W1.D4 |
 | Parsing vs typing | money and timestamps stay strings in the Spark schema; typed casts happen in Silver after a validity check | one more step vs a cast that silently rounds `12.505`, accepts `1e2` and turns overflow into null (measured) | DECISION_LOG D-045; W2.D7 |
+| Streaming idempotence | Delta `txnAppId` = streaming query id, `txnVersion` = batch id | stable per checkpoint lineage vs a fixed id, which would silently skip new data after a checkpoint loss; re-reads after a loss are appended and removed by Silver dedup | D-047; W2.D8, restart proof in W2.D9 |
 | Cloud cost | serverless, ephemeral, budget-tracked | always-on convenience vs cost; measured spend per run | ADR-0008, ADR-0011 |
 
 ## 3. Drafts (not yet verified — never copy to README before evidence exists)

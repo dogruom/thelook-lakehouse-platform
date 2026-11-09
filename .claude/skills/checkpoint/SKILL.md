@@ -21,6 +21,8 @@ Argument: `day W<w>.D<d>`, `week <w>` or `milestone M<n>`. Default: the active d
    executive summary · delivered (task IDs + status) · evidence (commit, command → result) ·
    reviews and audit verdicts · decisions (D-IDs) · not verified / known limitations · carry-overs ·
    risks · learning queued · next day · merge status (PR, CI run, merge commit).
+6b2. Update `docs/DATA_FLOW.md` for every pipeline step the day added or changed (D-046): status,
+   file links, input → output, how to see the data.
 6c. Merge under the standing approval in `CLAUDE.md` (D-032) when all its conditions hold;
    record the PR / CI / merge commit in the report.
 7. Learning gate: run the `tutor` skill for the day's concepts. In **batched mode** (see tutor
