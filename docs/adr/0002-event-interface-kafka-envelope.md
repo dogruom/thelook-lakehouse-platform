@@ -1,7 +1,7 @@
 # ADR-0002: Event interface — Kafka, common envelope, keys vs headers
 
 - **Status:** Accepted
-- **Date:** 2026-11-06
+- **Date:** 2026-11-06 (amended 2026-11-09: Bronze persists headers, D-047)
 
 ## Context
 The generator and the ingestion jobs communicate only through durable topics (ADR-0009). The
@@ -33,8 +33,9 @@ plus the entity fields. Details: [DATA_CONTRACTS.md §2.0](../DATA_CONTRACTS.md)
   would send the same key to a different partition than Spark, Kafka Connect or a Java producer,
   so per-key ordering would silently break once a second client writes the topic.
 - **Headers** `brand_id`, `schema_version`, `event_type` are routing copies for filtering and
-  debugging. They never take part in partitioning. Bronze does not persist headers, so downstream
-  logic must use the payload fields.
+  debugging. They never take part in partitioning. Bronze stores them unchanged in `_kafka_headers`
+  for lineage (amended 2026-11-09, D-047). Downstream logic must still use the payload fields; the
+  `brand_id` header is read only to attribute a row whose payload could not be parsed.
 - A null `session_id` produces key `{brand_id}:`; the event is kept in Bronze and rejected to the
   DLQ downstream (never dropped by the producer).
 - Consequence: all events of one session or customer share a partition, but a hot tenant can still
@@ -69,7 +70,7 @@ applied with idempotent MERGE. This ADR makes no exactly-once claim.
   built component.
 - Header/payload duplication costs a few bytes per message and can drift. Today the generator
   unit tests compare headers with the payload and the producer round trip compares the `brand_id`
-  header with the key prefix; Bronze trusts only the payload copy.
+  header with the key prefix; Bronze trusts the payload copy for every parseable row.
 - Ordering guarantees are per key only; hot-tenant skew is possible and observable via partition
   counts.
 - Without a registry, compatibility is enforced by snapshots and tests in this repository only.
@@ -81,5 +82,5 @@ applied with idempotent MERGE. This ADR makes no exactly-once claim.
 | Amazon MSK | Always-on broker cost; same client API as local Kafka, so deferred without redesign |
 | Schema Registry + Avro/Protobuf | Extra service and tooling for one producer; JSON Schema snapshots give the needed guarantees now |
 | Key by `brand_id` only | Per-tenant ordering is unnecessary and creates severe hot-partition skew |
-| Headers-only `brand_id` (no payload copy) | Bronze does not persist headers; tenant identity would be lost |
+| Headers-only `brand_id` (no payload copy) | The tenant would live outside the contract-validated payload, and Silver would depend on a routing copy that can drift |
 | Kafka transactions / exactly-once | Not needed with idempotent Silver; adds complexity and an unproven claim |

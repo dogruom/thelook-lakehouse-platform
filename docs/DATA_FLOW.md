@@ -1,6 +1,6 @@
 # Data Flow — Follow One Event Through the Code
 
-> **Last Updated**: 2026-11-09 (through W2.D7)
+> **Last Updated**: 2026-11-09 (through W2.D8)
 > **Purpose**: where each step of the pipeline lives, what goes in and out, and how to see the data.
 > Target design: [ARCHITECTURE.md](ARCHITECTURE.md). Field-level rules: [DATA_CONTRACTS.md](DATA_CONTRACTS.md).
 > **Rule**: updated at every day close. A step is ✅ only if its code exists and ran; 📋 steps are planned, and their paths may change.
@@ -29,7 +29,7 @@ flowchart LR
 | 6 | Send to Kafka | ✅ | [producer.py](../src/lakehouse/generator/producer.py) `produce_messages`; CLI [\_\_main\_\_.py](../src/lakehouse/generator/__main__.py) | messages → topics `customer_cdc`, `clickstream_events` | [week1-demo.md](runbooks/week1-demo.md) |
 | 7 | Start any Spark job | ✅ | [spark.py](../src/lakehouse/common/spark.py), [jobs.py](../src/lakehouse/common/jobs.py), [submit_job.py](../scripts/submit_job.py) | job name → run on the cluster, logs with `run_id` | Spark UI `127.0.0.1:8181` |
 | 8 | Parse contract JSON in Spark | ✅ schema only | [spark_schema.py](../src/lakehouse/contracts/spark_schema.py) | contract → `StructType` | [test_spark_contract_schemas.py](../tests/spark/test_spark_contract_schemas.py) |
-| 9 | Kafka → Bronze | 📋 W2.D8 | `src/lakehouse/ingestion/` | message → append-only row with raw value and lineage | added at D8 |
+| 9 | Kafka → Bronze | ✅ | [bronze.py](../src/lakehouse/ingestion/bronze.py) `to_bronze_rows`, `write_bronze_batch`; [bronze_stream.py](../src/lakehouse/ingestion/jobs/bronze_stream.py) | message → one append-only row with raw value, lineage and `_parse_error`; tables at `s3a://lakehouse/bronze/raw_customers`, `raw_clickstream` (by path until the metastore, W2.D11) | `python scripts/submit_job.py bronze_report` (counts per table, parse-error code and tenant; no raw values); [bronze_report.py](../src/lakehouse/ops/jobs/bronze_report.py) |
 | 10 | Bronze → DLQ | 📋 W2.D10 | `src/lakehouse/quality/` | invalid row → `dead_letter.dlq_*` with reason | added at D10 |
 | 11 | Bronze → Silver | 📋 W3.D14–D17 | `src/lakehouse/silver/` | valid row → `MERGE` by `_cdc_sequence`, SCD2 | added at D14 |
 | 12 | Reconcile counts | 📋 W3.D18 | `src/lakehouse/ops/` | layer counts → bronze = accepted + dlq + duplicates + stale + late | added at D18 |

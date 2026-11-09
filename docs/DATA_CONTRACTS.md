@@ -1,7 +1,7 @@
 # Data Contracts & Medallion Specifications
 
-> **Document Version**: 7.3
-> **Last Updated**: 2026-11-06 (v7.3: CDC ground-truth manifest §2.1.1, gate order and outcome precedence §4.1; v7.2: `event_id`/`schema_version`/`produced_at` payload fields, duplicate CDC defect, producer/consumer unknown-field rule, 2-decimal money strings; v7.1: orders carry embedded line items; static product seed; `schema_version` in the envelope; schema-evolution demo moved to orders; reconciliation adds `stale_cdc_noop` — DELIVERY_PLAN v8, ADR-0009)
+> **Document Version**: 7.4
+> **Last Updated**: 2026-11-09 (v7.4: Bronze metadata columns as built §3.1, stable `_parse_error` codes, headers persisted, no `mergeSchema` on Bronze, D-047; v7.3: CDC ground-truth manifest §2.1.1, gate order and outcome precedence §4.1; v7.2: `event_id`/`schema_version`/`produced_at` payload fields, duplicate CDC defect, producer/consumer unknown-field rule, 2-decimal money strings; v7.1: orders carry embedded line items; static product seed; `schema_version` in the envelope; schema-evolution demo moved to orders; reconciliation adds `stale_cdc_noop` — DELIVERY_PLAN v8, ADR-0009)
 > **Status**: 🟡 DRAFT — aligned with [PROJECT_CHARTER.md](PROJECT_CHARTER.md) v7. **Not yet enforced in code**; each contract becomes enforced when the corresponding PROGRESS task is ✅ with evidence.
 > **Target Platform**: Multi-Tenant CRM Lakehouse (Delta Lake OSS locally; cloud targets documented separately)
 
@@ -113,7 +113,7 @@ Applies to `customer_cdc` and `clickstream_events` (rationale: [ADR-0002](adr/00
 | Message **key** | `{brand_id}:{customer_id}` (CDC) · `{brand_id}:{session_id}` (clickstream) | Determines the partition → preserves per-customer / per-session ordering and spreads tenant load |
 | Header `brand_id` | tenant identifier | Routing and filtering only — **not** used for partitioning |
 | Value | UTF-8 JSON of the entity schema below | Parsed into typed columns in Bronze; unparseable values stored raw with `_parse_error` |
-| Header `schema_version` / `event_type` | e.g. `1` / `page_view` (CDC: `customer_cdc`) | Routing copies. The payload field `schema_version` is authoritative because Bronze does not persist headers. Additive changes keep the version, breaking changes bump it (ADR-0009) |
+| Header `schema_version` / `event_type` | e.g. `1` / `page_view` (CDC: `customer_cdc`) | Routing copies. Bronze keeps them in `_kafka_headers` for lineage only; the payload field `schema_version` stays authoritative (D-047). Additive changes keep the version, breaking changes bump it (ADR-0009) |
 | Payload `event_id`, `schema_version`, `produced_at` | UUIDv4 · integer `1` · UTC timestamp | Present on CDC and clickstream events; `produced_at` is the producer's emission time |
 | Null `session_id` (clickstream) | key `{brand_id}:` | Such events land in Bronze and are rejected to the DLQ downstream |
 | Money (orders, items, products) | JSON string with exactly 2 decimals, e.g. `"12.50"` | Avoids binary-float rounding; parsed into `DECIMAL(10,2)` |
@@ -289,10 +289,16 @@ most one defect. If a defect pool is too small the generator fails with `Infeasi
 |---|---|
 | `_ingest_ts` | Pipeline ingestion timestamp |
 | `_source_ref` | Kafka `topic/partition/offset` or landing file path |
-| `_batch_id` | Ingestion run / micro-batch identifier |
-| `brand_id` | Tenant identifier (from payload; header/path used only as fallback for unparseable records) |
-| `_raw_value` | Original payload string (stream sources) |
-| `_parse_error` | Null when parsing succeeded; error text otherwise |
+| `_batch_id` | Ingestion run / micro-batch identifier. Stream sources: `<streaming query id>:<micro-batch id>`, unique per checkpoint lineage |
+| `brand_id` | Tenant identifier (from payload; header/path used only as fallback for unparseable records). A parseable record without a payload `brand_id` keeps NULL and is rejected by the gate. NULL is also possible for an unparseable record without a header; the row is kept |
+| `_raw_value` | Original payload string (stream sources). Base64 of the bytes when `_parse_error = invalid_utf8`; NULL for a Kafka tombstone |
+| `_parse_error` | Null when parsing succeeded; otherwise a stable code, in precedence order: `null_value`, `invalid_utf8`, `malformed_json`. On any code all parsed contract fields are NULL |
+| `_kafka_key` | Stream sources: message key, binary, unchanged |
+| `_kafka_headers` | Stream sources: `ARRAY<STRUCT<key STRING, value BINARY>>`, unchanged. Lineage only (D-047) |
+| `_kafka_ts` | Stream sources: Kafka record timestamp |
+| `event_date` | `bronze.raw_clickstream` partition column: UTC date of `event_timestamp`, else of `_kafka_ts` when missing or unparseable, so a reload lands in the same partition |
+
+Known limit (measured, Spark 3.5.9): `from_json` accepts trailing garbage after the first JSON object, so `{"a":"1"} xyz` is parsed and not flagged; `_raw_value` retains the full text.
 
 ### 3.2 DLQ envelope
 Contract and integrity failures detected at the **Bronze → Silver gate** are written to `dead_letter.dlq_*` Delta tables. The original payload **stays in Bronze**; the DLQ references it. No record is dropped silently.
@@ -406,7 +412,7 @@ Rule-based heuristic score in [0, 1] (not a trained model). Built only if Core a
 | Layer | Contract Mechanism | Enforcement Action | Freshness Target* |
 |---|---|---|---|
 | **Producer** | Pydantic v2 models | Invalid generator output fails unit tests | — |
-| **Landing / Kafka → Bronze** | Envelope parsing | Parse failures kept in Bronze (`_parse_error`); schema evolution via `mergeSchema` | < 5 min |
+| **Landing / Kafka → Bronze** | Envelope parsing | Parse failures kept in Bronze (`_parse_error`); no `mergeSchema` on the write, so an unplanned schema change fails loudly (D-047) | < 5 min |
 | **Bronze → Silver** | PySpark validation gate + composite anti-joins | Failures → DLQ; pipeline proceeds; reconciliation vs. manifest | < 15 min |
 | **Silver → Gold** | dbt tests (`unique`, `not_null`, composite relationships, singular tests) | Test failures block downstream models; alert | Hourly |
 | **Stretch** | Great Expectations suite | Distribution and drift checks without overlapping dbt tests | Post-dbt |

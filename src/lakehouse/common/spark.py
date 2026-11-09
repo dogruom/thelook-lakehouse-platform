@@ -71,6 +71,11 @@ class SparkSettings(BaseSettings):
     # Single alias on purpose: a bare "master" alias would also read Spark's legacy MASTER env var.
     master: str | None = Field(default=None, validation_alias="LAKEHOUSE_SPARK_MASTER")
     catalog: Literal["in_memory", "hive", "glue"] | None = None
+    # Internal (container network) listener. Never the host's KAFKA_BOOTSTRAP_SERVERS.
+    kafka_bootstrap_servers: str = Field(
+        default="kafka:9092",
+        validation_alias=AliasChoices("LAKEHOUSE_KAFKA_BOOTSTRAP", "kafka_bootstrap_servers"),
+    )
 
     @model_validator(mode="after")
     def _glue_needs_aws(self) -> SparkSettings:
