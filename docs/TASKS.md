@@ -46,9 +46,9 @@ only server-side control for the D-032 merge gate.
 ## Queue
 | ID | Task | Status | Depends on | Attempts | Note |
 |---|---|---|---|---|---|
-| W2.D7.1 | `lakehouse.common.spark` SparkSession factory + environment adapter (local/aws) + job CLI base with run IDs | todo | — | 0 | |
-| W2.D7.2 | `spark-test` service (tools profile) running pytest in the Spark image; first Spark tests | todo | W2.D7.1 | 0 | image build pre-approved (D-041) |
-| W2.D7.3 | Wheel build + `scripts/submit_job.py` (spark-submit in the master container) | todo | W2.D7.2 | 0 | |
+| W2.D7.1 | `lakehouse.common.spark` SparkSession factory + environment adapter (local/aws) + job CLI base with run IDs | done | — | 0 | `e82f91b`, `44b5ea7` (interactive session) |
+| W2.D7.2 | `spark-test` service (tools profile) running pytest in the Spark image; first Spark tests | done | W2.D7.1 | 0 | `5836709` (no image rebuild needed) |
+| W2.D7.3 | Wheel build + `scripts/submit_job.py` (spark-submit in the master container) | done | W2.D7.2 | 0 | `80a6e63` |
 | W2.D7.close | Day close W2.D7 (checkpoint, report, D-032 merge gate) | todo | W2.D7.3 | 0 | |
 | W2.D8.1 | `ingestion.bronze_stream` (both topics, raw value, key, headers, source ref, availableNow, one checkpoint per query) | todo | W2.D7.close | 0 | |
 | W2.D8.2 | Spark tests for the parse function (valid, malformed, missing tenant) | todo | W2.D8.1 | 0 | |
@@ -83,3 +83,4 @@ Tutor gates deferred by the unattended run (D-041). Each row → one tutor sessi
 | Scope | Topics | Lab | Status |
 |---|---|---|---|
 | W1 | Kafka key/partition/headers, idempotent producer, contracts | [.claude/learning/labs/W1_LAB.md](../.claude/learning/labs/W1_LAB.md) | open |
+| W2.D7 | Driver vs executor code shipping, config layering, run IDs, `from_json` leniency | [.claude/learning/labs/W2_LAB.md](../.claude/learning/labs/W2_LAB.md) | open |
