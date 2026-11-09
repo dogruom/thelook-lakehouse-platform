@@ -50,10 +50,10 @@ only server-side control for the D-032 merge gate.
 | W2.D7.2 | `spark-test` service (tools profile) running pytest in the Spark image; first Spark tests | done | W2.D7.1 | 0 | `5836709` (no image rebuild needed) |
 | W2.D7.3 | Wheel build + `scripts/submit_job.py` (spark-submit in the master container) | done | W2.D7.2 | 0 | `80a6e63` |
 | W2.D7.close | Day close W2.D7 (checkpoint, report, D-032 merge gate) | done | W2.D7.3 | 0 | `879cd9e`, PR #8 |
-| W2.D8.1 | `ingestion.bronze_stream` (both topics, raw value, key, headers, source ref, availableNow, one checkpoint per query) | todo | W2.D7.close | 0 | |
-| W2.D8.2 | Spark tests for the parse function (valid, malformed, missing tenant) | todo | W2.D8.1 | 0 | |
-| W2.D8.3 | Integration: Bronze rows = produced messages | todo | W2.D8.2 | 0 | |
-| W2.D8.close | Day close W2.D8 | todo | W2.D8.3 | 0 | |
+| W2.D8.1 | `ingestion.bronze_stream` (both topics, raw value, key, headers, source ref, availableNow, one checkpoint per query) | done | W2.D7.close | 0 | `b67f155` |
+| W2.D8.2 | Spark tests for the parse function (valid, malformed, missing tenant) | done | W2.D8.1 | 0 | `78f3d60` |
+| W2.D8.3 | Integration: Bronze rows = produced messages | done | W2.D8.2 | 0 | `78f3d60` |
+| W2.D8.close | Day close W2.D8 | done | W2.D8.3 | 0 | day-close docs, interactive session |
 | W2.D9.1 | Restart tests: kill mid-stream → each offset once; delete checkpoint → replay quantified | todo | W2.D8.close | 0 | |
 | W2.D9.2 | ADR-0006 draft with measured outcomes | todo | W2.D9.1 | 0 | |
 | W2.D9.close | Day close W2.D9 (🔺 gate for M2) | todo | W2.D9.2 | 0 | |
@@ -84,3 +84,4 @@ Tutor gates deferred by the unattended run (D-041). Each row → one tutor sessi
 |---|---|---|---|
 | W1 | Kafka key/partition/headers, idempotent producer, contracts | [.claude/learning/labs/W1_LAB.md](../.claude/learning/labs/W1_LAB.md) | open |
 | W2.D7 | Driver vs executor code shipping, config layering, run IDs, `from_json` leniency | [.claude/learning/labs/W2_LAB.md](../.claude/learning/labs/W2_LAB.md) | open |
+| W2.D8 | Kafka source options, `foreachBatch` vs Delta sink, checkpoints, Delta `txnAppId`/`txnVersion`, parse errors vs contract failures | `python scripts/submit_job.py bronze_report`; [DATA_FLOW.md](DATA_FLOW.md) step 9 | open |
