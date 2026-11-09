@@ -61,10 +61,10 @@ only server-side control for the D-032 merge gate.
 | W2.D10.2 | Spark tests per rule incl. negatives | done | W2.D10.1 | 0 | `5f64ad4`; 178 passed |
 | W2.D10.3 | Integration: DLQ set = manifest DLQ-expected set (exact) | done | W2.D10.2 | 0 | `5f64ad4`; 14 passed |
 | W2.D10.close | Day close W2.D10 | done | W2.D10.3 | 0 | DAY_CLOSE_REPORTS W2.D10 |
-| W2.D11.1 | Postgres-backed Hive metastore; register Bronze/DLQ tables | todo | W2.D10.close | 0 | |
-| W2.D11.2 | Spark Thrift Server (`sql` profile); `dbt debug`; probe models | todo | W2.D11.1 | 0 | |
-| W2.D11.3 | Decision recorded (Thrift or `session` fallback) in ADR-0004 spike section | todo | W2.D11.2 | 0 | |
-| W2.D11.close | Day close W2.D11 | todo | W2.D11.3 | 0 | |
+| W2.D11.1 | Postgres-backed Hive metastore; register Bronze/DLQ tables | done | W2.D10.close | 0 | `f2f07f9`; register_tables + SHOW TABLES |
+| W2.D11.2 | Spark Thrift Server (`sql` profile); `dbt debug`; probe models | done | W2.D11.1 | 0 | `f2f07f9`; dbt build spike PASS=8 ×2 |
+| W2.D11.3 | Decision recorded (Thrift or `session` fallback) in ADR-0004 spike section | done | W2.D11.2 | 0 | ADR-0004, D-060/D-061 |
+| W2.D11.close | Day close W2.D11 | done | W2.D11.3 | 0 | DAY_CLOSE_REPORTS W2.D11 |
 | W2.D12.1 | `docs/runbooks/m1-streaming-demo.md` | todo | W2.D11.close | 0 | |
 | W2.D12.2 | Full regression | todo | W2.D12.1 | 0 | |
 | W2.D12.3 | Milestone review (reviewer + evidence-auditor), README status, can/cannot-claim note | todo | W2.D12.2 | 0 | `v0.1.0` tag is owner-only |
@@ -88,3 +88,4 @@ Tutor gates deferred by the unattended run (D-041). Each row → one tutor sessi
 | W2.D9 | Checkpoint anatomy (`offsets/`, `commits/`, `metadata`), Delta idempotent writes and their blind spot (S9), `failOnDataLoss`, fault injection, "offset committed once per checkpoint lineage" | [ADR-0006](adr/0006-delivery-semantics-restart-and-checkpoint-loss.md); `python scripts/submit_job.py bronze_report` (`offsets_by_partition`, `distinct_lineages`) | open |
 | W2.D8 | Kafka source options, `foreachBatch` vs Delta sink, checkpoints, Delta `txnAppId`/`txnVersion`, parse errors vs contract failures | `python scripts/submit_job.py bronze_report`; [DATA_FLOW.md](DATA_FLOW.md) step 9 | open |
 | W2.D10 | Validation as data (rules as columns), error taxonomies (code → category → retryable), quarantine/DLQ patterns, insert-only MERGE, null-safe join (`<=>`), independent post-write checks, log masking | `python scripts/submit_job.py dlq_report --list-refs`; [DATA_FLOW.md](DATA_FLOW.md) step 10 | open |
+| W2.D11 | Hive metastore internals (DBS/TBLS/SDS in Postgres, embedded client vs metastore service), external Delta tables by name, Thrift/JDBC, dbt adapter capability limits (merge, composite `unique_key`, contracts vs Delta constraints, `persist_docs`) | `beeline … -e "SHOW TABLES IN bronze"`; `dbt build --select spike`; [ADR-0004](adr/0004-spark-dbt-ownership-and-adapter-capabilities.md) | open |

@@ -19,6 +19,7 @@
 | 2026-11-09 | Kafka → Bronze Structured Streaming on Delta: one row per message including unparseable ones, lineage per offset, per-lineage idempotent batch writes; counts verified per topic, parse-error code and tenant against a generator manifest, and a rerun from the checkpoint adds no rows | commits `b67f155`, `78f3d60`; PROGRESS W2.D8 Evidence | DE |
 | 2026-11-09 | Fault-injected restart suite for Kafka → Bronze (crash before/after commit, SIGKILL, callback exception, broker outage, full and partial checkpoint loss, retention gap): per-partition offset proof against Kafka watermarks; found and fixed a silent data-loss path on partial checkpoint loss | commit `c23e322`; PROGRESS W2.D9 Evidence; ADR-0006 | DE |
 | 2026-11-09 | Contract validation gate in Spark: column rules with a fixed code/category/retryable taxonomy, insert-only idempotent DLQ (null-safe tenant key), independent post-write checks, PII-masked reporting; DLQ set reconciled exactly against a generator manifest, rerun inserts nothing | commits `5f64ad4`, `c91e03f`; PROGRESS W2.D10 Evidence | DE |
+| 2026-11-10 | Catalog + dbt capability spike: Spark-written Delta tables registered by name in a Postgres-backed Hive metastore and read by jobs and dbt through a Spark Thrift Server; dbt-spark probes for incremental Delta `merge`, composite tenant key, enforced contracts and `persist_docs`, including two observed adapter gaps with workarounds | [ADR-0004](adr/0004-spark-dbt-ownership-and-adapter-capabilities.md), PROGRESS W2.D11, `f2f07f9` | DE, ARCH |
 
 Competency tags: **DE** = Senior Data Engineer · **ARCH** = Data Architect.
 
@@ -36,6 +37,7 @@ Competency tags: **DE** = Senior Data Engineer · **ARCH** = Data Architect.
 | Streaming idempotence | Delta `txnAppId` = streaming query id, `txnVersion` = batch id | stable per checkpoint lineage vs a fixed id, which would silently skip new data after a checkpoint loss; re-reads after a loss are appended and removed by Silver dedup | D-047; W2.D8, restart proof in W2.D9 |
 | Checkpoint-loss safety | after a skipped Delta write, compare the batch's `_source_ref` set with the stored batch; mismatch = rewound checkpoint → fail | one extra read per skipped batch vs silent loss of new data when `offsets/` is lost but `metadata` survives (measured: half the rows) | D-050; ADR-0006 S9 |
 | DLQ design | parse errors stay in Bronze, only contract failures go to the DLQ; insert-only MERGE on a deterministic `_dlq_id`; post-write checks computed independently of the MERGE metrics | quarantine table to maintain vs silently dropped rows; a self-consistent metric check proves nothing (review finding) | D-056, D-057; W2.D10 |
+| Catalog and dbt engine | prove adapter capabilities with probes (incl. negatives) before modelling; writers keep the location, readers use the name; registered locations verified, never re-pointed | spike day vs discovering gaps mid-Gold; Thrift endpoint kept over `session`; FK-less local metastore accepted (local only) | ADR-0004 C1–C12, D-060, D-061 |
 
 | Cloud cost | serverless, ephemeral, budget-tracked | always-on convenience vs cost; measured spend per run | ADR-0008, ADR-0011 |
 

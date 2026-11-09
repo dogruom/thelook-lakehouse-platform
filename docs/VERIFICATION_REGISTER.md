@@ -14,7 +14,6 @@ Classes: **Closed** (verified, evidence linked) · **Planned** (has a task and a
 | # | Item | Class | Owner day / task | Risk if ignored |
 |---|---|---|---|---|
 | V-01 | Generator does not produce intermediate-late CDC or `late_beyond_window` events (D-030) | Planned | W3.D14.0 (before SCD2 tests) | SCD2 late-arrival tests would pass vacuously |
-| V-02 | Bronze tables are addressed by path, not by catalog name | Planned | W2.D11 (catalog spike) | Jobs on Glue/Databricks would need path config |
 | V-03 | Delta commit safety on AWS S3 / Glue (local SeaweedFS has no put-if-absent; single writer assumed) | Planned | W5 (Glue run) | Concurrent writers on S3 could corrupt the log; ADR-0006 results must not be carried over untested |
 | V-04 | AWS profile / short-lived credentials on the owner's machine | Planned | W5.D1 | First cloud day blocked |
 | V-05 | Two writers on one Bronze table at the same time | Known limit | ADR-0006 §single writer; `submit_job.py` refuses an identical running driver (best effort) | A second scheduler could double-write; no lock exists locally |
@@ -29,6 +28,12 @@ Classes: **Closed** (verified, evidence linked) · **Planned** (has a task and a
 | V-14 | dbt-spark gaps carried in the project: `spark__alter_column_comment` override, column-level `not_null` unusable on Delta (ADR-0004 W2/W3) | Known limit | Re-test on every dbt-spark upgrade (`dbt build --select spike`) | Override may drift from upstream; a removed workaround would break `persist_docs` |
 | V-15 | A running Spark job and dbt using the metastore at the same time (two embedded clients on one database) | Planned | W3 (first Gold models on Silver) | Lock waits or a stale table schema seen by one side |
 | V-16 | Spark Thrift Server has no authentication (published on 127.0.0.1 only; reachable from every container on the compose network) | Known limit | Local only; cloud targets use IAM/Glue or Databricks SQL auth (W5/W6) | A compromised local container could read/write the catalog and S3 data |
+
+## Closed (2026-11-10, W2.D11)
+
+| Item (earlier wording) | Result | Evidence |
+|---|---|---|
+| V-02 Bronze tables are addressed by path, not by catalog name | Bronze/DLQ registered as `bronze.raw_*` / `dead_letter.dlq_*` in the Postgres-backed Hive metastore; gate and reports read by name, registered location verified; paths remain the write contract (D-060) | `f2f07f9`; `register_tables` run, `SHOW TABLES IN bronze` via Thrift, PROGRESS W2.D11 evidence |
 
 ## Closed (2026-11-09, W2.D9)
 

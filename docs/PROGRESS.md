@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-05 (v9.0: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W2.D10 closed** (3/3 ✅) → next **W2.D11**
+> **Active**: **W2.D11 closed** (3/3 ✅) → next **W2.D12** (M1 review, demo and release)
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,18 +13,18 @@
 
 ## Current State
 
-- **Updated**: 2026-11-09 (W2.D10 closed) · **Branch**: `feat/w2-d10-dlq`; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
-- **Last delivered**: W2.D10.1–D10.3 ✅ — contract rules with fixed codes and categories (D-056), insert-only DLQ gate with independent post-write checks and masked tenant/event logging (D-057), `dlq_report`; DLQ set equals the manifest set exactly. Earlier: W2.D9 restart suite S1–S9 and `CheckpointRewoundError` (D-050); [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) (D-055).
-- **Unfinished**: W1 tutor re-test and W2.D7–D10 learning gates (Learning queue of [TASKS.md](TASKS.md)).
-- **Tests & results**: unit 1154 passed (HEAD `c91e03f`); day-close full suite on `5f64ad4`: unit 1146, Spark 258 (container), integration 34 passed, 1 skipped (broker chaos opt-in, D-059); ruff/mypy/import-linter clean.
-- **Test cadence (D-059)**: only the relevant tests while developing, full suite once per day close; rules proven in the Spark container, integration keeps reconciliation scenarios; broker chaos opt-in (`RUN_BROKER_CHAOS=1`). Single-SparkSession multi-step runner queued as TASKS Q-001.
-- **Owner action**: register rows V-09 (stale `COMPOSE_PROJECT_NAME` in the local environment file), V-10 (legacy containers, anonymous volume `5b2af2ca…`), V-11 (tutor gates). None blocking.
-- **Stack**: stopped (`docker compose --profile core stop`).
-- **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; Glue 5.0 (ADR-0011); Databricks Free Edition W6 (ADR-0012); budget ≤ USD 50; contracts strict producer / tolerant consumer; Silver gate order DLQ → dedup → MERGE (D-022); outcome precedence DLQ → DUPLICATE (vs valid Bronze history) → NOOP → ACCEPT (D-023/D-029); jobs resolved by convention, code shipped as zip via `--py-files` (D-044); money and timestamps stay strings until Silver (D-045); Bronze keeps headers, Delta app id = streaming query id, stable parse codes (D-047); exception text in logs (D-048).
-- **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); open items with owner days in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) (D-030 late CDC → W3.D14.0; Delta commit safety on S3 → W5; single writer is a known limit).
-- **Way of working**: Claude implements everything, priority is speed, every pipeline step is mapped in [DATA_FLOW.md](DATA_FLOW.md) (D-046); W1 tutor batched (D6 learning session); every decision in DECISION_LOG; per-session trace in [SESSION_LOG.md](SESSION_LOG.md); replies with executive/technical summary, file links, senior Q&A; personal glossary `.claude/learning/GLOSSARY.md`.
-- **Next task ("Start today's task")**: **W2.D11** — catalog and dbt capability spike (DELIVERY_PLAN D11 card); closes register row V-02.
-- **Next mode**: coordinator plans; `reviewer` design review → `implementer` ‖ `test-author` → code review → `evidence-auditor`.
+- **Updated**: 2026-11-10 (W2.D11 closed) · **Branch**: `feat/w2-d11-catalog-spike`; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
+- **Last delivered**: W2.D11.1–D11.3 ✅ — Postgres-backed Hive metastore, Bronze/DLQ registered by name (`register_tables`, D-060), gate/reports read by name; Spark Thrift Server + dbt 1.12.6/dbt-spark 1.11.0 probes (merge, composite key, contracts, persist_docs), Thrift kept ([ADR-0004](adr/0004-spark-dbt-ownership-and-adapter-capabilities.md), D-061). Earlier: W2.D10 DLQ gate (D-056/D-057).
+- **Unfinished**: W1 tutor re-test and W2.D7–D11 learning gates (Learning queue of [TASKS.md](TASKS.md)).
+- **Tests & results**: after review fixes: unit 1203 passed, 1 skipped; Spark 269 (container); day-close integration 34 passed, 1 skipped (71 min); dbt `build --select spike` PASS=8 ×2; ruff/mypy/import-linter clean.
+- **Test cadence (D-059)**: only the relevant tests while developing, full suite once per day close; broker chaos opt-in (`RUN_BROKER_CHAOS=1`). Single-SparkSession multi-step runner queued as TASKS Q-001.
+- **Owner action**: register rows V-09, V-10, V-11 (unchanged); V-13 optional: approve downloading the official Hive 2.3 PostgreSQL schema script to replace the FK-less auto-created schema. None blocking.
+- **Stack**: stopped (`docker compose --profile core --profile sql stop`). Thrift Server needs `--profile sql` and takes 1 of 2 worker cores: stop it before jobs/integration tests.
+- **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; Glue 5.0 (ADR-0011); Databricks Free Edition W6 (ADR-0012); budget ≤ USD 50; contracts strict producer / tolerant consumer; Silver gate order DLQ → dedup → MERGE (D-022); outcome precedence DLQ → DUPLICATE → NOOP → ACCEPT (D-023/D-029); jobs resolved by convention, `--py-files` zip (D-044); money and timestamps strings until Silver (D-045); stable parse codes (D-047); writers own the location, readers use the catalog name, namespaced runs never registered (D-060); dbt via Thrift in `.venv-dbt`, NOT NULL as model-level `check` (D-061).
+- **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); open items with owner days in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) (D-030 late CDC → W3.D14.0; Delta commit safety on S3 → W5; metastore concurrency job + dbt → W3, V-15).
+- **Way of working**: Claude implements everything, priority is speed, every pipeline step is mapped in [DATA_FLOW.md](DATA_FLOW.md) (D-046); every decision in DECISION_LOG; per-session trace in [SESSION_LOG.md](SESSION_LOG.md); replies with executive/technical summary, file links, senior Q&A; personal glossary `.claude/learning/GLOSSARY.md`.
+- **Next task ("Start today's task")**: **W2.D12** — M1 review, demo and release (DELIVERY_PLAN D12 card); `v0.1.0` tag needs the owner.
+- **Next mode**: coordinator; `reviewer` (milestone, code + data + security) ‖ `evidence-auditor` (milestone); owner runs `/security-review` once.
 - **Autonomous run**: not started (setup on `chore/autonomous-run`, D-041/D-042; pre-flight verified: refuses to start with uncommitted guardrail files)
 
 ---
@@ -52,7 +52,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 ## 📊 Macro Status (count of ✅ tasks / planned tasks)
 
 ```
-M1 (D1–D12)   [██████████████░░░░░░] 26 / 37
+M1 (D1–D12)   [████████████████░░░░] 29 / 37
 M2 (D13–D24)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 ```
@@ -212,11 +212,16 @@ M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  
 #### D11 · Catalog and dbt capability spike
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
-| W2.D11.1 | Hive metastore on Postgres | Bronze/DLQ tables registered; jobs use table names | `SHOW TABLES IN bronze` | ⏳ |
-| W2.D11.2 | Thrift Server + dbt probe | `dbt debug` ok; probes for incremental merge, composite key, contracts, persist_docs | `dbt build --select spike` | ⏳ |
-| W2.D11.3 | Decision recorded | ADR-0004 spike table with observed results; fallback chosen if needed | file review | ⏳ |
+| W2.D11.1 | Hive metastore on Postgres | Bronze/DLQ tables registered; jobs use table names | `SHOW TABLES IN bronze` | ✅ |
+| W2.D11.2 | Thrift Server + dbt probe | `dbt debug` ok; probes for incremental merge, composite key, contracts, persist_docs | `dbt build --select spike` | ✅ |
+| W2.D11.3 | Decision recorded | ADR-0004 spike table with observed results; fallback chosen if needed | file review | ✅ |
 
-**Evidence**: _—_
+**Evidence**:
+- W2.D11.1: commit `f2f07f9`; Postgres metastore schema auto-created (28 tables, no FKs — ADR-0004 W1 after an observed DataNucleus FK self-deadlock); `python scripts/submit_job.py register_tables` → `bronze.raw_clickstream`, `dead_letter.dlq_customers`, `dead_letter.dlq_clickstream` registered, `bronze.raw_customers` exists (spike entry, location check passed); rerun → all `exists`; `dlq_gate` on the default namespace reads Bronze by name → rows 3060 / 15600, DLQ 210 / 150, `dlq_inserted=0` (same as W2.D10); beeline via Thrift `SHOW TABLES IN bronze` → `raw_clickstream`, `raw_customers`; `SHOW TABLES IN dead_letter` → `dlq_clickstream`, `dlq_customers`; `SELECT count(*) FROM bronze.raw_customers` → 3060.
+- W2.D11.2: commit `f2f07f9`; `dbt debug` → `Connection test: OK`; `dbt build --select spike --full-refresh` → PASS=8, then `--vars "{spike_round: 2}"` (incremental `MERGE INTO … ON brand_id AND customer_id`) → PASS=8; negatives: wrong-round expectation → FAIL 3, contract type mismatch → compile error, nothing written, `INSERT NULL` → `DELTA_VIOLATE_CONSTRAINT_WITH_VALUES`. Observed gaps: column-level `not_null` constraint fails on OSS Delta, column-level `check` ignored, `persist_docs(columns)` fails upstream → override macro.
+- W2.D11.3: [ADR-0004](adr/0004-spark-dbt-ownership-and-adapter-capabilities.md) capability table C1–C12 with observed results; decision: keep Thrift (no `session` fallback); D-060, D-061.
+- Day-close full suite on the feature tree (before review fixes): ruff/format/mypy (40 files) clean, lint-imports 2 kept / 0 broken, unit **1195 passed**, integration **34 passed, 1 skipped** (`RUN_BROKER_CHAOS` opt-in) in 71 min. After review fixes: unit **1203 passed, 1 skipped** (POSIX mode test, run in the image), Spark container **269 passed** (`tests/spark`), render script **12 passed** in the image, `dlq_gate` rerun on the stack unchanged (3060/15600, inserted 0).
+- Review: APPROVE WITH NITS; both major items (registration after the counter log with an explicit "ingest committed" error; D-061 wording) and the nits (location check on named reads, accepted→proposed wording, dir mode, test comment, Thrift auth as V-16, `main()` tests) applied in `f2f07f9`.
 
 #### D12 · M1 review and release
 | ID | Task | Acceptance | Verify | Status |
