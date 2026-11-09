@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-05 (v9.0: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W2.D8 closed** (3/3 ✅) → next **W2.D9** 🔺
+> **Active**: **W2.D9 closed** (2/2 ✅) → next **W2.D10**
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,17 +13,17 @@
 
 ## Current State
 
-- **Updated**: 2026-11-09 (W2.D8 closed) · **Branch**: `feat/w2-d8-bronze`; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
-- **Last delivered**: W2.D8.1–D8.3 ✅ — `bronze_stream` writes `customer_cdc` and `clickstream_events` to Bronze Delta tables, one row per message with raw value, key, headers, lineage and a stable parse-error code; `bronze_report` for counts; a clean rerun adds nothing.
-- **Unfinished**: W1 tutor re-test and W2.D7, W2.D8 learning gates (Learning queue of [TASKS.md](TASKS.md)).
-- **Tests & results**: unit 1066 passed; coverage 88 %; Spark 71 passed (container); integration 7 passed, no skip; ruff/mypy/import-linter clean.
-- **Owner action**: none blocking. One anonymous volume of unknown origin (`5b2af2ca…`, 2026-03-15) is kept until the owner decides. Labs and tutor sessions are optional (D-046).
+- **Updated**: 2026-11-09 (W2.D9 closed) · **Branch**: `feat/w2-d9-restart`; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
+- **Last delivered**: W2.D9.1–D9.2 ✅ — restart and checkpoint-loss suite S1–S9 (every offset once per table after crash, kill, callback exception, broker outage); partial checkpoint loss, which silently lost data, now fails with `CheckpointRewoundError` (D-050); submit guards; ADR-0006 draft; [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) holds every open "not verified" item with an owner day (D-055).
+- **Unfinished**: W1 tutor re-test and W2.D7–D9 learning gates (Learning queue of [TASKS.md](TASKS.md)).
+- **Tests & results**: unit 1137 passed; Spark 80 passed (container); integration 21 passed with `RUN_BROKER_CHAOS=1`, no skip; ruff/mypy/import-linter clean.
+- **Owner action**: register rows V-09 (stale `COMPOSE_PROJECT_NAME` in the local environment file), V-10 (legacy containers, anonymous volume `5b2af2ca…`), V-11 (tutor gates). None blocking.
 - **Stack**: stopped (`docker compose --profile core stop`).
 - **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; Glue 5.0 (ADR-0011); Databricks Free Edition W6 (ADR-0012); budget ≤ USD 50; contracts strict producer / tolerant consumer; Silver gate order DLQ → dedup → MERGE (D-022); outcome precedence DLQ → DUPLICATE (vs valid Bronze history) → NOOP → ACCEPT (D-023/D-029); jobs resolved by convention, code shipped as zip via `--py-files` (D-044); money and timestamps stay strings until Silver (D-045); Bronze keeps headers, Delta app id = streaming query id, stable parse codes (D-047); exception text in logs (D-048).
-- **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); generator does not produce intermediate-late CDC or `late_beyond_window` (D-030, extend before SCD2 tests); broker failing mid-run untested; Kafka and SeaweedFS exit 137 on stop, again on 2026-11-09 (`stop_grace_period` check open); a job waits without a timeout when no worker is up, and `seaweedfs` + `spark-worker` were found exited once after `up -d` (cause not diagnosed); `scripts/submit_job.py` rebuilds `dist/` and is not safe to run concurrently.
+- **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); open items with owner days in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) (D-030 late CDC → W3.D14.0; Delta commit safety on S3 → W5; single writer is a known limit).
 - **Way of working**: Claude implements everything, priority is speed, every pipeline step is mapped in [DATA_FLOW.md](DATA_FLOW.md) (D-046); W1 tutor batched (D6 learning session); every decision in DECISION_LOG; per-session trace in [SESSION_LOG.md](SESSION_LOG.md); replies with executive/technical summary, file links, senior Q&A; personal glossary `.claude/learning/GLOSSARY.md`.
-- **Next task ("Start today's task")**: **W2.D9** 🔺 — restart and checkpoint-loss semantics (DELIVERY_PLAN D9 card).
-- **Next mode**: coordinator plans; `reviewer` design review → `implementer` ‖ `test-author` → code review → `evidence-auditor`. `write_bronze_batch` is separately callable so the test can inject a failure after the write.
+- **Next task ("Start today's task")**: **W2.D10** — validation gate and DLQ (DELIVERY_PLAN D10 card). The gate must handle empty Bronze tables (D-053) and `__invalid__` brand values (D-054).
+- **Next mode**: coordinator plans; `reviewer` design review → `implementer` ‖ `test-author` → code review → `evidence-auditor`.
 - **Autonomous run**: not started (setup on `chore/autonomous-run`, D-041/D-042; pre-flight verified: refuses to start with uncommitted guardrail files)
 
 ---
@@ -185,10 +185,14 @@ M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  
 #### D9 · 🔺 Restart and checkpoint loss
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
-| W2.D9.1 | Restart / loss tests | (a) restart: every `(topic, partition, offset)` exactly once in Bronze; (b) checkpoint loss: re-reads observed and counted | `pytest tests/integration/test_stream_restart.py -q` | ⏳ |
-| W2.D9.2 | ADR-0006 draft | per-stage semantics with test references; no exactly-once claim | file review | ⏳ |
+| W2.D9.1 | Restart / loss tests | (a) restart: every `(topic, partition, offset)` once per table in Bronze; (b) checkpoint loss: re-reads observed and counted | `pytest tests/integration/test_stream_restart.py -q` | ✅ |
+| W2.D9.2 | ADR-0006 draft | per-stage semantics with test references; no exactly-once claim | file review | ✅ |
 
-**Evidence**: _—_
+**Evidence**:
+- W2.D9.1: commit `c23e322`; `$env:RUN_BROKER_CHAOS='1'; pytest tests/integration -q` → **21 passed** in 62 min, no skip (pytest summary line: `21 passed in 3755.39s (1:02:35)`) (S1–S9 in `test_stream_restart.py`, 4 live guards in `test_submit_guards.py`, D8 counts, producer tests, smoke 24/24). (a) S1–S4, S7, S8: per-partition proof `min/max/rows/distinct` equals the Kafka watermarks for every table. (b) S5: full checkpoint loss re-reads every offset once more (`rows = 2 × messages`, `distinct_source_refs = messages`, 2 lineages), counted by `bronze_report`. S9 (partial loss) found silent data loss before the fix (102 of 204 CDC, 208 of 416 click rows); now `exit=1`, "checkpoint rewound", rows unchanged `102/208 → 102/208`. S7: exit 1 after 77 s, rerun exact.
+- W2.D9.2: commit `c23e322`; [ADR-0006](adr/0006-delivery-semantics-restart-and-checkpoint-loss.md) (draft): per-stage semantics with S1–S9 references, wording "offset committed once per checkpoint lineage", single-writer assumption, no exactly-once claim.
+- Gates (`c23e322`): ruff, ruff format, mypy (34 files) clean; unit **1136 passed**; Spark container `pytest tests/spark -q` → **80 passed** (71 before; +9 `test_bronze_rewound.py`); lint-imports 2 kept, 0 broken. Review nits fixed in the next commit (unit 1137 passed).
+- Open items moved to [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) (D-055).
 
 #### D10 · Validation gate and DLQ (stream entities)
 | ID | Task | Acceptance | Verify | Status |

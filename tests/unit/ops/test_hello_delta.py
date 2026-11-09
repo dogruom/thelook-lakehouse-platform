@@ -9,7 +9,7 @@ import pytest
 from lakehouse.ops.jobs.hello_delta import JOB, assert_packaged
 
 
-ZIP_ORIGIN = "/opt/spark/work/app-1/lakehouse_app.zip/lakehouse/__init__.py"
+ZIP_ORIGIN = "/opt/spark/work/app-1/lakehouse_app-0123456789ab.zip/lakehouse/__init__.py"
 SRC_ORIGIN = "/opt/spark-apps/src/lakehouse/__init__.py"
 
 
@@ -24,7 +24,7 @@ def test_assert_packaged_accepts_zip_origins() -> None:
 
 
 def test_assert_packaged_rejects_source_mount_origin() -> None:
-    with pytest.raises(RuntimeError, match="lakehouse_app.zip"):
+    with pytest.raises(RuntimeError, match="code not loaded from lakehouse_app-"):
         assert_packaged([SRC_ORIGIN])
 
 

@@ -11,6 +11,8 @@ filled from recorded evidence.
 - The local environment file created once by `python scripts/bootstrap_env.py`. Never print or commit it.
 - `COMPOSE_PROJECT_NAME=crm_lakehouse` in the shell (value from `.env.example`); a stale value makes
   `docker compose exec kafka` report "service not running": `$env:COMPOSE_PROJECT_NAME='crm_lakehouse'`.
+  A compose `up -d` under a stale name once removed a legacy container. Until the local file is fixed, set
+  the variable first or use `docker compose -p crm_lakehouse ...`.
 
 ## Steps (PowerShell, repo root)
 

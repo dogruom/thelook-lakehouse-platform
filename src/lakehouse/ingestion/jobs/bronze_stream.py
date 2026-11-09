@@ -14,6 +14,12 @@ within one checkpoint lineage and different between lineages. The query id is ex
 stores it in the checkpoint. A fixed app id would be wrong: after a checkpoint loss the batch ids
 restart at 0, Delta would find the old (app id, version) pairs and silently skip new data.
 
+The same skip would happen if only the checkpoint's ``offsets/`` and ``commits/`` were lost (the
+query id in ``metadata`` survives). ``write_bronze_batch`` guards against it: when Delta skips a
+write, the incoming ``_source_ref`` set must equal the stored one for that batch (a true replay),
+otherwise ``CheckpointRewoundError`` fails the query before the offset commit. A single writer per
+table is assumed.
+
 Delivery wording: offsets are committed once per checkpoint lineage; the sink is idempotent per
 batch. This is not an "exactly-once" claim.
 
@@ -32,7 +38,7 @@ from lakehouse.ingestion.bronze import CLICKSTREAM, CUSTOMERS, BronzeTarget, wri
 
 if TYPE_CHECKING:
     import argparse
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
     from pyspark.sql import DataFrame, SparkSession
     from pyspark.sql.streaming import StreamingQuery
@@ -96,6 +102,12 @@ class BronzeStreamJob(SparkJob):
         parser.add_argument(
             "--namespace", default=None, help="optional single path segment isolating this run"
         )
+        parser.add_argument(
+            "--checkpoint-namespace",
+            default=None,
+            help="path segment used for the checkpoints instead of --namespace; a fresh value "
+            "starts a new checkpoint lineage (simulates checkpoint loss without deleting data)",
+        )
         parser.add_argument("--cdc-topic", default=CUSTOMERS.topic, help="customer CDC topic")
         parser.add_argument(
             "--clickstream-topic", default=CLICKSTREAM.topic, help="clickstream topic"
@@ -107,11 +119,19 @@ class BronzeStreamJob(SparkJob):
             help="upper bound of messages per micro-batch (>= 1)",
         )
 
+    def _before_write(self, table: str, batch_id: int) -> None:
+        """Hook called before a micro-batch is written (default: nothing; for test subclasses)."""
+
+    def _after_write(self, table: str, batch_id: int) -> None:
+        """Hook called after the Delta write, before counters/log (default: nothing)."""
+
     def run(
         self, spark: SparkSession, args: argparse.Namespace, ctx: JobContext
     ) -> Mapping[str, Any]:
         namespace: str | None = args.namespace
         ns_parts = [namespace] if namespace else []
+        checkpoint_namespace: str | None = args.checkpoint_namespace or namespace
+        ckpt_parts = [checkpoint_namespace] if checkpoint_namespace else []
         targets = [
             BronzeTarget(args.cdc_topic, CUSTOMERS.table, CUSTOMERS.contract),
             BronzeTarget(
@@ -128,7 +148,7 @@ class BronzeStreamJob(SparkJob):
             for target in targets:
                 path = ctx.settings.layer_uri("bronze", *ns_parts, target.table)
                 checkpoint = ctx.settings.layer_uri(
-                    "checkpoints", "bronze_stream", *ns_parts, target.table
+                    "checkpoints", "bronze_stream", *ckpt_parts, target.table
                 )
                 info[target.table] = {"path": path, "checkpoint": checkpoint}
                 queries[target.table] = _start_query(
@@ -139,6 +159,8 @@ class BronzeStreamJob(SparkJob):
                     checkpoint,
                     args.max_offsets_per_trigger,
                     counters[target.table],
+                    before_write=self._before_write,
+                    after_write=self._after_write,
                 )
             _await_all(queries)
         finally:
@@ -172,15 +194,22 @@ def _start_query(
     checkpoint: str,
     max_offsets: int,
     counters: _Counters,
+    before_write: Callable[[str, int], None] | None = None,
+    after_write: Callable[[str, int], None] | None = None,
 ) -> StreamingQuery:
     name = query_name(target)
 
     def on_batch(batch_df: DataFrame, batch_id: int) -> None:
         # Looked up through the outer session by name: the id is the one stored in the checkpoint.
         query_id = _find_query_id(spark, name)
+        _log.info("bronze_stream.batch_started", table=target.table, batch_id=batch_id)
+        if before_write is not None:
+            before_write(target.table, batch_id)
         counts = write_bronze_batch(
             batch_df, path, target=target, app_id=query_id, batch_id=batch_id
         )
+        if after_write is not None:
+            after_write(target.table, batch_id)
         counters.add(counts.rows_seen, counts.parse_errors)
         _log.info(
             "bronze_stream.batch",

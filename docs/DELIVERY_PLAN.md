@@ -208,7 +208,7 @@ Branching: one short-lived branch per day or task group (`feat/w1-contracts`, `f
 | | |
 |---|---|
 | Objective | Correct current state under duplicates and reordering, with pseudonymised PII |
-| Work | W3.D14.1 `silver.silver_customers` (`foreachBatch`: dedup to max sequence per key, MERGE guarded by `_cdc_sequence`, tombstones, HMAC `email_token`, `phone_masked`, `stale_cdc_noop` metric) · W3.D14.2 Spark tests on tiny frames |
+| Work | W3.D14.0 generator: intermediate-late CDC deliveries and CDC `late_beyond_window` in the manifest (closes D-030; the D15 CDC suite depends on it) · W3.D14.1 `silver.silver_customers` (`foreachBatch`: dedup to max sequence per key, MERGE guarded by `_cdc_sequence`, tombstones, HMAC `email_token`, `phone_masked`, `stale_cdc_noop` metric) · W3.D14.2 Spark tests on tiny frames |
 | Learn | Delta MERGE semantics, multiple-match errors, keyed HMAC vs hashing |
 | Verify | `pytest tests/spark/test_silver_customers.py -q` |
 | Depends / blockers | D10, D11; `PII_HMAC_KEY` from `.env` |

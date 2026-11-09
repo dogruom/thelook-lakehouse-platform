@@ -79,6 +79,35 @@ def test_layer_uri_rejects_unsafe_parts(part: str) -> None:
         SparkSettings().layer_uri("ops", part)
 
 
+@pytest.mark.parametrize(
+    "part", ["a?b", "a#b", "a\n", "a\x00b", "a\x1bb", "a b", "a/b", "a%2Fb", "a:b", "ä"]
+)
+def test_layer_uri_rejects_uri_syntax_and_control_characters(part: str) -> None:
+    with pytest.raises(ValueError):
+        SparkSettings().layer_uri("bronze", part)
+
+
+@pytest.mark.parametrize("part", ["it_ab12cd34", "raw_customers", "v1.2", "k=v", "a-b.c_d"])
+def test_layer_uri_accepts_allowlisted_parts(part: str) -> None:
+    assert SparkSettings().layer_uri("bronze", part) == f"s3a://lakehouse/bronze/{part}"
+
+
+def test_s3_endpoint_with_userinfo_is_rejected_without_echoing_the_secret() -> None:
+    with pytest.raises(ValueError) as info:
+        SparkSettings(s3_endpoint="http://user:hunter2-secret@seaweedfs:9000")
+    assert "hunter2-secret" not in str(info.value)
+    assert "hunter2-secret" not in repr(info.value)
+
+
+def test_s3_endpoint_with_userinfo_from_env_is_rejected_without_echoing_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("S3_ENDPOINT", "http://user:hunter2-secret@seaweedfs:9000")
+    with pytest.raises(ValueError) as info:
+        SparkSettings()
+    assert "hunter2-secret" not in str(info.value)
+
+
 def test_invalid_bucket_name_is_rejected() -> None:
     with pytest.raises(ValidationError):
         SparkSettings(bucket="Bad_Bucket")

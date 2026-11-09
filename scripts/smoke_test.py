@@ -33,6 +33,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+COMPOSE_PROJECT = "crm_lakehouse"
 
 REQUIRED_TOPICS = ("customer_cdc", "clickstream_events")
 REQUIRED_PREFIXES = ("landing", "bronze", "silver", "gold", "dead_letter", "ops", "checkpoints")
@@ -138,7 +139,9 @@ def run(
 
 
 def compose(*args: str) -> list[str]:
-    return ["docker", "compose", "--profile", "core", *args]
+    # Explicit project name: a stale COMPOSE_PROJECT_NAME in .env once made plain
+    # ``docker compose`` act on a legacy project instead of this stack.
+    return ["docker", "compose", "-p", COMPOSE_PROJECT, "--profile", "core", *args]
 
 
 def section(title: str) -> None:

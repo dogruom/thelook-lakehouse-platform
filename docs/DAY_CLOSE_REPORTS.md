@@ -9,6 +9,24 @@
 
 ---
 
+## W2.D9 🔺 · Restart and checkpoint loss — closed 2026-11-09
+
+**Executive summary.** Bronze survives crashes before and after the write, a killed driver, an
+exception in the batch callback and a broker outage: after a restart every Kafka offset is in Bronze
+once per table, proven per partition against the Kafka watermarks. The tests found one real
+defect: when only part of a checkpoint was lost, the job silently skipped new data. That case now
+fails loudly and leaves Bronze unchanged. Every earlier "not verified" line is now either closed or
+listed with an owner day in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md).
+- **Delivered**: W2.D9.1 ✅ restart and loss suite S1–S9 · W2.D9.2 ✅ ADR-0006 draft · submit guards (capacity, duplicate driver, timeout kill, stale `--skip-build`) · verification register.
+- **Evidence**: commit `c23e322`; integration **21 passed** in 62 min with `RUN_BROKER_CHAOS=1`, no skip; S9 before the fix: 102 of 204 CDC and 208 of 416 click rows (silent loss), after: exit 1, "checkpoint rewound", rows unchanged; S7 exit 1 after 77 s, rerun exact; unit 1136 passed (1137 after the nit fix); ruff, format, mypy clean. Details: PROGRESS D9 Evidence.
+- **Reviews / audit**: design review before implementation; code review found 5 must-fix (vacuous S4, silent `kill_driver`, prune of an in-use zip, `close()` orphaning drivers, guards test order), all fixed; re-check APPROVE WITH NITS (all 5 confirmed fixed in code); nits fixed: inaccurate prune comment, a job ending exactly at the deadline reported 125 instead of its own code (new unit test). Carried over: exit-code overlap with spark-submit's own codes not documented, maintenance jobs (OPTIMIZE) not named in the single-writer note, leftover `.tmp` zips not pruned. `evidence-auditor`: no MISMATCH; 4 wording fixes applied (offset wording, S7 figure, V-06).
+- **Decisions**: D-049 fault-injection job · D-050 checkpoint-rewind guard · D-051 content-addressed zip and submit pre-flight · D-052 stop grace period · D-053 empty-topic tables (corrects D8) · D-054 input allowlists · D-055 verification register.
+- **Not verified / limitations**: all in the register (V-01…V-11). Main ones: Delta commit safety on S3/Glue (W5), concurrent writers (known limit, single writer), D-030 late CDC (W3.D14.0), one unexplained flaky failure of the D8 count test (V-08, did not recur in the 21-pass run).
+- **Risks**: Bronze now refuses to run after a partial checkpoint loss; recovery is a documented manual step (new checkpoint path, then Silver dedup), see ADR-0006 operating rules.
+- **Learning queued**: checkpoint anatomy (`offsets/`, `commits/`, `metadata`), Delta idempotent writes and their blind spot, `failOnDataLoss`, fault injection, delivery vocabulary.
+- **Next**: W2.D10 (validation gate and DLQ).
+- **Merge status**: [PR #10](https://github.com/dogruom/thelook-lakehouse-platform/pull/10) · CI green on the code commits (runs 42665055877, 42665043767; lint/types/boundaries/unit tests + coverage + gitleaks; CI runs no Spark or integration tests) · code review re-check APPROVE WITH NITS, no must-fix · `evidence-auditor` no MISMATCH, 4 wording fixes applied · merged under D-032 once this commit's CI is green.
+
 ## W2.D8 · Kafka → Bronze streaming — closed 2026-11-09
 
 **Executive summary.** Kafka messages now land in Bronze Delta tables, one row per message, including

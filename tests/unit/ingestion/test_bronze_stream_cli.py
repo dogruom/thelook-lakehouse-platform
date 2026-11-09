@@ -129,3 +129,84 @@ def test_kafka_bootstrap_servers_env_override(monkeypatch: pytest.MonkeyPatch) -
 def test_kafka_bootstrap_servers_kwarg_is_accepted() -> None:
     kwargs: dict[str, Any] = {"kafka_bootstrap_servers": "k:1"}
     assert SparkSettings(**kwargs).kafka_bootstrap_servers == "k:1"
+
+
+# ---- --checkpoint-namespace ------------------------------------------------------------------
+
+
+def test_checkpoint_namespace_defaults_to_the_namespace() -> None:
+    args = _parse("bronze_stream", "--namespace", "ns1")
+    assert args.checkpoint_namespace in (None, "ns1")  # None = resolved to the namespace at run
+
+
+def test_checkpoint_namespace_can_be_set_independently() -> None:
+    args = _parse("bronze_stream", "--namespace", "ns1", "--checkpoint-namespace", "fresh")
+    assert (args.namespace, args.checkpoint_namespace) == ("ns1", "fresh")
+
+
+# ---- bronze_stream_fault ---------------------------------------------------------------------
+
+FAULT = ("--fault", "crash_after_write", "--fault-table", "raw_customers", "--fault-batch", "2")
+
+
+def test_fault_module_imports_without_pyspark() -> None:
+    result = _run_blocked("lakehouse.ingestion.jobs.bronze_stream_fault", "bronze_stream_fault")
+    assert result.returncode == 0, result.stderr[-1500:]
+
+
+def test_fault_job_resolves_and_accepts_stream_args_plus_fault_args() -> None:
+    assert resolve_job("bronze_stream_fault").name == "bronze_stream_fault"
+    args = _parse(
+        "bronze_stream_fault", "--namespace", "ns1", "--max-offsets-per-trigger", "5", *FAULT
+    )
+    assert args.namespace == "ns1" and args.max_offsets_per_trigger == 5
+    assert (args.fault, args.fault_table, args.fault_batch) == (
+        "crash_after_write",
+        "raw_customers",
+        2,
+    )
+
+
+@pytest.mark.parametrize("dropped", ["--fault", "--fault-table", "--fault-batch"])
+def test_fault_job_requires_all_three_fault_arguments(dropped: str) -> None:
+    """Negative: a fault job without a complete fault spec must not start."""
+    argv = list(FAULT)
+    i = argv.index(dropped)
+    del argv[i : i + 2]
+    with pytest.raises(SystemExit):
+        _parse("bronze_stream_fault", "--namespace", "ns1", *argv)
+
+
+@pytest.mark.parametrize(
+    "override",
+    [("--fault", "explode"), ("--fault-table", "raw_orders"), ("--fault-batch", "x")],
+)
+def test_fault_job_rejects_unknown_fault_values(override: tuple[str, str]) -> None:
+    argv = list(FAULT)
+    argv[argv.index(override[0]) + 1] = override[1]
+    with pytest.raises(SystemExit):
+        _parse("bronze_stream_fault", "--namespace", "ns1", *argv)
+
+
+@pytest.mark.parametrize("fault", ["crash_after_write", "crash_before_write", "raise_in_callback"])
+@pytest.mark.parametrize("table", ["raw_customers", "raw_clickstream"])
+def test_fault_job_accepts_every_documented_fault_and_table(fault: str, table: str) -> None:
+    args = _parse(
+        "bronze_stream_fault",
+        "--namespace",
+        "ns1",
+        "--fault",
+        fault,
+        "--fault-table",
+        table,
+        "--fault-batch",
+        "1",
+    )
+    assert (args.fault, args.fault_table, args.fault_batch) == (fault, table, 1)
+
+
+def test_plain_bronze_stream_does_not_accept_fault_arguments() -> None:
+    """Negative: production job must have no fault-injection surface."""
+    for flag, value in (("--fault", "crash_after_write"), ("--fault-table", "raw_customers")):
+        with pytest.raises(SystemExit):
+            _parse("bronze_stream", "--namespace", "ns1", flag, value)

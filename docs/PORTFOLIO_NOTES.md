@@ -17,6 +17,7 @@
 | 2026-11-06 | Keyed idempotent Kafka producer (`acks=all`, idempotence, delivery accounting per tenant) with a live round-trip test proving per-key partition affinity and no extra records; clickstream generator with exact defect manifest | commit `03d02b4`; PROGRESS W1.D5 Evidence | DE |
 | 2026-11-09 | PySpark job framework: settings-driven session profiles, run ID on every log line, wheel-based packaging submitted to a standalone cluster, with a negative run proving the driver and the one executor in use (`spark.cores.max=1`) load the shipped code rather than a source mount; Spark tests run in the image, no PySpark on the host | commits `e82f91b`, `5836709`, `80a6e63`; PROGRESS W2.D7 Evidence | DE |
 | 2026-11-09 | Kafka → Bronze Structured Streaming on Delta: one row per message including unparseable ones, lineage per offset, per-lineage idempotent batch writes; counts verified per topic, parse-error code and tenant against a generator manifest, and a rerun from the checkpoint adds no rows | commits `b67f155`, `78f3d60`; PROGRESS W2.D8 Evidence | DE |
+| 2026-11-09 | Fault-injected restart suite for Kafka → Bronze (crash before/after commit, SIGKILL, callback exception, broker outage, full and partial checkpoint loss, retention gap): per-partition offset proof against Kafka watermarks; found and fixed a silent data-loss path on partial checkpoint loss | commit `c23e322`; PROGRESS W2.D9 Evidence; ADR-0006 | DE |
 
 Competency tags: **DE** = Senior Data Engineer · **ARCH** = Data Architect.
 
@@ -32,6 +33,8 @@ Competency tags: **DE** = Senior Data Engineer · **ARCH** = Data Architect.
 | CDC correctness | outcome precedence DLQ → DUPLICATE → NOOP → ACCEPT, gate before dedup, sequence not wall clock | batch-local dedup drops intermediate versions (SCD2 needs them) vs simpler MERGE | DECISION_LOG D-022…D-024, D-029; W1.D4 |
 | Parsing vs typing | money and timestamps stay strings in the Spark schema; typed casts happen in Silver after a validity check | one more step vs a cast that silently rounds `12.505`, accepts `1e2` and turns overflow into null (measured) | DECISION_LOG D-045; W2.D7 |
 | Streaming idempotence | Delta `txnAppId` = streaming query id, `txnVersion` = batch id | stable per checkpoint lineage vs a fixed id, which would silently skip new data after a checkpoint loss; re-reads after a loss are appended and removed by Silver dedup | D-047; W2.D8, restart proof in W2.D9 |
+| Checkpoint-loss safety | after a skipped Delta write, compare the batch's `_source_ref` set with the stored batch; mismatch = rewound checkpoint → fail | one extra read per skipped batch vs silent loss of new data when `offsets/` is lost but `metadata` survives (measured: half the rows) | D-050; ADR-0006 S9 |
+
 | Cloud cost | serverless, ephemeral, budget-tracked | always-on convenience vs cost; measured spend per run | ADR-0008, ADR-0011 |
 
 ## 3. Drafts (not yet verified — never copy to README before evidence exists)
