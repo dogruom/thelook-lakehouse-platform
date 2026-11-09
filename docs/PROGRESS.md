@@ -172,7 +172,7 @@ M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
 | W2.D8.1 | `ingestion.bronze_stream` | both topics; `_raw_value`, key, headers, `_source_ref`, `_ingest_ts`, `_batch_id`, `brand_id`, `_parse_error`; `availableNow`; one checkpoint per query | job run log | ✅ |
-| W2.D8.2 | Parse-function tests | valid, malformed, missing tenant → expected columns | `pytest tests/spark/test_bronze_parse.py -q` | ✅ |
+| W2.D8.2 | Parse-function tests | valid, malformed, missing tenant → expected columns | `docker compose --profile tools run --rm spark-test pytest tests/spark/test_bronze_parse.py -q` | ✅ |
 | W2.D8.3 | Count integration test | Bronze rows = produced messages incl. parse errors | `pytest tests/integration/test_bronze_stream.py -q` | ✅ |
 
 **Evidence**:
