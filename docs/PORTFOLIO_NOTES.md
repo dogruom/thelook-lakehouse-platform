@@ -15,7 +15,7 @@
 | 2026-11-06 | Versioned event contracts (Pydantic v2 + committed JSON Schema snapshots) with a breaking-change gate proven by a negative test; PII-safe validation errors | commit `6889317`; PROGRESS W1.D3 Evidence | DE |
 | 2026-11-06 | Deterministic multi-tenant CDC generator with an exact-count ground-truth manifest (expected outcome per emission, batch-aware `classify_outcomes`, reconciliation equation) validated against an independent reference MERGE | commit `848d9c8`; PROGRESS W1.D4 Evidence | DE |
 | 2026-11-06 | Keyed idempotent Kafka producer (`acks=all`, idempotence, delivery accounting per tenant) with a live round-trip test proving per-key partition affinity and no extra records; clickstream generator with exact defect manifest | commit `03d02b4`; PROGRESS W1.D5 Evidence | DE |
-| 2026-11-09 | PySpark job framework: settings-driven session profiles, run ID on every log line, wheel-based packaging submitted to a standalone cluster, with a negative run proving driver and executor load the shipped code rather than a source mount; Spark tests run in the image, no PySpark on the host | commits `e82f91b`, `5836709`, `80a6e63`; PROGRESS W2.D7 Evidence | DE |
+| 2026-11-09 | PySpark job framework: settings-driven session profiles, run ID on every log line, wheel-based packaging submitted to a standalone cluster, with a negative run proving the driver and the one executor in use (`spark.cores.max=1`) load the shipped code rather than a source mount; Spark tests run in the image, no PySpark on the host | commits `e82f91b`, `5836709`, `80a6e63`; PROGRESS W2.D7 Evidence | DE |
 
 Competency tags: **DE** = Senior Data Engineer · **ARCH** = Data Architect.
 
