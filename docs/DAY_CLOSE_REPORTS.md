@@ -26,7 +26,7 @@ defects with a manifest that says, line by line, what should happen to each one 
 - **Carry-overs**: none.
 - **Learning queued**: incremental file ingestion, line lineage, path vs payload brand, schema evolution, PERMISSIVE parsing (TASKS Learning queue).
 - **Next**: W3.D14 Silver customers (with D14.0 late CDC generator, Q-003).
-- **Merge status**: _pending — filled after PR / CI_.
+- **Merge status**: PR [#14](https://github.com/dogruom/thelook-lakehouse-platform/pull/14) merged as `b37a5a6` (merge commit) on 2026-11-11 under D-032: PR CI green, `main` CI [run 42938974449](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/42938974449) success.
 
 ---
 
