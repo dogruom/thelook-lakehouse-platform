@@ -89,6 +89,11 @@ CATALOG_TABLES: Mapping[str, TableSpec] = MappingProxyType(
     }
 )
 
+# Operational metrics (W3.D18, D-081): written path-based by the Silver jobs and ``reconcile``.
+# Deliberately not in ``CATALOG_TABLES``: it is not a pipeline dataset and is never registered
+# by ``register_tables`` (that mapping is the charter table list).
+PIPELINE_METRICS = TableSpec("ops", "ops", "pipeline_metrics")
+
 
 def resolve(
     settings: SparkSettings, spec: TableSpec, namespace: str | None = None

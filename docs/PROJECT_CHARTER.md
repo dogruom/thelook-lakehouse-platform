@@ -218,9 +218,9 @@ No percentage improvement is committed in advance. Every benchmark records:
 |---|---|---|
 | ADR-0001 | Local object storage with SeaweedFS | ✅ Written |
 | ADR-0002 | Kafka (implemented) vs. Kinesis (compared only); common event envelope | ⏳ |
-| ADR-0003 | Append-only Bronze and the erasure exception | ⏳ |
-| ADR-0004 | Spark vs. dbt ownership boundary (Silver/Gold, SCD2 owner, dbt adapter capabilities) | 🔄 Spike section accepted W2.D11; ownership Draft until W3.D15.3 |
-| ADR-0005 | Multi-tenant isolation model and partitioning | ⏳ |
+| ADR-0003 | Append-only Bronze and the erasure exception | ✅ Accepted W3.D18 (erasure procedure Proposed until W6.D31) |
+| ADR-0004 | Spark vs. dbt ownership boundary (Silver/Gold, SCD2 owner, dbt adapter capabilities) | ✅ Accepted (spike W2.D11, ownership W3.D15.3) |
+| ADR-0005 | Multi-tenant isolation model and partitioning | ✅ Accepted W3.D18 |
 | ADR-0006 | Delivery semantics, idempotency and replay | ⏳ |
 | ADR-0007 | Runtime baseline, table catalog and Gold engine | ✅ Accepted |
 | ADR-0008 | AWS target and cost guardrails (compute superseded by ADR-0011) | ✅ Accepted |

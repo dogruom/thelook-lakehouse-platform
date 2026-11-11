@@ -2,8 +2,10 @@
 the approved design, not from the job code.
 
 Outcome precedence: parse -> reread -> dlq_excluded -> late_beyond_window -> duplicate -> accepted.
-The window is ``event_date >= date(hwm) - lookback_days`` where ``hwm`` is the maximum
-``event_timestamp`` over the target and the batch (event time, never wall clock).
+An event is late iff ``produced_at - event_timestamp > lookback_days`` (both from the payload, the
+simulated clock). The rule looks at the event alone: batch boundaries, arrival order, the target
+and other (e.g. far-future) events cannot change an outcome. Dedup key: ``(brand_id, event_id,
+event_date)``.
 
 Frames are Kafka-shaped rows run through the production ``to_bronze_rows`` so ``event_date`` (the
 Bronze partition column) and ``_source_ref`` are realistic.
@@ -14,7 +16,7 @@ Runs inside the Spark image (``docker compose --profile tools run --rm spark-tes
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -78,11 +80,13 @@ def ev(
     url: str = "/home",
     **over: Any,
 ) -> dict[str, Any]:
+    # Default: produced one second after the event happened (well inside any window).
+    produced = datetime.fromisoformat(ts.replace("Z", "+00:00")) + timedelta(seconds=1)
     payload: dict[str, Any] = {
         "event_id": eid(n),
         "brand_id": brand,
         "schema_version": 1,
-        "produced_at": "2026-03-10T09:00:01Z",
+        "produced_at": produced.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "session_id": SESSION,
         "customer_id": None,
         "event_type": "page_view",
@@ -141,7 +145,33 @@ class Lake:
 
 @pytest.fixture
 def lake(spark: SparkSession, tmp_path: Path) -> Lake:
-    return Lake(spark, tmp_path)
+    return Lake(spark, tmp_path / "a")
+
+
+@pytest.fixture
+def lake2(spark: SparkSession, tmp_path: Path) -> Lake:
+    return Lake(spark, tmp_path / "b")
+
+
+LINEAGE = {"_bronze_ref", "_bronze_batch_id", "_updated_at"}
+COUNTERS = (
+    "rows_read",
+    "reread_rows",
+    "parse_excluded",
+    "dlq_excluded",
+    "duplicates_removed",
+    "late_beyond_window",
+    "silver_accepted",
+)
+
+
+def content(lake: Lake) -> dict[tuple[str, str], dict[str, Any]]:
+    """Silver rows without lineage columns (those differ with batch layout and Kafka offsets)."""
+    return {k: {c: v for c, v in r.items() if c not in LINEAGE} for k, r in lake.rows().items()}
+
+
+def total(all_counts: list[Any]) -> dict[str, int]:
+    return {name: sum(getattr(c, name) for c in all_counts) for name in COUNTERS}
 
 
 def sum_holds(c: Any) -> bool:
@@ -239,15 +269,16 @@ def test_reprocessing_the_same_events_changes_nothing(lake: Lake) -> None:
 
 # ---- lookback window -------------------------------------------------------------------------
 
+PRODUCED = "2026-03-10T09:00:00Z"
 
-def test_event_older_than_the_window_is_counted_late_and_not_written(lake: Lake) -> None:
-    # hwm = 2026-03-10 -> lower bound 2026-03-03 (inclusive)
+
+def test_event_produced_more_than_lookback_days_after_it_happened_is_late(lake: Lake) -> None:
     counts = lake.process(
         [
-            ev(1, "2026-03-10T09:00:00Z"),
-            ev(2, "2026-03-03T00:00:00Z"),  # exactly on the boundary: accepted
-            ev(3, "2026-03-02T23:59:59Z"),  # one second before the boundary date: late
-            ev(4, "2026-02-01T00:00:00Z"),  # far beyond: late
+            ev(1, "2026-03-10T08:00:00Z"),
+            ev(2, "2026-03-03T09:00:00Z", produced_at=PRODUCED),  # lag exactly 7d: accepted
+            ev(3, "2026-03-03T08:59:59Z", produced_at=PRODUCED),  # lag 7d + 1s: late
+            ev(4, "2026-02-01T00:00:00Z", produced_at=PRODUCED),  # far beyond: late
         ]
     )
     assert (counts.late_beyond_window, counts.silver_accepted) == (2, 2)
@@ -255,18 +286,21 @@ def test_event_older_than_the_window_is_counted_late_and_not_written(lake: Lake)
     assert set(lake.rows()) == {(ALPHA, eid(1)), (ALPHA, eid(2))}
 
 
-def test_window_is_relative_to_the_event_time_high_water_mark_of_the_target(lake: Lake) -> None:
+def test_lateness_ignores_the_target_the_batch_mates_and_the_wall_clock(lake: Lake) -> None:
     lake.process([ev(1, "2026-03-10T09:00:00Z")])
-    # The new batch is all old; only the target's hwm (03-10) makes 03-02 late. A batch-local
-    # hwm (03-02) would wrongly accept it. Wall clock (NOW = November) must play no role.
-    counts = lake.process([ev(2, "2026-03-02T10:00:00Z"), ev(3, "2026-03-05T10:00:00Z")])
-    assert (counts.late_beyond_window, counts.silver_accepted) == (1, 1)
-    assert (ALPHA, eid(2)) not in lake.rows() and (ALPHA, eid(3)) in lake.rows()
+    # Old event, produced right after it happened: not late, although the target is a week ahead
+    # (a high-water-mark window would reject it) and NOW is November.
+    counts = lake.process([ev(2, "2026-01-02T10:00:00Z"), ev(3, "2026-03-05T10:00:00Z")])
+    assert (counts.late_beyond_window, counts.silver_accepted) == (0, 2)
+    assert {(ALPHA, eid(2)), (ALPHA, eid(3))} <= set(lake.rows())
 
 
 def test_lookback_days_is_a_parameter(lake: Lake) -> None:
-    events = [ev(1, "2026-03-10T09:00:00Z"), ev(2, "2026-03-05T09:00:00Z")]
-    narrow = lake.process(events, lookback=2)  # lower bound 03-08
+    events = [
+        ev(1, "2026-03-10T09:00:00Z"),
+        ev(2, "2026-03-05T09:00:00Z", produced_at="2026-03-10T09:00:00Z"),  # lag 5d
+    ]
+    narrow = lake.process(events, lookback=2)
     assert (narrow.late_beyond_window, narrow.silver_accepted) == (1, 1)
     wide = lake.process(events, lookback=7)  # event 2 is now inside the window
     assert (wide.late_beyond_window, wide.silver_accepted, wide.duplicates_removed) == (0, 1, 1)
@@ -274,18 +308,75 @@ def test_lookback_days_is_a_parameter(lake: Lake) -> None:
 
 
 def test_late_beyond_window_takes_precedence_over_duplicate(lake: Lake) -> None:
-    lake.process([ev(1, "2026-03-10T09:00:00Z"), ev(2, "2026-03-10T09:30:00Z")])
-    # A re-send of event 3 with an old timestamp: it is late (window check first), not a duplicate.
-    counts = lake.process([ev(3, "2026-02-20T09:00:00Z"), ev(3, "2026-02-20T09:00:00Z")])
-    assert (counts.late_beyond_window, counts.duplicates_removed) == (2, 0)
+    old = ev(3, "2026-02-20T09:00:00Z", produced_at=PRODUCED)
+    counts = lake.process([old, old])
+    assert (counts.late_beyond_window, counts.duplicates_removed, counts.silver_accepted) == (
+        2,
+        0,
+        0,
+    )
     assert sum_holds(counts)
 
 
-def test_old_event_for_a_known_duplicate_key_leaves_the_stored_row_untouched(lake: Lake) -> None:
-    """MERGE is bounded by the window: an out-of-window re-send never reaches the stored row."""
+def test_null_produced_at_is_dlq_excluded_not_late(lake: Lake) -> None:
+    counts = lake.process([ev(1, "2026-03-10T09:00:00Z", produced_at=None)])
+    assert (counts.dlq_excluded, counts.late_beyond_window, counts.silver_accepted) == (1, 0, 0)
+
+
+def test_resend_long_after_is_still_a_matched_duplicate_and_the_stored_row_is_untouched(
+    lake: Lake,
+) -> None:
     lake.process([ev(1, "2026-03-10T09:00:00Z", url="/kept")])
-    lake.process([ev(2, "2026-03-20T09:00:00Z")])  # hwm moves on; event 1 is now outside
+    lake.process([ev(2, "2026-06-20T09:00:00Z")])  # much later traffic changes nothing for event 1
     counts = lake.process([ev(1, "2026-03-10T09:00:00Z", url="/resent")])
-    assert counts.silver_accepted == 0
+    assert (counts.silver_accepted, counts.duplicates_removed) == (0, 1)
     assert lake.rows()[(ALPHA, eid(1))]["page_url"] == "/kept"
     assert sum_holds(counts)
+
+
+# ---- determinism ------------------------------------------------------------------------------
+
+
+def _mixed_events() -> list[dict[str, Any] | bytes]:
+    return [
+        ev(1, "2026-03-10T09:00:00Z"),
+        ev(2, "2026-03-01T09:00:00Z"),
+        ev(3, "2026-02-01T09:00:00Z", produced_at=PRODUCED),  # late
+        ev(1, "2026-03-10T09:00:00Z", url="/dup"),  # duplicate
+        ev(4, "2026-03-09T09:00:00Z", session_id=None),  # dlq
+        b"{truncated",  # parse
+        ev(5, "2026-03-04T09:00:00Z", brand=BETA),
+        ev(6, "2026-03-03T08:00:00Z", produced_at=PRODUCED),  # late (lag 7d 1h)
+        ev(2, "2026-03-01T09:00:00Z", url="/dup2"),  # duplicate
+    ]
+
+
+def test_same_events_in_one_batch_or_many_batches_give_identical_silver_and_counts(
+    lake: Lake, lake2: Lake
+) -> None:
+    events = _mixed_events()
+    one = [lake.process(events)]
+    many = [lake2.process(events[i : i + 2]) for i in range(0, len(events), 2)]
+    assert content(lake) == content(lake2)
+    assert set(lake.rows()) == {(ALPHA, eid(1)), (ALPHA, eid(2)), (BETA, eid(5))}
+    one_total, many_total = total(one), total(many)
+    for name in ("parse_excluded", "dlq_excluded", "late_beyond_window", "silver_accepted"):
+        assert one_total[name] == many_total[name], name
+    assert one_total["late_beyond_window"] == 2
+    assert all(sum_holds(c) for c in [*one, *many])
+
+
+def test_a_far_future_event_does_not_change_any_other_outcome(lake: Lake, lake2: Lake) -> None:
+    others = [
+        ev(1, "2026-03-10T09:00:00Z"),
+        ev(2, "2026-03-02T09:00:00Z"),
+        ev(3, "2026-02-01T09:00:00Z", produced_at=PRODUCED),  # late either way
+    ]
+    future = ev(9, "2099-01-01T00:00:00Z")
+    base = lake.process(others)
+    lake2.process([future])  # arrives first, in its own batch
+    with_future = lake2.process(others)
+    assert content(lake) | {(ALPHA, eid(9)): content(lake2)[(ALPHA, eid(9))]} == content(lake2)
+    for name in COUNTERS:
+        assert getattr(base, name) == getattr(with_future, name), name
+    assert base.late_beyond_window == 1

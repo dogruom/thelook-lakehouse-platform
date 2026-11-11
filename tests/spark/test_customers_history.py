@@ -24,6 +24,7 @@ pytest.importorskip("pyspark")
 
 from pyspark.sql import functions as F  # noqa: E402
 
+from lakehouse.silver.customers import ReconciliationError  # noqa: E402
 from lakehouse.silver.customers_history import (  # noqa: E402
     ensure_history_table,
     history_content_hash,
@@ -494,3 +495,57 @@ def test_invariant_checker_detects_each_kind_of_violation() -> None:
     assert invariant_violations([row(1, 1, 2, True), row(2, 2, None, True)])  # two current
     assert invariant_violations([row(1, 1, 2, False), row(2, 2, None, False)])  # none current
     assert invariant_violations([row(1, 1, 2, False), row(2, 2, 3, True)])  # open end closed
+
+
+# ---- reconciliation and shrinking keys ----------------------------------------------------------------
+
+
+def test_history_merge_metrics_that_disagree_with_the_plan_raise_reconciliation_error(
+    lake: HLake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from delta.tables import DeltaTable
+
+    batch = lake.append([ev(ALPHA, C1, 1, "I"), ev(ALPHA, C1, 2, "U")])
+    real_history = DeltaTable.history
+
+    def lying_history(self: DeltaTable, limit: int | None = None) -> DataFrame:
+        frame = real_history(self, limit)
+        if limit != 2:  # the post-MERGE metrics lookup only
+            return frame
+        wrong = F.create_map(
+            F.lit("numTargetRowsInserted"),
+            F.lit("99"),
+            F.lit("numTargetRowsUpdated"),
+            F.lit("0"),
+            F.lit("numTargetRowsDeleted"),
+            F.lit("0"),
+        )
+        return frame.withColumn("operationMetrics", wrong)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(DeltaTable, "history", lying_history)
+        with pytest.raises(ReconciliationError, match="planned 2 written"):
+            lake.process_history(batch)
+
+
+def test_key_whose_rebuild_shrinks_deletes_the_stale_versions(lake: HLake) -> None:
+    batch = lake.append([ev(ALPHA, C1, 1, "I"), ev(ALPHA, C1, 2, "U", city="Berlin")])
+    lake.process_history(batch)
+    good = lake.hash()
+    # A stale third version (e.g. left by an earlier, wider rebuild) that Bronze no longer backs.
+    (
+        lake.history()
+        .where(F.col("version") == 2)
+        .withColumn("version", F.lit(3))
+        .withColumn("_cdc_sequence", F.lit(3).cast("long"))
+        .write.format("delta")
+        .mode("append")
+        .save(lake.history_path)
+    )
+    assert len(lake.rows(ALPHA, C1)) == 3
+
+    counts = lake.process_history(batch)
+    assert (counts.versions_written, counts.versions_deleted) == (0, 1)
+    assert len(lake.rows(ALPHA, C1)) == 2
+    assert lake.hash() == good
+    assert invariant_violations(lake.rows()) == []

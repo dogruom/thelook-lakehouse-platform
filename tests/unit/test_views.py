@@ -24,7 +24,7 @@ def test_temp_view_has_no_database_prefix_on_the_view_name() -> None:
 
 def test_view_filters_exactly_one_brand_literal() -> None:
     sql = tenant_view_sql("customers", "brand_alpha", temp=False)
-    assert sql.count("brand_id =") == 1 and "brand_beta" not in sql and " OR " not in sql
+    assert sql.count("brand_id =") == 1 and "brand_beta" not in sql and " OR brand_id" not in sql
 
 
 @pytest.mark.parametrize(

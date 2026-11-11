@@ -42,8 +42,8 @@ from lakehouse.quality.rules import (
     CUSTOMER_FK_MISSING,
     FK_ERROR_CATEGORY,
     PRODUCT_FK_MISSING,
-    _canonical_ts,
     apply_rules,
+    canonical_ts,
     order_rules,
     product_rules,
 )
@@ -314,7 +314,7 @@ def typed_orders(rows: DataFrame) -> DataFrame:
         F.col("brand_id"),
         F.col("order_id"),
         F.col("customer_id"),
-        F.to_timestamp(_canonical_ts(F.col("order_timestamp"))).alias("order_timestamp"),
+        F.to_timestamp(canonical_ts(F.col("order_timestamp"))).alias("order_timestamp"),
         F.col("order_status"),
         F.col("payment_method"),
         F.col("currency"),
@@ -392,7 +392,7 @@ def merge_orders(
 
     Orders first, then items. Both MERGEs are keyed insert-only, so the items MERGE also repairs a
     run that crashed between the two. ``rows`` keeps the Bronze columns; at most one row per
-    ``(brand_id, order_id)`` survives (the earliest by ``_ingest_ts``, ``_source_ref``). Existing
+    ``(brand_id, order_id)`` survives (the earliest by ``_ingest_ts`` and landing position, as in :func:`classify_orders`). Existing
     keys are never touched. ``now`` stamps ``_updated_at`` (default: ``current_timestamp``).
     """
     from pyspark import StorageLevel
@@ -402,7 +402,7 @@ def merge_orders(
     ensure_tables(spark, orders_path, items_path)
     stamp = F.lit(now).cast("timestamp") if now is not None else F.current_timestamp()
     first = Window.partitionBy(*KEY).orderBy(
-        F.col("_ingest_ts").asc_nulls_last(), F.col("_source_ref").asc()
+        F.col("_ingest_ts").asc_nulls_last(), *_landing_position()
     )
     unique = (
         rows.withColumn("_key_rank", F.row_number().over(first))

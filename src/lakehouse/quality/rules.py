@@ -153,7 +153,7 @@ def _is_null(name: str) -> Callable[[], Column]:
     return failed
 
 
-def _canonical_ts(col: Column) -> Column:
+def canonical_ts(col: Column) -> Column:
     """Text Spark's cast can parse: upper-case T/Z and a colon in the offset (Pydantic needs
     neither). Shared by the validity check and by every rule that reads the timestamp's value."""
     from pyspark.sql import functions as F
@@ -161,10 +161,13 @@ def _canonical_ts(col: Column) -> Column:
     return F.regexp_replace(F.upper(col), r"([+-][0-9]{2})([0-9]{2})\z", "$1:$2")
 
 
+_canonical_ts = canonical_ts  # private alias kept for existing importers
+
+
 def _aware_ts_ok(col: Column) -> Column:
     from pyspark.sql import functions as F
 
-    return col.rlike(_AWARE_TS_RLIKE) & F.to_timestamp(_canonical_ts(col)).isNotNull()
+    return col.rlike(_AWARE_TS_RLIKE) & F.to_timestamp(canonical_ts(col)).isNotNull()
 
 
 def _date_ok(col: Column) -> Column:
@@ -293,7 +296,7 @@ def _signup_after_produced() -> Column:
     produced = F.col("produced_at")
     signup = F.col("signup_date")
     both_valid = _aware_ts_ok(produced) & _date_ok(signup)
-    epoch_days = F.floor(F.to_timestamp(_canonical_ts(produced)).cast("long") / F.lit(86400)).cast(
+    epoch_days = F.floor(F.to_timestamp(canonical_ts(produced)).cast("long") / F.lit(86400)).cast(
         "int"
     )
     produced_utc_date = F.date_add(F.lit("1970-01-01").cast("date"), epoch_days)
@@ -513,7 +516,7 @@ def _order_in_future() -> Column:
     from pyspark.sql import functions as F
 
     ts = F.col("order_timestamp")
-    return _never_null(_aware_ts_ok(ts) & (F.to_timestamp(_canonical_ts(ts)) > F.col("_ingest_ts")))
+    return _never_null(_aware_ts_ok(ts) & (F.to_timestamp(canonical_ts(ts)) > F.col("_ingest_ts")))
 
 
 def order_rules() -> list[Rule]:

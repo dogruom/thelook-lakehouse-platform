@@ -33,6 +33,7 @@ from lakehouse.common.tables import (
     register_table,
     resolve,
 )
+from lakehouse.ops.metrics import BatchRecorder, metrics_path
 from lakehouse.silver.jobs.silver_customers import CatalogRegistrationError, _positive_int
 from lakehouse.silver.orders import OrderBatchCounts, ensure_tables, process_orders_batch
 
@@ -65,6 +66,7 @@ class _Counters:
         self._lock = threading.Lock()
         self.batches = 0
         self.totals = OrderBatchCounts(0, 0, 0, 0, 0, 0, 0, 0)
+        self.recorder: BatchRecorder | None = None
 
     def add(self, counts: OrderBatchCounts) -> None:
         with self._lock:
@@ -72,6 +74,11 @@ class _Counters:
             old = self.totals.as_dict()
             new = counts.as_dict()
             self.totals = OrderBatchCounts(**{k: old[k] + new[k] for k in old})
+
+    def record(self, batch_id: int, counts: Mapping[str, int]) -> None:
+        """Write the batch's ``ops.pipeline_metrics`` row (no-op without a recorder)."""
+        if self.recorder is not None:
+            self.recorder.record(batch_id, counts)
 
 
 class SilverOrdersJob(SparkJob):
@@ -115,6 +122,13 @@ class SilverOrdersJob(SparkJob):
         ensure_tables(spark, tables[ORDERS_TABLE].location, tables[ITEMS_TABLE].location)
 
         counters = _Counters()
+        counters.recorder = BatchRecorder(
+            spark,
+            metrics_path(ctx.settings, namespace),
+            job=QUERY_NAME,
+            source_table=BRONZE_TABLE,
+            run_id=ctx.run_id,
+        )
         query = start_query(
             spark,
             {name: table.location for name, table in tables.items()},
@@ -123,6 +137,7 @@ class SilverOrdersJob(SparkJob):
             ctx.run_id,
             counters,
         )
+        counters.recorder.bind_query(str(query.id))
         try:
             query.awaitTermination()
             error = query.exception()
@@ -199,6 +214,7 @@ def start_query(
             run_id,
             datetime.now(UTC),
         )
+        counters.record(batch_id, counts.as_dict())
         counters.add(counts)
         _log.info("silver_orders.batch", batch_id=batch_id, **counts.as_dict())
 

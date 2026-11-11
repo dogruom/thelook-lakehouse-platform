@@ -459,3 +459,27 @@ def test_replay_of_a_late_parent_order_recovers_it_exactly_once(lake: Lake) -> N
     assert merge_orders(lake.spark, lake.orders_path, lake.items_path, recovered) == (1, 2)
     assert merge_orders(lake.spark, lake.orders_path, lake.items_path, recovered) == (0, 0)
     assert set(lake.orders()) == {(ALPHA, O5)} and len(lake.items()) == 2
+
+
+def test_crash_between_the_orders_and_the_items_merge_is_repaired_by_the_rerun(
+    lake: Lake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    batch = lake.append({order_path(): [order(O1)]})
+    real = orders_mod._insert_only
+
+    def crash_on_items(spark: Any, path: str, source: Any, key: list[str]) -> int:
+        if key == orders_mod.ITEM_KEY:
+            raise RuntimeError("simulated crash before the items MERGE")
+        return real(spark, path, source, key)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(orders_mod, "_insert_only", crash_on_items)
+        with pytest.raises(RuntimeError, match="simulated crash"):
+            lake.process(batch)
+    assert set(lake.orders()) == {(ALPHA, O1)} and lake.items() == {}  # orders only
+
+    counts = lake.process(batch)
+    assert (counts.silver_accepted, counts.duplicates_removed, counts.already_present) == (0, 1, 1)
+    assert counts.items_inserted == 2
+    assert sum_holds(counts)
+    assert len(lake.orders()) == 1 and len(lake.items()) == 2

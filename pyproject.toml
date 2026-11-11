@@ -219,7 +219,16 @@ ignore_imports = [
     "lakehouse.silver.** -> lakehouse.quality.rules",
     "lakehouse.silver.** -> lakehouse.quality.dlq",
     "lakehouse.quality.jobs.replay -> lakehouse.silver.orders",
+    "lakehouse.silver.jobs.silver_customers -> lakehouse.ops.metrics",
+    "lakehouse.silver.jobs.silver_orders -> lakehouse.ops.metrics",
+    "lakehouse.silver.jobs.silver_clickstream -> lakehouse.ops.metrics",
+    "lakehouse.quality.jobs.reconcile -> lakehouse.ops.metrics",
+    "lakehouse.quality.jobs.isolation_check -> lakehouse.silver.views",
+    "lakehouse.ops.jobs.register_tenant_views -> lakehouse.silver.views",
 ]
 # Silver evaluates the customer_cdc contract rules inline (W3.D14, D-022); only that one module may
 # be imported, not the quality jobs. Silver also writes its FK orphans to the DLQ through
 # quality.dlq (W3.D17, D-077); the replay job re-uses silver.orders for the insert-only merge.
+# The three Silver jobs write ops.pipeline_metrics through ops.metrics and ``reconcile`` reads and
+# writes it (W3.D18, D-081); no other cross-component import is allowed for that table.
+# The tenant-isolation jobs share the one view-DDL builder, silver.views (W3.D18, D-085).

@@ -10,7 +10,8 @@ Rebuild of one ``(brand_id, customer_id)``:
 1. Rows with ``_parse_error`` are dropped before ``brand_id`` is used (Q-003); rows failing a
    ``customer_cdc`` rule are dropped (``apply_rules`` inline, as in ``silver.customers``).
 2. One row per full key ``(brand_id, customer_id, _cdc_sequence)``: the first valid occurrence by
-   Kafka ``(partition, offset)`` (D-029), so duplicates and re-reads never add a version.
+   Kafka ``(partition, offset)`` (D-029), so duplicates and re-reads never add a version. Copies
+   of one key that differ in content are not merged: the lowest offset wins, the others are ignored.
 3. Versions are numbered ``1..n`` by ``_cdc_sequence`` only. ``_cdc_ts`` never orders anything.
 4. ``valid_from`` is the version's ``_cdc_ts``; ``valid_to`` is the next version's ``_cdc_ts``
    (NULL for the last); ``is_current`` marks the last version. ``D`` is a tombstone version
