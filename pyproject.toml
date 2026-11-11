@@ -215,6 +215,11 @@ modules = [
     "lakehouse.silver",
     "lakehouse.ops",
 ]
-ignore_imports = ["lakehouse.silver.** -> lakehouse.quality.rules"]
+ignore_imports = [
+    "lakehouse.silver.** -> lakehouse.quality.rules",
+    "lakehouse.silver.** -> lakehouse.quality.dlq",
+    "lakehouse.quality.jobs.replay -> lakehouse.silver.orders",
+]
 # Silver evaluates the customer_cdc contract rules inline (W3.D14, D-022); only that one module may
-# be imported, not the quality jobs.
+# be imported, not the quality jobs. Silver also writes its FK orphans to the DLQ through
+# quality.dlq (W3.D17, D-077); the replay job re-uses silver.orders for the insert-only merge.

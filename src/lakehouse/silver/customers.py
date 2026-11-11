@@ -66,8 +66,8 @@ if TYPE_CHECKING:
 
 
 OUTCOMES = ("parse_excluded", "dlq_excluded", "reread", "duplicate", "stale_noop", "accepted")
-_KEY = ["brand_id", "customer_id"]
-_FULL_KEY = [*_KEY, "_cdc_sequence"]
+KEY = ["brand_id", "customer_id"]
+FULL_KEY = [*KEY, "_cdc_sequence"]
 _CONSTRAINT = "brand_id_not_null"
 
 
@@ -150,13 +150,13 @@ def silver_customers_schema() -> StructType:
     )
 
 
-def _is_valid() -> Column:
+def is_valid() -> Column:
     from pyspark.sql import functions as F
 
     return F.col("_parse_error").isNull() & (F.size("_rejection_codes") == 0)
 
 
-def _kafka_position() -> list[Column]:
+def kafka_position() -> list[Column]:
     """``(partition, offset)`` parsed from ``topic/partition/offset``; NULL when not that shape."""
     from pyspark.sql import functions as F
 
@@ -183,21 +183,21 @@ def classify_batch(batch: DataFrame, bronze: DataFrame) -> DataFrame:
         F.col("_ingest_ts").asc_nulls_last(), F.col("_batch_id").asc_nulls_last()
     )
     checked = apply_rules(batch.withColumn("_ref_rank", F.row_number().over(one_per_ref)), rules)
-    valid = _is_valid()
+    valid = is_valid()
     first_copy = valid & (F.col("_ref_rank") == 1)
 
     current = checked.where(first_copy)
-    keys = current.select(*_FULL_KEY).distinct()
-    history = apply_rules(bronze.join(F.broadcast(keys), _FULL_KEY, "left_semi"), rules)
+    keys = current.select(*FULL_KEY).distinct()
+    history = apply_rules(bronze.join(F.broadcast(keys), FULL_KEY, "left_semi"), rules)
     # One row per valid Bronze/current ``_source_ref`` with its earliest ingest time.
     refs = (
-        history.where(_is_valid())
-        .select(*_FULL_KEY, "_source_ref", "_ingest_ts")
-        .unionByName(current.select(*_FULL_KEY, "_source_ref", "_ingest_ts"))
-        .groupBy("_source_ref", *_FULL_KEY)
+        history.where(is_valid())
+        .select(*FULL_KEY, "_source_ref", "_ingest_ts")
+        .unionByName(current.select(*FULL_KEY, "_source_ref", "_ingest_ts"))
+        .groupBy("_source_ref", *FULL_KEY)
         .agg(F.min("_ingest_ts").alias("_first_ingest_ts"))
     )
-    occurrence = Window.partitionBy(*_FULL_KEY).orderBy(*_kafka_position())
+    occurrence = Window.partitionBy(*FULL_KEY).orderBy(*kafka_position())
     ranked = refs.select(
         "_source_ref", "_first_ingest_ts", F.row_number().over(occurrence).alias("_dup_rank")
     )
@@ -233,10 +233,20 @@ def classify_batch(batch: DataFrame, bronze: DataFrame) -> DataFrame:
 def merge_source(
     classified: DataFrame, spark: SparkSession, key: bytes | Broadcast[bytes]
 ) -> DataFrame:
-    """Typed Silver rows (without ``_updated_at``) of the ``accepted`` candidates, one per key.
+    """Typed Silver rows (without ``_updated_at``) of the ``accepted`` candidates, one per key."""
+    from pyspark.sql import functions as F
+
+    return typed_silver_rows(classified.where(F.col("_outcome") == "accepted"), spark, key)
+
+
+def typed_silver_rows(
+    rows: DataFrame, spark: SparkSession, key: bytes | Broadcast[bytes]
+) -> DataFrame:
+    """Typed Silver columns (without ``_updated_at``) of already validated Bronze ``rows``.
 
     Casts happen here, after the rules (D-045). A ``D`` row becomes a tombstone (PII columns NULL).
     ``key`` is the HMAC key or a handle from ``pii_key_broadcast`` (which the caller destroys).
+    Shared with ``silver.customers_history`` so both tables type and pseudonymise identically.
     """
     from pyspark.sql import functions as F
 
@@ -245,7 +255,7 @@ def merge_source(
     def kept(column: Column) -> Column:
         return F.when(~tombstone, column)
 
-    return classified.where(F.col("_outcome") == "accepted").select(
+    return rows.select(
         F.col("brand_id"),
         F.col("customer_id"),
         kept(F.col("first_name")).alias("first_name"),
@@ -294,7 +304,7 @@ def merge_customers(spark: SparkSession, path: str, source: DataFrame) -> tuple[
     if "_updated_at" not in source.columns:
         source = source.withColumn("_updated_at", F.current_timestamp())
     stats = source.agg(
-        F.count(F.lit(1)).alias("rows"), F.countDistinct(F.struct(*_KEY)).alias("distinct")
+        F.count(F.lit(1)).alias("rows"), F.countDistinct(F.struct(*KEY)).alias("distinct")
     ).first()
     rows = int(stats["rows"]) if stats is not None else 0
     if rows == 0:
@@ -363,8 +373,8 @@ def process_batch(
             target = spark.read.format("delta").load(path)
             applicable = (
                 source.join(
-                    target.select(*_KEY, F.col("_cdc_sequence").alias("_target_sequence")),
-                    _KEY,
+                    target.select(*KEY, F.col("_cdc_sequence").alias("_target_sequence")),
+                    KEY,
                     "left",
                 )
                 .where(

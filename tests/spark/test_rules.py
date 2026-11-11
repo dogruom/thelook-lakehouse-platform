@@ -492,7 +492,12 @@ def test_clickstream_rule_codes_and_order_follow_the_contract() -> None:
 
 
 def test_rules_by_table_maps_bronze_tables_to_rule_sets() -> None:
-    assert set(RULES_BY_TABLE) == {"raw_customers", "raw_clickstream"}
+    assert set(RULES_BY_TABLE) == {
+        "raw_customers",
+        "raw_clickstream",
+        "raw_orders",
+        "raw_products",
+    }
     assert [r.code for r in RULES_BY_TABLE["raw_customers"]()] == CDC_CODES
     assert [r.code for r in RULES_BY_TABLE["raw_clickstream"]()] == CLICK_CODES
 

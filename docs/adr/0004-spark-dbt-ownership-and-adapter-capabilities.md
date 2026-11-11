@@ -1,10 +1,10 @@
 # ADR-0004: Spark vs. dbt ownership boundary and dbt adapter capabilities
 
-- **Status:** Accepted for the spike section (W2.D11, 2026-11-10); the ownership section stays
-  Draft until W3.D15.3 (after the Silver/SCD2 work).
-- **Date:** 2026-11-10
+- **Status:** Accepted (spike section W2.D11, 2026-11-10; ownership section W3.D15.3, 2026-11-11).
+- **Date:** 2026-11-10 (ownership finalised 2026-11-11)
 - **Related:** ADR-0007 (runtime, catalog, Gold engine), ADR-0009 (component boundaries),
-  D-060 (catalog wiring), D-061 (dbt toolchain and workarounds)
+  D-060 (catalog wiring), D-061 (dbt toolchain and workarounds), D-071 (file Bronze),
+  D-074 (Silver customers), D-076 (SCD2 history)
 
 ## Context
 Charter §3 fixes the ownership: Spark owns Bronze, DLQ, Silver and SCD2; dbt owns Gold only and
@@ -14,16 +14,26 @@ None of that had been run. Before any Gold modelling, W2.D11 had to prove, again
 stack, that (a) tables written by Spark jobs are reachable by name, and (b) the dbt features the
 Gold layer depends on work on Delta through the Thrift Server.
 
-## Ownership (draft, finalised in W3.D15.3)
+## Ownership (final, W3.D15.3)
 | Layer | Owner | Written by | Addressed by |
 |---|---|---|---|
-| Bronze `bronze.raw_*` | Spark | `bronze_stream` (path), registered in the catalog | name for readers |
+| Bronze `bronze.raw_customers`, `raw_clickstream` | Spark | `bronze_stream` (path), registered in the catalog | name for readers |
+| Bronze `bronze.raw_orders`, `raw_products` | Spark | `bronze_batch` (path), registered (D-071) | name for readers |
 | DLQ `dead_letter.dlq_*` | Spark | `dlq_gate` (path), registered after write | name for readers |
-| Silver / SCD2 | Spark | Silver jobs (W3) | name |
+| Silver `silver.customers` | Spark | `silver_customers`: sequence-guarded MERGE, tombstones, HMAC email token (D-074, D-075) | name |
+| SCD2 `silver.customers_history` | Spark | `silver_customers_history`: rebuild of affected keys from Bronze ordered by `_cdc_sequence` (D-076) | name |
+| Silver orders, items, clickstream | Spark | W3.D17 jobs | name |
 | Gold | dbt | dbt models (Delta, Thrift Server) | name |
 
 Writers keep the storage location as their write contract; the catalog is the read contract
-(D-060). dbt never writes Bronze, DLQ or Silver.
+(D-060). dbt never writes Bronze, DLQ or Silver, takes no dbt snapshots of customers (history is
+Spark's `silver.customers_history`) and does no hashing of PII: privacy columns (`email_token`,
+`phone_masked`) arrive pseudonymised from Silver. Why Spark owns Silver and SCD2: correctness
+depends on per-event ordering by `_cdc_sequence`, Bronze lineage, re-read/duplicate detection
+and an in-batch reconciliation check against MERGE metrics — logic that is tested in PySpark
+(`tests/spark/test_silver_customers.py`, `test_customers_history.py`) and would be split across two
+engines if dbt snapshots or incremental models held it. dbt keeps what it is good at: tested,
+documented dimensional models on top of clean Silver.
 
 ## Spike (W2.D11) — observed results
 
