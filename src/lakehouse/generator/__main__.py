@@ -1,5 +1,6 @@
 """CLI: ``python -m lakehouse.generator {cdc,clickstream} ... --dry-run`` writes files;
-``python -m lakehouse.generator produce`` sends CDC and clickstream to Kafka."""
+``python -m lakehouse.generator produce`` sends CDC and clickstream to Kafka;
+``python -m lakehouse.generator land`` lands orders and products batches in S3 (or locally)."""
 
 from __future__ import annotations
 
@@ -9,16 +10,27 @@ import sys
 from pathlib import Path
 
 from lakehouse.common.logging import configure_logging
+from lakehouse.common.spark import SparkSettings
 from lakehouse.generator.cdc import InfeasibleDefectPlan, generate_cdc
 from lakehouse.generator.clickstream import generate_clickstream
 from lakehouse.generator.config import GeneratorConfig
 from lakehouse.generator.io import write_clickstream_run, write_run
+from lakehouse.generator.landing import (
+    s3_client_from_env,
+    write_batch,
+    write_batch_local,
+    write_products,
+    write_products_local,
+)
 from lakehouse.generator.messages import cdc_messages
+from lakehouse.generator.orders import customer_pools_from_cdc, generate_orders
 from lakehouse.generator.producer import DeliveryStats, create_producer, produce_messages
+from lakehouse.generator.products import generate_products
 
 
 DEFAULT_OUT_DIR = Path("build/generated/cdc")
 DEFAULT_CLICKSTREAM_OUT_DIR = Path("build/generated/clickstream")
+DEFAULT_LANDING_OUT_DIR = Path("build/generated/landing")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -45,6 +57,18 @@ def _parser() -> argparse.ArgumentParser:
     produce.add_argument(
         "--bootstrap-servers", default=None, help="default: GEN_KAFKA_BOOTSTRAP_SERVERS"
     )
+    land = sub.add_parser("land", help="land orders and products batches in S3 (or --dry-run)")
+    land.add_argument("--brands", type=int, default=3, help="first N tenants of GEN_TENANTS")
+    land.add_argument("--batches", type=int, default=12, help="number of landing batches")
+    land.add_argument(
+        "--orders-per-batch", type=int, default=50, help="base orders per brand/batch"
+    )
+    land.add_argument(
+        "--cdc-events", type=int, default=1000, help="CDC base events (customer pool), as produce"
+    )
+    land.add_argument("--seed", type=int, default=None, help="overrides GEN_SEED")
+    land.add_argument("--dry-run", action="store_true", help="write to --out-dir, not to S3")
+    land.add_argument("--out-dir", type=Path, default=DEFAULT_LANDING_OUT_DIR)
     return parser
 
 
@@ -98,6 +122,73 @@ def _produce(args: argparse.Namespace, config: GeneratorConfig) -> int:
     return 0 if stats.ok else 1
 
 
+def _land(
+    args: argparse.Namespace, config: GeneratorConfig, parser: argparse.ArgumentParser
+) -> int:
+    for name, flag in (
+        (args.batches, "--batches"),
+        (args.orders_per_batch, "--orders-per-batch"),
+        (args.cdc_events, "--cdc-events"),
+    ):
+        if name < 1:
+            parser.error(f"{flag} must be >= 1")
+    try:
+        pools = customer_pools_from_cdc(
+            generate_cdc(config, brands=args.brands, events=args.cdc_events)
+        )
+        products = generate_products(config)
+        products_by_brand = {b: ids for b, ids in products.product_ids().items() if b in pools}
+        run = generate_orders(
+            config,
+            customer_pools=pools,
+            product_ids=products_by_brand,
+            batches=args.batches,
+            orders_per_batch=args.orders_per_batch,
+        )
+    except InfeasibleDefectPlan as exc:
+        print(f"error: infeasible defect plan: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    date_str = products.batch_date.isoformat()
+    if args.dry_run:
+        root: Path = args.out_dir
+        for brand_id in pools:
+            file = products.files[brand_id]
+            write_products_local(root, brand_id, date_str, file.data, file.manifest)
+        for batch in run.batches:
+            write_batch_local(
+                root,
+                batch.brand_id,
+                batch.batch_date.isoformat(),
+                batch.batch_no,
+                batch.data,
+                batch.manifest,
+            )
+        target = str(root)
+    else:
+        settings = SparkSettings()
+        client = s3_client_from_env(settings.s3_endpoint)
+        for brand_id in pools:
+            file = products.files[brand_id]
+            write_products(client, settings.bucket, brand_id, date_str, file.data, file.manifest)
+        for batch in run.batches:
+            write_batch(
+                client,
+                settings.bucket,
+                batch.brand_id,
+                batch.batch_date.isoformat(),
+                batch.batch_no,
+                batch.data,
+                batch.manifest,
+            )
+        target = f"s3://{settings.bucket}/landing"
+    print(f"landed {len(run.batches)} order batches and {len(pools)} product files to {target}")
+    _print_counts(run.summary["totals"], "orders.")
+    return 0
+
+
 def _dry_run(
     args: argparse.Namespace, config: GeneratorConfig, parser: argparse.ArgumentParser
 ) -> int:
@@ -129,6 +220,12 @@ def main(argv: list[str] | None = None) -> int:
     config = GeneratorConfig()
     if args.seed is not None:
         config = config.model_copy(update={"seed": args.seed})
+    if args.command == "land":
+        if not 1 <= args.brands <= len(config.tenants):
+            parser.error(
+                f"--brands must be between 1 and {len(config.tenants)} (configured tenants)"
+            )
+        return _land(args, config, parser)
     if args.command != "produce" and not args.dry_run:
         parser.error(
             "sending to Kafka is done by the `produce` subcommand (W1.D5); "

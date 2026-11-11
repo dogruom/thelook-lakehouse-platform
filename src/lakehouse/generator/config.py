@@ -63,6 +63,11 @@ class GeneratorConfig(BaseSettings):
     order_duplicate_rate: RatePct = 4.0
     order_future_ts_rate: RatePct = 2.0
     order_negative_amount_rate: RatePct = 1.0
+    # Landing batch (1-based) from which orders carry ``sales_channel`` (schema-evolution demo)
+    order_sales_channel_from_batch: int = Field(default=10, ge=1)
+
+    # products (static catalog seed, no defect injection)
+    products_per_brand: int = Field(default=40, ge=5, le=500)
 
     # clickstream
     click_late_rate: RatePct = 10.0

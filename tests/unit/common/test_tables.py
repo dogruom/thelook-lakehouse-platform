@@ -29,6 +29,8 @@ RAW = CATALOG_TABLES["raw_customers"]
 def test_catalog_tables_are_the_charter_names() -> None:
     assert {k: s.qualified_name for k, s in CATALOG_TABLES.items()} == {
         "raw_customers": "bronze.raw_customers",
+        "raw_orders": "bronze.raw_orders",
+        "raw_products": "bronze.raw_products",
         "raw_clickstream": "bronze.raw_clickstream",
         "dlq_customers": "dead_letter.dlq_customers",
         "dlq_clickstream": "dead_letter.dlq_clickstream",
