@@ -23,6 +23,16 @@ to add a missing link. File lines are clickable repo-relative links.
 
 ---
 
+## 2026-11-11 · W3.D13 Batch landing and Bronze batch ingest
+
+- **Tasks**: W3.D13.1–D13.3 ✅ ([PROGRESS Week 3](PROGRESS.md))
+- **Commits / PR**: `be2ae2b` feat(ingestion) · docs close commit · PR to `main` under D-032
+- **Decisions**: D-069 … D-071 ([DECISION_LOG](DECISION_LOG.md))
+- **Files**: [orders.py](../src/lakehouse/generator/orders.py), [products.py](../src/lakehouse/generator/products.py), [landing.py](../src/lakehouse/generator/landing.py), [\_\_main\_\_.py](../src/lakehouse/generator/__main__.py), [batch.py](../src/lakehouse/ingestion/batch.py), [bronze_batch.py](../src/lakehouse/ingestion/jobs/bronze_batch.py), [bronze.py](../src/lakehouse/ingestion/bronze.py) (`append_idempotent`), [tables.py](../src/lakehouse/common/tables.py), [DATA_CONTRACTS.md](DATA_CONTRACTS.md), [DATA_FLOW.md](DATA_FLOW.md); tests [test_orders.py](../tests/unit/generator/test_orders.py), [test_landing.py](../tests/unit/generator/test_landing.py), [test_land_cli.py](../tests/unit/generator/test_land_cli.py), [test_bronze_batch_cli.py](../tests/unit/ingestion/test_bronze_batch_cli.py), [test_bronze_batch_catalog.py](../tests/unit/ingestion/test_bronze_batch_catalog.py), [test_bronze_batch.py (Spark)](../tests/spark/test_bronze_batch.py), [test_bronze_batch.py (integration)](../tests/integration/test_bronze_batch.py)
+- **Agents**: implementer ×2 ‖ test-author → test-author ×2 (coverage, integration) → reviewer code (Sonnet) → implementer (review fixes) → evidence-auditor (Haiku)
+- **Finding**: namespaced runs were not isolated on the landing side; wrong-typed JSON fields become NULL without a parse error
+- **Learning**: file ingestion and schema evolution queued for the tutor
+
 ## 2026-11-11 · W2.D12 M1 review, demo and release
 
 - **Tasks**: W2.D12.1–D12.2 ✅, D12.3 🔄 (owner tag) ([PROGRESS D12](PROGRESS.md))

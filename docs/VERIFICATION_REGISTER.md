@@ -1,6 +1,6 @@
 # Verification register
 
-> **Version**: 1.3 · **Last updated**: 2026-11-11 (W2.D12, M1 close) · Decision: D-055
+> **Version**: 1.4 · **Last updated**: 2026-11-11 (W3.D13) · Decision: D-055
 
 One list of every statement that a day report marked "not verified". Each row has a class and an
 owner day, so nothing stays as an unowned caveat. Update this file whenever a day report names a
@@ -28,6 +28,9 @@ Classes: **Closed** (verified, evidence linked) · **Planned** (has a task and a
 | V-14 | dbt-spark gaps carried in the project: `spark__alter_column_comment` override, column-level `not_null` unusable on Delta (ADR-0004 W2/W3) | Known limit | Re-test on every dbt-spark upgrade (`dbt build --select spike`) | Override may drift from upstream; a removed workaround would break `persist_docs` |
 | V-15 | A running Spark job and dbt using the metastore at the same time (two embedded clients on one database) | Planned | W3 (first Gold models on Silver) | Lock waits or a stale table schema seen by one side |
 | V-16 | Spark Thrift Server has no authentication (published on 127.0.0.1 only; reachable from every container on the compose network) | Known limit | Local only; cloud targets use IAM/Glue or Databricks SQL auth (W5/W6) | A compromised local container could read/write the catalog and S3 data |
+| V-20 | Landing order lines that are valid JSON with a wrong field type reach Bronze with `_parse_error` NULL and only that field NULL (Spark `from_json` PERMISSIVE, pinned by a Spark test) | Planned | W3.D17 orders gate: NULL contract fields → DLQ (or re-validate `_raw_value`) | A wrong-typed order could pass into Silver with NULL values |
+| V-21 | Overwriting an already ingested landing key with different bytes is not re-read (the file-source checkpoint tracks paths) | Known limit | Landing keys are immutable by convention; the generator is deterministic (same bytes on rerun) | A corrected file under the same key would be ignored silently |
+| V-22 | `write_batch` / `write_products` against SeaweedFS (only moto-tested; the integration test lands via `*_local` + aws CLI because the host has no S3 credentials) | Planned | W5.D27 (generator writes through the AWS adapter) | An S3-API difference in the boto3 path would surface only in the cloud run |
 | V-17 | Guard hook flags `--rm` / words such as `perform` as `rm` (regex has no left boundary); self-test cases for it are written but the fix is not applied | Owner action | Owner applies the two-line regex patch in `.claude/hooks/guard_commands.py` (`\brm` → `(?<![-\w])rm`; leading `\b(` of the Remove-Item rule → `(?<![-\w])(`), runs `python .claude/hooks/guard_commands.py --self-test`, commits the file (agents may not edit the guard) | False blocks on `docker compose run --rm` and on prose; the file stays uncommitted |
 | V-18 | Release tag `v0.1.0` for M1 | Owner action | After the W2.D12 PR is merged: `git checkout main; git pull; git tag -a v0.1.0 -m "M1: reliable streaming ingestion"; git push origin v0.1.0` | README and PROGRESS point to a release that does not exist |
 | V-19 | One `/security-review` run over M1 (owner-triggered command) | Owner action | Owner runs `/security-review` once on `main` after the merge | No independent security pass besides the reviewer agent |
