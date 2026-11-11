@@ -12,13 +12,14 @@
 ## W3.D13 · Batch landing and Bronze batch ingest — closed 2026-11-11
 
 **Executive summary.** The platform now has its second way in: besides events from Kafka, order
-and product files dropped into a landing folder reach Bronze with the same guarantees — every
-line becomes exactly one row that points back to its file and line, nothing is read twice on a
-rerun, and each test run can be isolated in its own folder. The order data carries realistic
+and product files dropped into a landing folder reach Bronze with the same guarantees — the
+integration test shows one Bronze row per landed line, each pointing back to its file and line; a
+rerun adds nothing (the checkpoint remembers processed files and each write is idempotent), and
+each test run can be isolated in its own folder. The order data carries realistic
 defects with a manifest that says, line by line, what should happen to each one later.
 - **Delivered**: W3.D13.1 ✅ orders/products generator, S3 landing writer, `land` CLI · W3.D13.2 ✅ `bronze_batch` · W3.D13.3 ✅ integration count test.
-- **Evidence**: `be2ae2b`; unit 1293 passed / 1 skipped, coverage 83 %; Spark batch tests 14 passed, full Spark 304 passed; integration `test_bronze_batch.py` 7 passed (190 s) — rows per file = manifest line count, `sales_channel` NULL before batch 10, rerun adds nothing; `land --dry-run` byte-identical across runs; ruff/mypy/import-linter clean.
-- **Reviews / audit**: code review APPROVE WITH NITS — should-fix: docstring overclaimed `mergeSchema` as the cause of `sales_channel` (it is the contract projection), run-level defect budget untested at fractional rates; nits: vacuous cross-tenant test, missing wrong-type / empty-file / rewound-checkpoint tests; all applied, contract wording aligned (v7.8). `evidence-auditor`: _see merge status_.
+- **Evidence**: `be2ae2b`; unit 1293 passed / 1 skipped, coverage 83 %; Spark batch tests 14 passed, full Spark 307 passed; integration `test_bronze_batch.py` 7 passed (rerun on the final tree, 173 s) — rows per file = manifest line count, `sales_channel` NULL before batch 10, rerun adds nothing; `land --dry-run` byte-identical across runs; ruff/mypy/import-linter clean.
+- **Reviews / audit**: code review APPROVE WITH NITS — should-fix: docstring overclaimed `mergeSchema` as the cause of `sales_channel` (it is the contract projection), run-level defect budget untested at fractional rates; nits: vacuous cross-tenant test, missing wrong-type / empty-file / rewound-checkpoint tests; all applied, contract wording aligned (v7.8). `evidence-auditor`: 7 MISMATCH, all docs — exactly-once-sounding summary sentence, writer retry wording, Spark/integration counts from before the review fixes (both suites rerun on the final tree), "landing write" vs Bronze write in DATA_CONTRACTS, missing close hash, merge status pending by convention; fixed. Auditor re-runs: unit 1293/1 skipped, 83 %, `land --dry-run` byte-identical (78 files).
 - **Decisions**: D-069 late-parent defect deferred to W3.D17, namespaced landing · D-070 orders generator rules · D-071 `bronze_batch` design.
 - **Found during the day (not in the plan)**: a namespaced `bronze_batch` run read every landing file in the bucket (found by the test-author before the integration test was written; fixed, D-069); Spark `from_json` keeps a wrong-typed field as NULL without a parse error (V-20, input for the W3.D17 gate).
 - **Not verified / limitations**: V-20 wrong-typed lines need the orders gate (W3.D17) · V-21 landing keys must stay immutable · V-22 boto3 writer only against moto, not SeaweedFS (W5.D27).

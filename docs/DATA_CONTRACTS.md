@@ -1,7 +1,7 @@
 # Data Contracts & Medallion Specifications
 
 > **Document Version**: 7.8
-> **Last Updated**: 2026-11-11 (v7.8: landing → Bronze as built — `sales_channel` via contract schema, `mergeSchema` on the landing write only, D-071; v7.7: non-UTF-8 Kafka key → `brand_key_mismatch`, D-068; v7.6: gate transport rules `kafka_key_missing` / `brand_header_missing`, `rejected_duplicates` vs `duplicates_removed` glossary, Q-002/Q-004; v7.5: DLQ envelope §3.2 as built — `_rejection_codes`, `event_id`, Kafka `_bronze_ref`, `PARSE_ERROR` reserved, D-062; v7.4: Bronze metadata columns as built §3.1, stable `_parse_error` codes, headers persisted, no `mergeSchema` on Bronze, D-047; v7.3: CDC ground-truth manifest §2.1.1, gate order and outcome precedence §4.1; v7.2: `event_id`/`schema_version`/`produced_at` payload fields, duplicate CDC defect, producer/consumer unknown-field rule, 2-decimal money strings; v7.1: orders carry embedded line items; static product seed; `schema_version` in the envelope; schema-evolution demo moved to orders; reconciliation adds `stale_cdc_noop` — DELIVERY_PLAN v8, ADR-0009)
+> **Last Updated**: 2026-11-11 (v7.8: landing → Bronze as built — `sales_channel` via contract schema, `mergeSchema` only on the Bronze write of landing files, D-071; v7.7: non-UTF-8 Kafka key → `brand_key_mismatch`, D-068; v7.6: gate transport rules `kafka_key_missing` / `brand_header_missing`, `rejected_duplicates` vs `duplicates_removed` glossary, Q-002/Q-004; v7.5: DLQ envelope §3.2 as built — `_rejection_codes`, `event_id`, Kafka `_bronze_ref`, `PARSE_ERROR` reserved, D-062; v7.4: Bronze metadata columns as built §3.1, stable `_parse_error` codes, headers persisted, no `mergeSchema` on Bronze, D-047; v7.3: CDC ground-truth manifest §2.1.1, gate order and outcome precedence §4.1; v7.2: `event_id`/`schema_version`/`produced_at` payload fields, duplicate CDC defect, producer/consumer unknown-field rule, 2-decimal money strings; v7.1: orders carry embedded line items; static product seed; `schema_version` in the envelope; schema-evolution demo moved to orders; reconciliation adds `stale_cdc_noop` — DELIVERY_PLAN v8, ADR-0009)
 > **Status**: 🟡 DRAFT — aligned with [PROJECT_CHARTER.md](PROJECT_CHARTER.md) v7. **Not yet enforced in code**; each contract becomes enforced when the corresponding PROGRESS task is ✅ with evidence.
 > **Target Platform**: Multi-Tenant CRM Lakehouse (Delta Lake OSS locally; cloud targets documented separately)
 
@@ -177,7 +177,7 @@ All injected defects are recorded in the ground-truth manifest, **not** in the p
 | `discount_amount` | DECIMAL(10,2) | No | `discount_amount >= 0` | Promotion amount |
 | `net_amount` | DECIMAL(10,2) | No | `net_amount = gross_amount - discount_amount` | Final revenue amount |
 | `items` | ARRAY<STRUCT> | No | 1–5 line items, schema in §2.3 | Embedded line items (exploded into `silver.order_items`) |
-| `sales_channel` | STRING | Yes | ENUM (`web`, `app`, `store`); present from landing batch 10 onwards | **Schema evolution demo** (additive producer change: the key is absent before batch 10). Bronze projects the contract schema, so the column exists from batch 1 and is NULL before batch 10; Delta `mergeSchema` on the landing write lets a later contract version add a column to the existing table (D-071) |
+| `sales_channel` | STRING | Yes | ENUM (`web`, `app`, `store`); present from landing batch 10 onwards | **Schema evolution demo** (additive producer change: the key is absent before batch 10). Bronze projects the contract schema, so the column exists from batch 1 and is NULL before batch 10; Delta `mergeSchema` on the Bronze write of landing files lets a later contract version add a column to the existing table (D-071) |
 
 #### 🧪 Dirty Data Budget & Injection Spec (`orders`)
 - **Orphan Foreign Key**: 3.0% ± 0.5% → DLQ with `_retryable = true`
@@ -423,7 +423,7 @@ Rule-based heuristic score in [0, 1] (not a trained model). Built only if Core a
 | Layer | Contract Mechanism | Enforcement Action | Freshness Target* |
 |---|---|---|---|
 | **Producer** | Pydantic v2 models | Invalid generator output fails unit tests | — |
-| **Landing / Kafka → Bronze** | Envelope parsing | Parse failures kept in Bronze (`_parse_error`); Kafka write without `mergeSchema`, so an unplanned schema change fails loudly (D-047); landing write with `mergeSchema` for contract-versioned additive columns (D-071) | < 5 min |
+| **Landing / Kafka → Bronze** | Envelope parsing | Parse failures kept in Bronze (`_parse_error`); Kafka write without `mergeSchema`, so an unplanned schema change fails loudly (D-047); Bronze write of landing files with `mergeSchema` for contract-versioned additive columns (D-071) | < 5 min |
 | **Bronze → Silver** | PySpark validation gate + composite anti-joins | Failures → DLQ; pipeline proceeds; reconciliation vs. manifest | < 15 min |
 | **Silver → Gold** | dbt tests (`unique`, `not_null`, composite relationships, singular tests) | Test failures block downstream models; alert | Hourly |
 | **Stretch** | Great Expectations suite | Distribution and drift checks without overlapping dbt tests | Post-dbt |
