@@ -190,7 +190,7 @@ def _field(prefix: str, column: str, ok: Callable[[Column], Column]) -> list[Rul
 
 
 def _decoded_key() -> Column:
-    """Kafka key as text; NULL when absent or not valid UTF-8 (then the key rule cannot judge)."""
+    """Kafka key as text; NULL when absent or not valid UTF-8 (a present non-UTF-8 key mismatches)."""
     from pyspark.sql import functions as F
 
     key = F.col("_kafka_key")
@@ -211,9 +211,13 @@ def _kafka_key_missing() -> Column:
 def _brand_key_mismatch() -> Column:
     from pyspark.sql import functions as F
 
+    # A present key that is not valid UTF-8 has no readable prefix: it cannot name the payload
+    # brand, so it counts as a mismatch (M1 review, D-064) instead of passing unchecked.
     prefix = F.substring_index(_decoded_key(), ":", 1)
-    return _never_null(
-        _kafka_key_present() & F.col("brand_id").isNotNull() & (prefix != F.col("brand_id"))
+    return (
+        _kafka_key_present()
+        & F.col("brand_id").isNotNull()
+        & ~_never_null(prefix == F.col("brand_id"))
     )
 
 

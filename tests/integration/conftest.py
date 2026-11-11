@@ -35,10 +35,14 @@ def bootstrap_servers() -> str:
 
 
 #: Every namespaced test run writes under ``<layer>/it_<hex8>/...`` (and the stream checkpoint under
-#: ``checkpoints/bronze_stream/it_<hex8>/...``); default tables never contain an ``/it_`` segment.
+#: ``checkpoints/bronze_stream/it_<hex8>/...``). The aws CLI filters use fnmatch, where ``*`` also
+#: matches ``/``; the glob therefore names the exact ``it_<hex8>`` directory shape, so a table or file
+#: that merely starts with ``it_`` is never matched.
+IT_NAMESPACE_GLOB = "*/it_" + "[0-9a-f]" * 8 + "/*"
 _IT_PURGE_SCRIPT = (
     'aws --endpoint-url "http://$S3_HOST:$S3_PORT" --no-cli-pager --only-show-errors '
-    's3 rm "s3://$LAKEHOUSE_BUCKET/" --recursive --exclude "*" --include "*/it_*"'
+    's3 rm "s3://$LAKEHOUSE_BUCKET/" --recursive --exclude "*" '
+    f'--include "{IT_NAMESPACE_GLOB}"'
 )
 
 

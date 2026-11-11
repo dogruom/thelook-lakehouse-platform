@@ -64,7 +64,6 @@ EXPECTED_PYTHON = "3.11"
 SPARK_ROUNDTRIP = r"""
 import os
 import sys
-import time
 import uuid
 
 from pyspark.sql import SparkSession

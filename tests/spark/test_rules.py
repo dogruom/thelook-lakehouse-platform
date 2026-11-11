@@ -241,6 +241,8 @@ def _brand_cases(make: Any) -> list[Case]:
         make("key_null", ["kafka_key_missing"], key_brand=None),
         make("key_empty_bytes", ["kafka_key_missing"], raw_key=""),
         make("key_present_passes", []),
+        # Non-empty key that is not valid UTF-8: no readable brand prefix -> mismatch, not a pass.
+        make("key_not_utf8", ["brand_key_mismatch"], raw_key=b"\xff\xfe:entity"),
         make("header_absent", ["brand_header_missing"], header_brand=None),
         make("header_list_empty", ["brand_header_missing"], raw_headers=[]),
         make(
@@ -449,7 +451,7 @@ def _evaluate(
 ) -> dict[str, Row]:
     rows = [
         (
-            None if c.key is None else c.key.encode("utf-8"),
+            None if c.key is None else c.key if isinstance(c.key, bytes) else c.key.encode("utf-8"),
             c.value,
             "t",
             0,
