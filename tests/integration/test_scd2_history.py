@@ -56,6 +56,9 @@ Key = tuple[str, str]
 Row = dict[str, Any]
 PII = ("first_name", "last_name", "email_token", "phone_masked", "city")
 WALL_CLOCK = "_updated_at"
+#: Lineage differs legitimately between in-order and shuffled deliveries (other Kafka offsets),
+#: so content comparisons leave it out together with the wall clock (D-076).
+NOT_CONTENT = frozenset({WALL_CLOCK, "_bronze_ref"})
 
 _built = [False]
 
@@ -64,9 +67,11 @@ _built = [False]
 
 
 def content_hash(rows: Sequence[Row]) -> str:
-    """Order-independent hash of history rows without the wall-clock column."""
+    """Order-independent hash of history rows without the wall clock and lineage."""
     canon = sorted(
-        json.dumps({k: v for k, v in r.items() if k != WALL_CLOCK}, sort_keys=True, default=str)
+        json.dumps(
+            {k: v for k, v in r.items() if k not in NOT_CONTENT}, sort_keys=True, default=str
+        )
         for r in rows
     )
     return hashlib.sha256("\n".join(canon).encode()).hexdigest()
