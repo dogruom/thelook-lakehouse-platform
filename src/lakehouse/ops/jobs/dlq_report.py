@@ -20,10 +20,11 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
+from lakehouse.common.brand_key import INVALID_BRAND_KEY, NULL_BRAND_KEY, brand_key
 from lakehouse.common.jobs import SparkJob
 from lakehouse.common.logging import get_logger
 from lakehouse.common.tables import TableSpec, read_delta, resolve, table_exists
-from lakehouse.contracts.models import BRAND_ID_PATTERN, UUID_V4_PATTERN
+from lakehouse.contracts.models import UUID_V4_PATTERN
 
 
 if TYPE_CHECKING:
@@ -35,10 +36,6 @@ if TYPE_CHECKING:
     from lakehouse.common.jobs import JobContext
 
 DEFAULT_TABLES = ("dlq_customers", "dlq_clickstream")
-NULL_BRAND_KEY = "__null__"
-INVALID_BRAND_KEY = "__invalid__"
-# Java's ``$`` also matches before a trailing newline; ``\z`` is the true end of input.
-_BRAND_RLIKE = BRAND_ID_PATTERN.removesuffix("$") + r"\z"
 _UUID_RE = re.compile(UUID_V4_PATTERN.removesuffix("$") + r"\Z")  # \Z: no trailing-newline match
 _log = get_logger(__name__)
 
@@ -48,17 +45,6 @@ def _safe_event_id(value: str | None) -> str:
     if value is None:
         return NULL_BRAND_KEY
     return value if _UUID_RE.match(value) else INVALID_BRAND_KEY
-
-
-def _brand_key() -> Column:
-    from pyspark.sql import functions as F
-
-    brand = F.col("brand_id")
-    return (
-        F.when(brand.isNull(), F.lit(NULL_BRAND_KEY))
-        .when(brand.rlike(_BRAND_RLIKE), brand)
-        .otherwise(F.lit(INVALID_BRAND_KEY))
-    )
 
 
 def _counts(df: DataFrame, key: Column, name: str) -> dict[str, int]:
@@ -125,7 +111,7 @@ class DlqReportJob(SparkJob):
                 "distinct_dlq_ids": int(row["distinct_dlq_ids"]),
                 "by_code": by_code,
                 "by_category": _counts(df, F.col("_error_category"), "category"),
-                "by_brand": _counts(df, _brand_key(), "brand_key"),
+                "by_brand": _counts(df, brand_key(), "brand_key"),
                 "replay_status": _counts(df, F.col("_replay_status"), "status"),
             }
             _log.info("dlq_report.table", table=table, **report[table])

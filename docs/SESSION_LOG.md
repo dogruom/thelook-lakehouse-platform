@@ -23,6 +23,16 @@ to add a missing link. File lines are clickable repo-relative links.
 
 ---
 
+## 2026-11-11 · W2.D12 M1 review, demo and release
+
+- **Tasks**: W2.D12.1–D12.2 ✅, D12.3 🔄 (owner tag) ([PROGRESS D12](PROGRESS.md))
+- **Commits / PR**: `0ba2cc2` feat(m1) · `782ec39` fix(m1) review nits · docs close commit · PR to `main` under D-032
+- **Decisions**: D-062 … D-068 ([DECISION_LOG](DECISION_LOG.md))
+- **Files**: [m1-streaming-demo.md](runbooks/m1-streaming-demo.md), [README.md](../README.md), [rules.py](../src/lakehouse/quality/rules.py), [brand_key.py](../src/lakehouse/common/brand_key.py), [smoke_test.py](../scripts/smoke_test.py), [Dockerfile](../docker/spark/Dockerfile), [ci.yml](../.github/workflows/ci.yml), [conftest.py](../tests/integration/conftest.py), [DATA_CONTRACTS.md](DATA_CONTRACTS.md), [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md); tests [test_rules.py](../tests/spark/test_rules.py), [test_brand_key.py](../tests/spark/test_brand_key.py), [test_smoke_wait.py](../tests/unit/scripts/test_smoke_wait.py), [test_bronze_report_args.py](../tests/unit/ops/test_bronze_report_args.py), [test_it_purge_glob.py](../tests/integration/test_it_purge_glob.py)
+- **Agents**: reviewer milestone (Sonnet) → implementer ×2 (Sonnet) → reviewer code (Sonnet) → evidence-auditor (Haiku)
+- **Finding**: the first smoke run after `up -d` raced the init jobs; the integration purge glob `*/it_*` would also have matched any future `it_*` table
+- **Learning**: M1 learning gate round 1 asked; answers pending (V-11)
+
 ## 2026-11-09 · W2.D10 Validation gate and DLQ
 
 - **Tasks**: W2.D10.1–D10.3 ✅ ([PROGRESS D10](PROGRESS.md))

@@ -72,7 +72,9 @@ KAFKA_TS = datetime(2026, 3, 5, 10, 0, 0, tzinfo=UTC)
 ENVELOPE_CODES = [
     "brand_id_null_or_wrong_type",
     "brand_id_invalid",
+    "kafka_key_missing",
     "brand_key_mismatch",
+    "brand_header_missing",
     "brand_header_mismatch",
     "event_id_null_or_wrong_type",
     "event_id_invalid",
@@ -120,6 +122,9 @@ CLICK_CODES = [
 
 ABSENT = object()  # drop the field from the JSON object
 KEEP = "__keep__"  # header/key brand follows the default
+# Transport-level rules (Kafka key/header, Q-002): no Pydantic counterpart, so they are outside the
+# differential parity tests below; the fixtures always carry key and header (asserted there).
+TRANSPORT_CODES = {"kafka_key_missing", "brand_header_missing"}
 CUSTOMER = "22222222-2222-4222-8222-222222222222"
 SESSION = "44444444-4444-4444-8444-444444444444"
 
@@ -160,7 +165,7 @@ class Case:
     cid: str
     value: bytes | None
     key: str | None
-    headers: list[tuple[str, bytes]] | None
+    headers: list[tuple[str, bytes | None]] | None
     expected: list[str]
 
 
@@ -173,6 +178,8 @@ def _case(
     *,
     key_brand: str | None = "brand_alpha",
     header_brand: str | None = "brand_alpha",
+    raw_key: Any = KEEP,
+    raw_headers: Any = KEEP,
 ) -> Case:
     payload = dict(base)
     for name, value in (over or {}).items():
@@ -184,8 +191,12 @@ def _case(
     return Case(
         cid=cid,
         value=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
-        key=None if key_brand is None else f"{key_brand}:{key_entity}",
-        headers=None if header_brand is None else [("brand_id", header_brand.encode("utf-8"))],
+        key=raw_key
+        if raw_key is not KEEP
+        else (None if key_brand is None else f"{key_brand}:{key_entity}"),
+        headers=raw_headers
+        if raw_headers is not KEEP
+        else (None if header_brand is None else [("brand_id", header_brand.encode("utf-8"))]),
         expected=expected,
     )
 
@@ -226,7 +237,27 @@ def _brand_cases(make: Any) -> list[Case]:
         with_brand("brand_digits_underscore_valid", "brand_a1_b2", []),
         make("key_brand_mismatch", ["brand_key_mismatch"], key_brand="brand_beta"),
         make("header_brand_mismatch", ["brand_header_mismatch"], header_brand="brand_beta"),
-        make("header_absent_is_not_a_mismatch", [], header_brand=None),
+        # Transport rules (Q-002): a missing key / header fires only its own *_missing code.
+        make("key_null", ["kafka_key_missing"], key_brand=None),
+        make("key_empty_bytes", ["kafka_key_missing"], raw_key=""),
+        make("key_present_passes", []),
+        # Non-empty key that is not valid UTF-8: no readable brand prefix -> mismatch, not a pass.
+        make("key_not_utf8", ["brand_key_mismatch"], raw_key=b"\xff\xfe:entity"),
+        make("header_absent", ["brand_header_missing"], header_brand=None),
+        make("header_list_empty", ["brand_header_missing"], raw_headers=[]),
+        make(
+            "header_other_key_only",
+            ["brand_header_missing"],
+            raw_headers=[("schema_version", b"1")],
+        ),
+        make("header_null_value", ["brand_header_missing"], raw_headers=[("brand_id", None)]),
+        make("header_present_passes", [], raw_headers=[("brand_id", b"brand_alpha")]),
+        make(
+            "key_and_header_missing_both_fire_in_rule_order",
+            ["kafka_key_missing", "brand_header_missing"],
+            key_brand=None,
+            header_brand=None,
+        ),
         make(
             "key_and_header_mismatch_both_fire",
             ["brand_key_mismatch", "brand_header_mismatch"],
@@ -420,7 +451,7 @@ def _evaluate(
 ) -> dict[str, Row]:
     rows = [
         (
-            None if c.key is None else c.key.encode("utf-8"),
+            None if c.key is None else c.key if isinstance(c.key, bytes) else c.key.encode("utf-8"),
             c.value,
             "t",
             0,
@@ -548,6 +579,35 @@ def test_multi_failure_row_lists_all_codes_in_rule_order_and_first_category(
     assert leaked not in row["_rejection_reason"]
 
 
+@pytest.mark.parametrize(
+    ("build", "target", "rules"),
+    [(cdc, CUSTOMERS, cdc_rules), (click, CLICKSTREAM, clickstream_rules)],
+    ids=["cdc", "click"],
+)
+def test_missing_key_and_header_list_both_codes_and_stay_schema_violations(
+    spark: SparkSession, build: Any, target: BronzeTarget, rules: Any
+) -> None:
+    case = build(
+        "no_transport",
+        ["kafka_key_missing", "brand_header_missing"],
+        key_brand=None,
+        header_brand=None,
+    )
+    row = _evaluate(spark, target, rules(), [case])["no_transport"]
+    assert list(row["_rejection_codes"]) == ["kafka_key_missing", "brand_header_missing"]
+    assert row["_error_category"] == "SCHEMA_VIOLATION"
+    assert row["_retryable"] is False
+    assert row["_rejection_reason"] == "kafka_key_missing, brand_header_missing"
+
+
+def test_transport_rules_do_not_gate_parse_errors(spark: SparkSession) -> None:
+    """A tombstone without key and header stays in Bronze only: no DLQ codes (parse errors skip)."""
+    frame = spark.createDataFrame([(None, None, "t", 0, 0, KAFKA_TS, None)], KAFKA_SCHEMA)
+    out = apply_rules(to_bronze_rows(frame, CUSTOMERS, "b"), cdc_rules()).collect()[0]
+    assert out["_parse_error"] == "null_value"
+    assert list(out["_rejection_codes"]) == []
+
+
 def test_business_rule_alone_gives_business_category(spark: SparkSession) -> None:
     case = cdc("biz", ["signup_after_produced"], {"signup_date": "2026-02-01"})
     row = _evaluate(spark, CUSTOMERS, cdc_rules(), [case])["biz"]
@@ -641,6 +701,11 @@ def test_every_rule_column_is_a_non_null_boolean_on_an_all_null_row(
     # Conditional rules must not fire on absent optional data / null payload brand.
     assert row["brand_key_mismatch"] is False
     assert row["brand_header_mismatch"] is False
+    # Missing-ness follows the input exactly (empty key / header without a value count as missing).
+    assert row["kafka_key_missing"] is (not key)
+    assert row["brand_header_missing"] is (
+        not any(k == "brand_id" and v is not None for k, v in headers or [])
+    )
 
 
 def test_all_null_row_gets_a_non_empty_code_array(spark: SparkSession) -> None:
@@ -696,6 +761,16 @@ def _pydantic_rejects(model: Any, raw: bytes) -> bool:
     return False
 
 
+def test_differential_fixtures_carry_key_and_header() -> None:
+    # Pydantic parity is only meaningful when the transport rules cannot fire (Q-002).
+    for path in FIXTURES:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        for section in (data["cdc"], data["click"]):
+            for m in _load(section):
+                assert m.key
+                assert any(k == "brand_id" and v for k, v in m.headers)
+
+
 def test_differential_fixtures_exist() -> None:
     # Frozen generator output (the Spark image has no Faker); freshness is guarded by
     # tests/unit/quality/test_rules_fixture.py on the host.
@@ -713,7 +788,7 @@ def test_cdc_rules_agree_with_pydantic_and_manifest(spark: SparkSession, path: P
     for i, message in enumerate(messages):
         row = out[i]
         assert row["_parse_error"] is None
-        spark_rejects = len(row["_rejection_codes"]) > 0
+        spark_rejects = bool(set(row["_rejection_codes"]) - TRANSPORT_CODES)  # not in pydantic
         assert spark_rejects == _pydantic_rejects(CustomerCdcEvent, message.value), (
             i,
             list(row["_rejection_codes"]),
@@ -755,7 +830,7 @@ def test_clickstream_rules_agree_with_pydantic_and_manifest(
         if i in parse_errors:
             continue
         row = out[i]
-        spark_rejects = len(row["_rejection_codes"]) > 0
+        spark_rejects = bool(set(row["_rejection_codes"]) - TRANSPORT_CODES)  # not in pydantic
         assert spark_rejects == _pydantic_rejects(ClickstreamEvent, message.value), (
             i,
             list(row["_rejection_codes"]),

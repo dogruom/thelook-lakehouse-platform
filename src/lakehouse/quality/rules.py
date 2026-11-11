@@ -14,10 +14,13 @@ Order matters: the shared envelope rules come first, then the entity rules, then
 business rules. ``_error_category`` of a rejected row is the category of its *first* failing rule.
 Reasons contain codes only, never values (PII).
 
-Envelope rules by design: a NULL Kafka key or a missing ``brand_id`` header passes (nothing to
-compare); only the key's brand prefix (text before the first ``:``) is compared, not the entity id;
-only the first ``brand_id`` header is read (as Bronze does). A DLQ row is attributed to the
-*payload* brand, never to the key or header.
+Envelope rules by design (Q-002): a NULL or empty Kafka key fires ``kafka_key_missing`` and a
+missing ``brand_id`` header (or one with a NULL value) fires ``brand_header_missing``; the two
+``*_mismatch`` rules only compare what is present, so an absent key or header never fires them.
+Only the key's brand prefix (text before the first ``:``) is compared, not the entity id; only the
+first ``brand_id`` header is read (as Bronze does). These four are transport-level (Kafka) checks
+with no Pydantic counterpart. A DLQ row is attributed to the *payload* brand, never to the key or
+header.
 
 Regexes are the Pydantic patterns with the final ``$`` replaced by ``\\z``: Java's ``$`` also
 matches before a trailing newline (``"brand_x\\n"``), Rust's (Pydantic) does not.
@@ -187,7 +190,7 @@ def _field(prefix: str, column: str, ok: Callable[[Column], Column]) -> list[Rul
 
 
 def _decoded_key() -> Column:
-    """Kafka key as text; NULL when absent or not valid UTF-8 (then the key rule cannot judge)."""
+    """Kafka key as text; NULL when absent or not valid UTF-8 (a present non-UTF-8 key mismatches)."""
     from pyspark.sql import functions as F
 
     key = F.col("_kafka_key")
@@ -195,18 +198,45 @@ def _decoded_key() -> Column:
     return F.when(F.encode(text, "UTF-8") == key, text)
 
 
+def _kafka_key_present() -> Column:
+    from pyspark.sql import functions as F
+
+    return _never_null(F.length(F.col("_kafka_key")) > 0)
+
+
+def _kafka_key_missing() -> Column:
+    return ~_kafka_key_present()
+
+
 def _brand_key_mismatch() -> Column:
     from pyspark.sql import functions as F
 
+    # A present key that is not valid UTF-8 has no readable prefix: it cannot name the payload
+    # brand, so it counts as a mismatch (M1 review, D-064) instead of passing unchecked.
     prefix = F.substring_index(_decoded_key(), ":", 1)
-    return _never_null(F.col("brand_id").isNotNull() & (prefix != F.col("brand_id")))
+    return (
+        _kafka_key_present()
+        & F.col("brand_id").isNotNull()
+        & ~_never_null(prefix == F.col("brand_id"))
+    )
+
+
+def _brand_header_value() -> Column:
+    """Value of the first ``brand_id`` header as text; NULL when absent, NULL-valued or no headers."""
+    from pyspark.sql import functions as F
+
+    header = F.filter(F.col("_kafka_headers"), lambda h: h["key"] == F.lit(_BRAND_HEADER))
+    return F.decode(header.getItem(0)["value"], "UTF-8")
+
+
+def _brand_header_missing() -> Column:
+    return _brand_header_value().isNull()
 
 
 def _brand_header_mismatch() -> Column:
     from pyspark.sql import functions as F
 
-    header = F.filter(F.col("_kafka_headers"), lambda h: h["key"] == F.lit(_BRAND_HEADER))
-    value = F.decode(header.getItem(0)["value"], "UTF-8")
+    value = _brand_header_value()
     return _never_null(
         F.col("brand_id").isNotNull() & value.isNotNull() & (value != F.col("brand_id"))
     )
@@ -221,7 +251,9 @@ def _version_invalid() -> Column:
 def _envelope_rules() -> list[Rule]:
     return [
         *_field("brand_id", "brand_id", _pattern_ok(BRAND_ID_PATTERN)),
+        _schema("kafka_key_missing", _kafka_key_missing),
         _schema("brand_key_mismatch", _brand_key_mismatch),
+        _schema("brand_header_missing", _brand_header_missing),
         _schema("brand_header_mismatch", _brand_header_mismatch),
         *_field("event_id", "event_id", _pattern_ok(UUID_V4_PATTERN)),
         _schema("schema_version_invalid", _version_invalid),

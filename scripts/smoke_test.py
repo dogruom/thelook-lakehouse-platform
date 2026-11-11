@@ -27,9 +27,15 @@ import os
 import platform
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -153,6 +159,49 @@ def check_env_file() -> bool:
     if (REPO_ROOT / ".env").is_file():
         return record(".env present", True)
     return record(".env present", False, "run: python scripts/bootstrap_env.py")
+
+
+INIT_CONTAINERS = ("crm_kafka_init", "crm_seaweedfs_init")
+READY_TIMEOUT_S = 180.0
+READY_POLL_S = 3.0
+
+
+def _inspect(name: str, template: str) -> str:
+    proc = run(["docker", "inspect", "--format", template, name], 15)
+    return proc.stdout.strip() if proc.returncode == 0 else ""
+
+
+def stack_ready() -> bool:
+    """Core containers healthy and init jobs exited 0 (the state the checks below assume)."""
+    healthy = all(_inspect(n, "{{.State.Health.Status}}") == "healthy" for n in CORE_CONTAINERS)
+    inits_done = all(
+        _inspect(n, "{{.State.Status}} {{.State.ExitCode}}") == "exited 0" for n in INIT_CONTAINERS
+    )
+    return healthy and inits_done
+
+
+def wait_for_stack(
+    timeout_s: float = READY_TIMEOUT_S,
+    poll_s: float = READY_POLL_S,
+    *,
+    is_ready: Callable[[], bool] = stack_ready,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> float | None:
+    """Wait until the stack is ready; seconds waited, or None on timeout.
+
+    ``docker compose up -d`` returns once Kafka is healthy; the other containers may still be
+    ``starting`` and the init jobs still running. Without this wait a smoke test started right
+    after ``up -d`` failed one check on 2026-11-10 and passed on rerun. The checks stay strict:
+    on timeout they run anyway and report what is not ready.
+    """
+    start = clock()
+    while True:
+        if is_ready():
+            return clock() - start
+        if clock() - start >= timeout_s:
+            return None
+        sleep(poll_s)
 
 
 def check_container_health() -> None:
@@ -315,6 +364,11 @@ def report_resources() -> None:
 def main() -> int:
     print("CRM Lakehouse - strict smoke test v2 (profile: core)")
     if check_env_file():
+        waited = wait_for_stack()
+        if waited is None:
+            info(f"stack not ready after {READY_TIMEOUT_S:.0f} s - running the checks anyway")
+        else:
+            info(f"stack ready after {waited:.0f} s (healthy containers, init jobs exited 0)")
         check_container_health()
         check_http()
         check_kafka()

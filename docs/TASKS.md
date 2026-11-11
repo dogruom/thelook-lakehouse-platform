@@ -65,11 +65,14 @@ only server-side control for the D-032 merge gate.
 | W2.D11.2 | Spark Thrift Server (`sql` profile); `dbt debug`; probe models | done | W2.D11.1 | 0 | `f2f07f9`; dbt build spike PASS=8 ×2 |
 | W2.D11.3 | Decision recorded (Thrift or `session` fallback) in ADR-0004 spike section | done | W2.D11.2 | 0 | ADR-0004, D-060/D-061 |
 | W2.D11.close | Day close W2.D11 | done | W2.D11.3 | 0 | DAY_CLOSE_REPORTS W2.D11 |
-| W2.D12.1 | `docs/runbooks/m1-streaming-demo.md` | todo | W2.D11.close | 0 | |
-| W2.D12.2 | Full regression | todo | W2.D12.1 | 0 | |
-| W2.D12.3 | Milestone review (reviewer + evidence-auditor), README status, can/cannot-claim note | todo | W2.D12.2 | 0 | `v0.1.0` tag is owner-only |
-| W2.D12.close | Week/milestone close W2 (tutor deferred to owner session) | todo | W2.D12.3 | 0 | |
+| W2.D12.1 | `docs/runbooks/m1-streaming-demo.md` | done | W2.D11.close | 0 | demo on `aa7f9e9`; runbook `2aaa8d0` |
+| W2.D12.2 | Full regression | done | W2.D12.1 | 0 | `0ba2cc2`, `782ec39` |
+| W2.D12.3 | Milestone review (reviewer + evidence-auditor), README status, can/cannot-claim note | blocked-owner | W2.D12.2 | 0 | `0ba2cc2`, `782ec39`; only the `v0.1.0` tag is open (owner, V-18) |
+| W2.D12.close | Week/milestone close W2 (tutor deferred to owner session) | done | W2.D12.2 | 0 | `782ec39`, `2aaa8d0`; tag V-18 and tutor V-11 are owner items |
 | Q-001 | Run several Spark steps in one SparkSession / one submit (e.g. `bronze_stream` → `dlq_gate` → reports) to cut the ~30–60 s submit and JVM start per step in tests and demos | todo | W2.D12.close | 0 | Owner, 2026-11-09 (D-059): queued, not before D10; changes the job framework (D-044), so plan it with a design review |
+| Q-002 | Gate rules `kafka_key_missing` and `brand_header_missing` (SCHEMA_VIOLATION) + Spark tests; manifest stays unchanged (producer always sets both) | done | W3.D13 | 0 | M1 review MINOR 4, D-063; before Silver relies on the key |
+| Q-003 | Silver excludes `_parse_error IS NOT NULL` rows before any `brand_id` join; test with an unvalidated header brand | todo | W3.D14 | 0 | M1 review MINOR 5, D-063 |
+| Q-004 | Small M1 review leftovers: `bronze_report --table` choices; shared log-safe brand key helper in `lakehouse.common`; glossary line `rejected_duplicates` vs manifest `duplicates_removed`; Airflow image 2.9.3 placeholder → 3.x in W4 | done | W3 | 0 | M1 review MINOR 6 + nits |
 
 ## Owner approvals
 Open items the unattended run could not decide. The agent adds a row and stops that branch of

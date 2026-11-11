@@ -1,6 +1,6 @@
 # Verification register
 
-> **Version**: 1.2 · **Last updated**: 2026-11-10 (W2.D11) · Decision: D-055
+> **Version**: 1.3 · **Last updated**: 2026-11-11 (W2.D12, M1 close) · Decision: D-055
 
 One list of every statement that a day report marked "not verified". Each row has a class and an
 owner day, so nothing stays as an unowned caveat. Update this file whenever a day report names a
@@ -22,12 +22,24 @@ Classes: **Closed** (verified, evidence linked) · **Planned** (has a task and a
 | V-08 | `test_bronze_rows_equal_produced_messages…` failed once (`raw_customers 1 == 0`) and passed on rerun | Watch | Did not recur in the W2.D9 (21 passed) and W2.D10 day-close (34 passed) runs; keep watching, investigate on a second failure | A flaky test hides real regressions |
 | V-09 | Owner's local environment file holds a stale `COMPOSE_PROJECT_NAME` | Owner action | Owner edits the value (do not print the file) | Plain `docker compose` targets the wrong project |
 | V-10 | Legacy containers of the earlier incident and anonymous volume `5b2af2ca…` | Owner action | Owner decides keep or remove | Disk use only |
-| V-11 | Tutor learning gates W1, W2.D7, W2.D8, W2.D9 | Owner action | Learning queue in [TASKS.md](TASKS.md) | Owner cannot explain the work in interviews |
+| V-11 | Tutor learning gates W1 and W2.D7–D11 (M1 learning gate; round 1 asked 2026-11-11, answers pending) | Owner action | Learning queue in [TASKS.md](TASKS.md); owner returns to it after starting W3.D13 | Owner cannot explain the work in interviews |
 | V-12 | Spark rules accept a JSON number in a string field (`first_name: 5`) and differ from Pydantic on rare timestamp/integer forms (D-058, `rules.KNOWN_DIVERGENCES`) | Known limit | Revisit if a producer outside the Pydantic contracts is added | A non-conforming producer could pass a few wrong-typed values into Silver |
-| V-13 | Local Hive metastore schema has no foreign keys (DataNucleus auto-create without constraints, ADR-0004 W1) | Known limit | Replace with the official Hive 2.3 PostgreSQL schema script if the owner approves the download | Orphan metadata rows possible after a crash mid-DDL; local single-user catalog only |
+| V-13 | Local Hive metastore schema has no foreign keys (DataNucleus auto-create without constraints, ADR-0004 W1) | Known limit | Deferred (D-067): owner downloads the official Hive 2.3 PostgreSQL schema script only if wanted; prepared patch kept outside the repo | Orphan metadata rows possible after a crash mid-DDL; local single-user catalog only |
 | V-14 | dbt-spark gaps carried in the project: `spark__alter_column_comment` override, column-level `not_null` unusable on Delta (ADR-0004 W2/W3) | Known limit | Re-test on every dbt-spark upgrade (`dbt build --select spike`) | Override may drift from upstream; a removed workaround would break `persist_docs` |
 | V-15 | A running Spark job and dbt using the metastore at the same time (two embedded clients on one database) | Planned | W3 (first Gold models on Silver) | Lock waits or a stale table schema seen by one side |
 | V-16 | Spark Thrift Server has no authentication (published on 127.0.0.1 only; reachable from every container on the compose network) | Known limit | Local only; cloud targets use IAM/Glue or Databricks SQL auth (W5/W6) | A compromised local container could read/write the catalog and S3 data |
+| V-17 | Guard hook flags `--rm` / words such as `perform` as `rm` (regex has no left boundary); self-test cases for it are written but the fix is not applied | Owner action | Owner applies the two-line regex patch in `.claude/hooks/guard_commands.py` (`\brm` → `(?<![-\w])rm`; leading `\b(` of the Remove-Item rule → `(?<![-\w])(`), runs `python .claude/hooks/guard_commands.py --self-test`, commits the file (agents may not edit the guard) | False blocks on `docker compose run --rm` and on prose; the file stays uncommitted |
+| V-18 | Release tag `v0.1.0` for M1 | Owner action | After the W2.D12 PR is merged: `git checkout main; git pull; git tag -a v0.1.0 -m "M1: reliable streaming ingestion"; git push origin v0.1.0` | README and PROGRESS point to a release that does not exist |
+| V-19 | One `/security-review` run over M1 (owner-triggered command) | Owner action | Owner runs `/security-review` once on `main` after the merge | No independent security pass besides the reviewer agent |
+
+## Closed (2026-11-11, W2.D12)
+
+| Item (earlier wording) | Result | Evidence |
+|---|---|---|
+| Smoke test failed once right after `up -d` (2026-11-10, 23/24, rerun 24/24) | Cause: checks ran before init jobs finished; `smoke_test.py` waits up to 180 s for healthy services and init jobs exited 0 (D-066) | `0ba2cc2`; `tests/unit/scripts/test_smoke_wait.py` 4 passed; smoke after `up -d`: waited 8 s, 24/24 |
+| Integration runs leave `it_*` Bronze/DLQ/checkpoint data in the bucket | Session-end purge of every `it_*` namespace (`KEEP_IT_DATA=1` keeps it) (D-066) | `0ba2cc2`; integration 35 passed, purge without warnings (2026-11-11) |
+| NULL Kafka key / missing `brand_id` header passed the gate (M1 review) | Rules `kafka_key_missing`, `brand_header_missing` (D-064) | `0ba2cc2`; Spark container 291 passed |
+| Spark image base and connector JARs not pinned by digest/hash | Base pinned by index digest; 9 JARs verified with `sha256sum -c` (D-066) | `0ba2cc2`; image rebuilt, full regression green |
 
 ## Closed (2026-11-10, W2.D11)
 

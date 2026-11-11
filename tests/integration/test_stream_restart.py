@@ -131,7 +131,7 @@ class Env:
         out = run_ok([SKIP, "bronze_report", "--namespace", self.namespace])
         return dict(metrics(out)["tables"])
 
-    def assert_exactly_once(self) -> None:
+    def assert_each_offset_once(self) -> None:
         report = self.report()
         for table in TABLES:
             assert_each_offset_once(
@@ -164,7 +164,7 @@ def env(bootstrap_servers: str, make_topics: Callable[..., list[str]]) -> Env:
 def assert_each_offset_once(
     report_table: dict[str, Any], watermarks: Watermarks, produced: int, *, label: str = ""
 ) -> None:
-    """Bronze holds every produced offset of every partition exactly once."""
+    """Bronze holds every produced offset of every partition once: no gap, no duplicate."""
     assert sum(high - low for low, high in watermarks.values()) == produced, label
     assert report_table["rows"] == produced, f"{label}: rows"
     assert report_table["distinct_source_refs"] == produced, f"{label}: distinct_source_refs"
@@ -226,21 +226,21 @@ def _crash_restart(env: Env, fault: str, table: str) -> None:
     restart = run_ok(env.job_args())
     assert _first_started_batch(restart, table) == 2, "restart did not replay the crashed batch"
     assert _query_ids(restart)[table] == first_ids[table], "restart must reuse the query lineage"
-    env.assert_exactly_once()
+    env.assert_each_offset_once()
 
 
 # ---- scenarios ------------------------------------------------------------------------------
 
 
-def test_s1_crash_after_write_replays_batch_and_stays_exactly_once(env: Env) -> None:
+def test_s1_crash_after_write_replays_batch_and_keeps_offsets_unique(env: Env) -> None:
     _crash_restart(env, "crash_after_write", CDC_TABLE)
 
 
-def test_s2_crash_before_write_replays_batch_and_stays_exactly_once(env: Env) -> None:
+def test_s2_crash_before_write_replays_batch_and_keeps_offsets_unique(env: Env) -> None:
     _crash_restart(env, "crash_before_write", CLICK_TABLE)
 
 
-def test_s3_external_sigkill_of_the_driver_then_restart_is_exactly_once(env: Env) -> None:
+def test_s3_external_sigkill_of_the_driver_then_restart_keeps_offsets_unique(env: Env) -> None:
     env.produce_all()
     job = submit_streaming(
         env.job_args(max_offsets=SLOW_MAX_OFFSETS, skip_build=False),
@@ -258,10 +258,10 @@ def test_s3_external_sigkill_of_the_driver_then_restart_is_exactly_once(env: Env
     assert not _succeeded(out)
 
     run_ok(env.job_args())
-    env.assert_exactly_once()
+    env.assert_each_offset_once()
 
 
-def test_s4_exception_in_callback_fails_job_then_restart_is_exactly_once(env: Env) -> None:
+def test_s4_exception_in_callback_fails_job_then_restart_keeps_offsets_unique(env: Env) -> None:
     env.produce_all()
     code, out = submit(env.fault_args("raise_in_callback", CDC_TABLE, 1, skip_build=False))
     assert code == 1, f"expected exit 1; tail:\n{out[-2000:]}"
@@ -280,7 +280,7 @@ def test_s4_exception_in_callback_fails_job_then_restart_is_exactly_once(env: En
     restart = run_ok(env.job_args())
     # The batch whose callback raised had no commit-log entry, so the restart plans it again.
     assert _first_started_batch(restart, CDC_TABLE) == 1, "restart did not replay batch 1"
-    env.assert_exactly_once()
+    env.assert_each_offset_once()
 
 
 def test_s5_checkpoint_loss_measurement_of_reread_amount(env: Env) -> None:
@@ -288,7 +288,7 @@ def test_s5_checkpoint_loss_measurement_of_reread_amount(env: Env) -> None:
     env.produce_all()
     first = run_ok(env.job_args(skip_build=False))
     first_ids = _query_ids(first)
-    env.assert_exactly_once()
+    env.assert_each_offset_once()
 
     second = run_ok(env.job_args(extra=["--checkpoint-namespace", f"fresh_{uuid.uuid4().hex[:6]}"]))
     second_ids = _query_ids(second)
@@ -359,7 +359,9 @@ def test_s6_retention_gap_fails_loudly_and_leaves_bronze_unchanged(env: Env) -> 
         assert unchanged[table]["distinct_source_refs"] == before[table]["distinct_source_refs"]
 
 
-def test_s8_empty_topics_create_empty_tables_then_data_arrives_exactly_once(env: Env) -> None:
+def test_s8_empty_topics_create_empty_tables_then_data_arrives_with_unique_offsets(
+    env: Env,
+) -> None:
     # Measured: a first run on empty topics plans one zero-row batch, so Delta creates the table
     # with its schema and zero rows. A second empty run plans nothing.
     queries = metrics(run_ok(env.job_args(skip_build=False)))["queries"]
@@ -374,7 +376,7 @@ def test_s8_empty_topics_create_empty_tables_then_data_arrives_exactly_once(env:
 
     env.produce_all()
     run_ok(env.job_args())
-    env.assert_exactly_once()
+    env.assert_each_offset_once()
 
 
 def _delete_checkpoint_logs(namespace: str, table: str) -> None:
@@ -410,7 +412,7 @@ def _rows(report: dict[str, Any]) -> dict[str, int]:
     return {table: int(report[table]["rows"]) for table in TABLES}
 
 
-def test_s7_broker_outage_then_restart_is_exactly_once(env: Env) -> None:
+def test_s7_broker_outage_then_restart_keeps_offsets_unique(env: Env) -> None:
     if os.environ.get("RUN_BROKER_CHAOS") != "1":
         pytest.skip("broker chaos is opt-in: set RUN_BROKER_CHAOS=1")
     env.produce_all()
@@ -436,7 +438,7 @@ def test_s7_broker_outage_then_restart_is_exactly_once(env: Env) -> None:
     print(f"S7_OUTCOME: exit={code} duration={time.monotonic() - started:.0f}")
 
     run_ok(env.job_args())
-    env.assert_exactly_once()
+    env.assert_each_offset_once()
 
 
 def _wait_for_broker(servers: str, timeout_s: float = 120.0) -> None:
