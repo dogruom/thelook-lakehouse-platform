@@ -9,6 +9,27 @@
 
 ---
 
+## W3.D13 · Batch landing and Bronze batch ingest — closed 2026-11-11
+
+**Executive summary.** The platform now has its second way in: besides events from Kafka, order
+and product files dropped into a landing folder reach Bronze with the same guarantees — the
+integration test shows one Bronze row per landed line, each pointing back to its file and line; a
+rerun adds nothing (the checkpoint remembers processed files and each write is idempotent), and
+each test run can be isolated in its own folder. The order data carries realistic
+defects with a manifest that says, line by line, what should happen to each one later.
+- **Delivered**: W3.D13.1 ✅ orders/products generator, S3 landing writer, `land` CLI · W3.D13.2 ✅ `bronze_batch` · W3.D13.3 ✅ integration count test.
+- **Evidence**: `be2ae2b`; unit 1293 passed / 1 skipped, coverage 83 %; Spark batch tests 14 passed, full Spark 307 passed; integration `test_bronze_batch.py` 7 passed (rerun on the final tree, 173 s) — rows per file = manifest line count, `sales_channel` NULL before batch 10, rerun adds nothing; `land --dry-run` byte-identical across runs; ruff/mypy/import-linter clean.
+- **Reviews / audit**: code review APPROVE WITH NITS — should-fix: docstring overclaimed `mergeSchema` as the cause of `sales_channel` (it is the contract projection), run-level defect budget untested at fractional rates; nits: vacuous cross-tenant test, missing wrong-type / empty-file / rewound-checkpoint tests; all applied, contract wording aligned (v7.8). `evidence-auditor`: 7 MISMATCH, all docs — exactly-once-sounding summary sentence, writer retry wording, Spark/integration counts from before the review fixes (both suites rerun on the final tree), "landing write" vs Bronze write in DATA_CONTRACTS, missing close hash, merge status pending by convention; fixed. Auditor re-runs: unit 1293/1 skipped, 83 %, `land --dry-run` byte-identical (78 files).
+- **Decisions**: D-069 late-parent defect deferred to W3.D17, namespaced landing · D-070 orders generator rules · D-071 `bronze_batch` design.
+- **Found during the day (not in the plan)**: a namespaced `bronze_batch` run read every landing file in the bucket (found by the test-author before the integration test was written; fixed, D-069); Spark `from_json` keeps a wrong-typed field as NULL without a parse error (V-20, input for the W3.D17 gate).
+- **Not verified / limitations**: V-20 wrong-typed lines need the orders gate (W3.D17) · V-21 landing keys must stay immutable · V-22 boto3 writer only against moto, not SeaweedFS (W5.D27).
+- **Carry-overs**: none.
+- **Learning queued**: incremental file ingestion, line lineage, path vs payload brand, schema evolution, PERMISSIVE parsing (TASKS Learning queue).
+- **Next**: W3.D14 Silver customers (with D14.0 late CDC generator, Q-003).
+- **Merge status**: _pending — filled after PR / CI_.
+
+---
+
 ## W2.D12 · M1 review, demo and release — closed 2026-11-11
 
 **Executive summary.** Milestone 1 (reliable streaming ingestion) is technically complete. The demo
@@ -24,7 +45,7 @@ needs the owner: the `v0.1.0` tag, the learning gate and a few local clean-ups.
 - **Carry-overs**: none for M1 code. Q-003 (Silver `_parse_error` exclusion) belongs to W3.D14; D-030 late CDC to W3.D14.0.
 - **Learning**: M1 learning gate started (round 1 asked); owner continues it later (V-11).
 - **Next**: W3.D13 batch landing + Bronze batch.
-- **Merge status**: _pending — filled after PR / CI_.
+- **Merge status**: PR [#13](https://github.com/dogruom/thelook-lakehouse-platform/pull/13) merged as `ac239b3` (merge commit) on 2026-11-11 under D-032: PR CI green (lint/types/boundaries/unit, gitleaks), `main` CI [run 42931477510](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/42931477510) success.
 
 ---
 
@@ -46,7 +67,7 @@ decision is to keep the Thrift Server, no fallback needed.
 - **Risks**: Thrift Server holds 1 of the 2 worker cores — stop it before job runs and integration tests (`docker compose --profile sql stop spark-thrift`).
 - **Learning queued**: Hive metastore internals, external Delta tables, Thrift/JDBC, dbt adapter capability limits (TASKS Learning queue).
 - **Next**: W2.D12 (M1 review, demo and release).
-- **Merge status**: _pending — filled after PR / CI_.
+- **Merge status**: PR [#12](https://github.com/dogruom/thelook-lakehouse-platform/pull/12) merged as `aa7f9e9` (merge commit) under D-032; `main` CI [run 42722466999](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/42722466999) success.
 
 ## W2.D10 🔺 · Validation gate and DLQ — closed 2026-11-09
 

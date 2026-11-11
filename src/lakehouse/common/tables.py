@@ -74,6 +74,8 @@ CATALOG_TABLES: Mapping[str, TableSpec] = MappingProxyType(
         for spec in (
             TableSpec("bronze", "bronze", "raw_customers"),
             TableSpec("bronze", "bronze", "raw_clickstream"),
+            TableSpec("bronze", "bronze", "raw_orders"),
+            TableSpec("bronze", "bronze", "raw_products"),
             TableSpec("dead_letter", "dead_letter", "dlq_customers"),
             TableSpec("dead_letter", "dead_letter", "dlq_clickstream"),
         )

@@ -69,6 +69,10 @@ only server-side control for the D-032 merge gate.
 | W2.D12.2 | Full regression | done | W2.D12.1 | 0 | `0ba2cc2`, `782ec39` |
 | W2.D12.3 | Milestone review (reviewer + evidence-auditor), README status, can/cannot-claim note | blocked-owner | W2.D12.2 | 0 | `0ba2cc2`, `782ec39`; only the `v0.1.0` tag is open (owner, V-18) |
 | W2.D12.close | Week/milestone close W2 (tutor deferred to owner session) | done | W2.D12.2 | 0 | `782ec39`, `2aaa8d0`; tag V-18 and tutor V-11 are owner items |
+| W3.D13.1 | Orders + products generator, S3 landing writer, `land` CLI | done | W2.D12.close | 0 | `be2ae2b` |
+| W3.D13.2 | `ingestion.bronze_batch` (file source, exact line refs, namespaced landing) | done | W3.D13.1 | 0 | `be2ae2b` |
+| W3.D13.3 | Integration count test landing → Bronze | done | W3.D13.2 | 0 | `be2ae2b`; 7 passed |
+| W3.D13.close | Day close W3.D13 (tutor queued) | done | W3.D13.3 | 0 | `a2f204b` |
 | Q-001 | Run several Spark steps in one SparkSession / one submit (e.g. `bronze_stream` → `dlq_gate` → reports) to cut the ~30–60 s submit and JVM start per step in tests and demos | todo | W2.D12.close | 0 | Owner, 2026-11-09 (D-059): queued, not before D10; changes the job framework (D-044), so plan it with a design review |
 | Q-002 | Gate rules `kafka_key_missing` and `brand_header_missing` (SCHEMA_VIOLATION) + Spark tests; manifest stays unchanged (producer always sets both) | done | W3.D13 | 0 | M1 review MINOR 4, D-063; before Silver relies on the key |
 | Q-003 | Silver excludes `_parse_error IS NOT NULL` rows before any `brand_id` join; test with an unvalidated header brand | todo | W3.D14 | 0 | M1 review MINOR 5, D-063 |
@@ -92,3 +96,4 @@ Tutor gates deferred by the unattended run (D-041). Each row → one tutor sessi
 | W2.D8 | Kafka source options, `foreachBatch` vs Delta sink, checkpoints, Delta `txnAppId`/`txnVersion`, parse errors vs contract failures | `python scripts/submit_job.py bronze_report`; [DATA_FLOW.md](DATA_FLOW.md) step 9 | open |
 | W2.D10 | Validation as data (rules as columns), error taxonomies (code → category → retryable), quarantine/DLQ patterns, insert-only MERGE, null-safe join (`<=>`), independent post-write checks, log masking | `python scripts/submit_job.py dlq_report --list-refs`; [DATA_FLOW.md](DATA_FLOW.md) step 10 | open |
 | W2.D11 | Hive metastore internals (DBS/TBLS/SDS in Postgres, embedded client vs metastore service), external Delta tables by name, Thrift/JDBC, dbt adapter capability limits (merge, composite `unique_key`, contracts vs Delta constraints, `persist_docs`) | `beeline … -e "SHOW TABLES IN bronze"`; `dbt build --select spike`; [ADR-0004](adr/0004-spark-dbt-ownership-and-adapter-capabilities.md) | open |
+| W3.D13 | Incremental file ingestion (Auto Loader concept on OSS: file-source checkpoint tracks processed files), exact line lineage, path brand vs payload brand, schema evolution (contract projection vs `mergeSchema`), PERMISSIVE parsing of wrong types, landing manifests as completion markers | `python -m lakehouse.generator land --dry-run --out-dir build/landing`; [DATA_FLOW.md](DATA_FLOW.md) steps 6a, 9a | open |

@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-05 (v9.0: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W2.D12 closed** (M1: 36/37 ✅, `v0.1.0` tag owner-only) → next **W3.D13** (batch landing + Bronze batch)
+> **Active**: **W3.D13 closed** (3/3 ✅) → next **W3.D14** (Silver customers: sequence-ordered CDC MERGE) · M1: 36/37 ✅ (`v0.1.0` tag owner-only)
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,17 +13,17 @@
 
 ## Current State
 
-- **Updated**: 2026-11-11 (W2.D12 closed; M1 complete except the owner-only `v0.1.0` tag) · **Branch**: `feat/w2-d12-m1-release`; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
-- **Last delivered**: W2.D12.1–D12.2 ✅, D12.3 🔄 (tag) — demo runbook recorded from a stopped stack ([m1-streaming-demo.md](runbooks/m1-streaming-demo.md), 16 min 11 s); M1 review fixes: transport gate rules (D-064), shared brand key (D-065), smoke readiness wait, `it_*` purge, digest/SHA-256-pinned Spark image (D-066); README can/cannot-claim section. V-13 deferred (D-067).
+- **Updated**: 2026-11-11 (W3.D13 closed; M1 merged as `ac239b3`, only owner items left) · **Branch**: `feat/w3-d13-batch-landing`; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
+- **Last delivered**: W3.D13.1–D13.3 ✅ (`be2ae2b`) — orders/products generator + S3 landing writer + `land` CLI (D-070), `bronze_batch` file ingest with exact line refs and namespaced landing (D-069, D-071), integration count test 7 passed. Before: W2.D12 M1 release (PR #13, `ac239b3`).
 - **Unfinished**: M1 learning gate (V-11; round 1 questions asked 2026-11-11, owner answers pending) — owner returns to it later.
-- **Tests & results**: M1 release regression 2026-11-11 on the rebuilt image: unit 1222 passed, 1 skipped; Spark 291 passed; integration 35 passed incl. broker chaos (1 h 24 min); ruff/mypy/import-linter clean. After the post-review fixes (`782ec39`): unit 1222/1 skipped, Spark 293.
+- **Tests & results**: W3.D13 close: unit 1293 passed, 1 skipped, coverage 83 %; Spark full suite 307 passed (final tree, incl. 14 batch-file tests); integration `test_bronze_batch.py` 7 passed (final tree, 173 s); ruff/mypy/import-linter clean. M1 release regression (2026-11-11): integration 35 passed incl. broker chaos.
 - **Test cadence (D-059)**: only the relevant tests while developing, full suite once per day close; broker chaos opt-in (`RUN_BROKER_CHAOS=1`). Single-SparkSession multi-step runner queued as TASKS Q-001.
 - **Owner action (the only open M1 items)** — rows in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) class *Owner action*: V-17 guard-hook regex patch + `--self-test` + commit · V-18 `v0.1.0` tag after merge · V-11 M1 learning gate · V-19 one `/security-review` run · V-10 remove the legacy anonymous volume · V-09 fix `COMPOSE_PROJECT_NAME` in the local env file · V-13 (deferred, D-067) download the official Hive 2.3 schema only if wanted.
-- **Stack**: stopped. Thrift Server needs `--profile sql` and takes 1 of 2 worker cores: stop it before jobs/integration tests.
+- **Stack**: Thrift Server needs `--profile sql` and takes 1 of 2 worker cores: stop it before jobs/integration tests. Core stack currently running (W3.D13 tests).
 - **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; Glue 5.0 (ADR-0011); Databricks Free Edition W6 (ADR-0012); budget ≤ USD 50; contracts strict producer / tolerant consumer; Silver gate order DLQ → dedup → MERGE (D-022); outcome precedence DLQ → DUPLICATE → NOOP → ACCEPT (D-023/D-029); jobs resolved by convention, `--py-files` zip (D-044); money and timestamps strings until Silver (D-045); stable parse codes (D-047); writers own the location, readers use the catalog name (D-060); dbt via Thrift in `.venv-dbt` (D-061); missing Kafka key / `brand_id` header → DLQ (D-064).
 - **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); open items in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) (D-030 late CDC → W3.D14.0; Silver `_parse_error` exclusion → W3.D14, Q-003; metastore concurrency job + dbt → W3, V-15; Delta commit safety on S3 → W5).
 - **Way of working**: Claude implements everything, priority is speed, every pipeline step is mapped in [DATA_FLOW.md](DATA_FLOW.md) (D-046); every decision in DECISION_LOG; per-session trace in [SESSION_LOG.md](SESSION_LOG.md).
-- **Next task ("Start today's task")**: **W3.D13** — batch landing (orders + products, boto3 landing writer, manifest) and `ingestion.bronze_batch` (DELIVERY_PLAN D13 card). Owner, 2026-11-11: continue with W3.D13; the M1 learning gate is revisited later.
+- **Next task ("Start today's task")**: **W3.D14** — `silver_customers`: sequence-ordered CDC MERGE, tombstones, HMAC email token, phone mask, `stale_cdc_noop` (DELIVERY_PLAN D14 card). First W3.D14.0: generator late CDC (D-030, V-01) and Q-003 (`_parse_error` exclusion). Needs an HMAC key placeholder in `.env.example` (owner sets the real value).
 - **Autonomous run**: not started (setup on `chore/autonomous-run`, D-041/D-042)
 
 ---
@@ -52,7 +52,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 
 ```
 M1 (D1–D12)   [███████████████████░] 36 / 37
-M2 (D13–D24)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
+M2 (D13–D24)  [██░░░░░░░░░░░░░░░░░░]  3 / 35
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 ```
 
@@ -244,9 +244,9 @@ Evidence:
 ### Week 3
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
-| W3.D13.1 | Orders + products + landing writer | orders embed items; product seed per brand; boto3 writer with retries; manifest per batch; `sales_channel` from batch 10 | `pytest tests/unit/generator/test_landing.py -q` (moto) | ⏳ |
-| W3.D13.2 | `ingestion.bronze_batch` | incremental file source; `_source_ref` file + line; `mergeSchema` | job run | ⏳ |
-| W3.D13.3 | Batch count test | Bronze rows = landed rows; schema evolution visible | `pytest tests/integration/test_bronze_batch.py -q` | ⏳ |
+| W3.D13.1 | Orders + products + landing writer | orders embed items; product seed per brand; boto3 writer with retries; manifest per batch; `sales_channel` from batch 10 | `pytest tests/unit/generator/test_landing.py -q` (moto) | ✅ |
+| W3.D13.2 | `ingestion.bronze_batch` | incremental file source; `_source_ref` file + line; `mergeSchema` | job run | ✅ |
+| W3.D13.3 | Batch count test | Bronze rows = landed rows; schema evolution visible | `pytest tests/integration/test_bronze_batch.py -q` | ✅ |
 | W3.D14.1 | `silver_customers` | dedup to max sequence; MERGE guarded by sequence; tombstones; HMAC token; phone mask; `stale_cdc_noop` metric | job run | ⏳ |
 | W3.D14.2 | Merge unit tests | I/U/D, stale, duplicate on tiny frames | `pytest tests/spark/test_silver_customers.py -q` | ⏳ |
 | W3.D15.1 | 🔺 CDC suite | 6 scenarios pass | `pytest tests/integration/test_cdc_correctness.py -q` | ⏳ |
@@ -262,7 +262,14 @@ Evidence:
 | W3.D18.3 | 🔺 Tenant isolation | per-tenant counts = manifest; joins keyed on `brand_id`; leaky fixture fails; scoped views | `pytest tests/integration/test_tenant_isolation.py -q` | ⏳ |
 | W3.D18.4 | ADR-0003, ADR-0005 | written and linked | file review | ⏳ |
 
-**Evidence**: _—_ · **Week 3 checkpoint**: _not run_
+**Evidence**:
+- W3.D13.1: `be2ae2b` — orders (embedded items, 4 defect kinds, run-level exact budget, duplicates within/across batches, `sales_channel` key from batch 10), product seed per brand, S3 landing writer (data first, manifest last, bounded retries), `land` CLI (D-069, D-070). `pytest tests/unit/generator -q` → 437 passed (incl. `test_landing.py` with moto: keys, write order, sha256/line count, idempotent rerun, retry, exhausted retries); same seed twice → byte-identical `--dry-run` trees (78 files).
+- W3.D13.2: `be2ae2b` — `bronze_batch` (`availableNow` file source, `*.ndjson` only, `wholetext` + exact `#L<n>` refs, path brand + `payload_brand_id`, idempotent per micro-batch, `--namespace` isolates landing, D-071); `raw_orders`/`raw_products` in `CATALOG_TABLES`. Spark container `tests/spark/test_bronze_batch.py` **14 passed** (refs, blank lines, invalid UTF-8, evolution via `mergeSchema` append, namespaced landing, wrong-type JSON pinned, 0-byte file, rewound checkpoint); full Spark suite **307 passed** on the final tree (Kafka path unchanged by the `append_idempotent` refactor).
+- W3.D13.3: `tests/integration/test_bronze_batch.py` against the core stack → **7 passed** (190 s; rerun on the final tree `a2f204b`: 7 passed, 173 s): rows per file = manifest line count, totals = landed lines (orders + products), refs unique and existing with path brand, `sales_channel` NULL before batch 10 and set from 10, 0 parse errors, rerun adds nothing, a new batch adds only its lines.
+- Gates: ruff/format/mypy (46 files)/import-linter clean; unit **1293 passed, 1 skipped**, coverage **83 %**; smoke 24/24.
+- Review: APPROVE WITH NITS; should-fix (mergeSchema docstring overclaim, untested run-level defect budget) and nits (vacuous cross-tenant test, wrong-type/empty-file/rewound tests, immutable landing keys note) applied in `be2ae2b`; contract wording aligned (DATA_CONTRACTS v7.8).
+
+**Week 3 checkpoint**: _not run_
 
 ### Week 4
 | ID | Task | Acceptance | Verify | Status |

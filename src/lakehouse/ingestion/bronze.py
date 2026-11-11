@@ -200,6 +200,39 @@ def _check_skipped_write_is_replay(
     )
 
 
+def append_idempotent(
+    rows: DataFrame,
+    path: str,
+    *,
+    app_id: str,
+    batch_id: int,
+    partition_by: tuple[str, ...] = (),
+    merge_schema: bool = False,
+) -> None:
+    """Append Bronze ``rows`` once per (``app_id``, ``batch_id``) and guard a skipped write.
+
+    ``rows`` must carry ``_source_ref`` and a ``_batch_id`` of ``<app_id>:<batch_id>``. A write that
+    Delta skipped (table version unchanged) must be a true replay of the stored batch, else
+    :class:`CheckpointRewoundError`. ``merge_schema`` lets an additive column evolve the table
+    (file sources); the Kafka path keeps it off so that a drift fails loudly.
+    """
+    writer = (
+        rows.write.format("delta")
+        .mode("append")
+        .option("txnAppId", app_id)
+        .option("txnVersion", batch_id)
+    )
+    if merge_schema:
+        writer = writer.option("mergeSchema", "true")
+    if partition_by:
+        writer = writer.partitionBy(*partition_by)
+    spark = rows.sparkSession
+    version_before = _table_version(spark, path)
+    writer.save(path)
+    if _table_version(spark, path) == version_before:
+        _check_skipped_write_is_replay(spark, rows, path, app_id=app_id, batch_id=batch_id)
+
+
 def write_bronze_batch(
     batch_df: DataFrame, path: str, *, target: BronzeTarget, app_id: str, batch_id: int
 ) -> BatchCounts:
@@ -215,19 +248,9 @@ def write_bronze_batch(
     batch_df.persist(StorageLevel.MEMORY_AND_DISK)
     try:
         rows = to_bronze_rows(batch_df, target, f"{app_id}:{batch_id}")
-        writer = (
-            rows.write.format("delta")
-            .mode("append")
-            .option("txnAppId", app_id)
-            .option("txnVersion", batch_id)
+        append_idempotent(
+            rows, path, app_id=app_id, batch_id=batch_id, partition_by=target.partition_by
         )
-        if target.partition_by:
-            writer = writer.partitionBy(*target.partition_by)
-        spark = batch_df.sparkSession
-        version_before = _table_version(spark, path)
-        writer.save(path)
-        if _table_version(spark, path) == version_before:
-            _check_skipped_write_is_replay(spark, rows, path, app_id=app_id, batch_id=batch_id)
         counts = rows.agg(
             F.count(F.lit(1)).alias("seen"), F.count(F.col("_parse_error")).alias("errors")
         ).first()
