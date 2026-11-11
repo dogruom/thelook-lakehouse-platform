@@ -21,10 +21,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from lakehouse.common.brand_key import brand_key
 from lakehouse.common.jobs import SparkJob
 from lakehouse.common.logging import get_logger
 from lakehouse.common.tables import TableSpec, read_delta, resolve, table_exists
-from lakehouse.contracts.models import BRAND_ID_PATTERN
 
 
 if TYPE_CHECKING:
@@ -44,10 +44,6 @@ NULL_COUNT_COLUMNS = (
     "_kafka_ts",
     "brand_id",
 )
-NULL_BRAND_KEY = "__null__"
-INVALID_BRAND_KEY = "__invalid__"
-# Java's ``$`` also matches before a trailing newline; ``\z`` is the true end of input.
-_BRAND_RLIKE = BRAND_ID_PATTERN.removesuffix("$") + r"\z"
 _log = get_logger(__name__)
 
 
@@ -66,6 +62,7 @@ class BronzeReportJob(SparkJob):
             "--table",
             action="append",
             default=None,
+            choices=DEFAULT_TABLES,
             help="Bronze table name (repeatable; default: raw_customers and raw_clickstream)",
         )
 
@@ -106,14 +103,9 @@ class BronzeReportJob(SparkJob):
                 .agg(F.count(F.lit(1)).alias("n"))
                 .collect()
             }
-            brand_key = (
-                F.when(F.col("brand_id").isNull(), F.lit(NULL_BRAND_KEY))
-                .when(F.col("brand_id").rlike(_BRAND_RLIKE), F.col("brand_id"))
-                .otherwise(F.lit(INVALID_BRAND_KEY))
-            )
             by_brand = {
                 str(r["brand_key"]): int(r["n"])
-                for r in df.groupBy(brand_key.alias("brand_key"))
+                for r in df.groupBy(brand_key().alias("brand_key"))
                 .agg(F.count(F.lit(1)).alias("n"))
                 .collect()
             }

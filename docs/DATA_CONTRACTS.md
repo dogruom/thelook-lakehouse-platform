@@ -1,7 +1,7 @@
 # Data Contracts & Medallion Specifications
 
-> **Document Version**: 7.4
-> **Last Updated**: 2026-11-09 (v7.4: Bronze metadata columns as built §3.1, stable `_parse_error` codes, headers persisted, no `mergeSchema` on Bronze, D-047; v7.3: CDC ground-truth manifest §2.1.1, gate order and outcome precedence §4.1; v7.2: `event_id`/`schema_version`/`produced_at` payload fields, duplicate CDC defect, producer/consumer unknown-field rule, 2-decimal money strings; v7.1: orders carry embedded line items; static product seed; `schema_version` in the envelope; schema-evolution demo moved to orders; reconciliation adds `stale_cdc_noop` — DELIVERY_PLAN v8, ADR-0009)
+> **Document Version**: 7.6
+> **Last Updated**: 2026-11-10 (v7.6: gate transport rules `kafka_key_missing` / `brand_header_missing`, `rejected_duplicates` vs `duplicates_removed` glossary, Q-002/Q-004; v7.5: DLQ envelope §3.2 as built — `_rejection_codes`, `event_id`, Kafka `_bronze_ref`, `PARSE_ERROR` reserved, D-062; v7.4: Bronze metadata columns as built §3.1, stable `_parse_error` codes, headers persisted, no `mergeSchema` on Bronze, D-047; v7.3: CDC ground-truth manifest §2.1.1, gate order and outcome precedence §4.1; v7.2: `event_id`/`schema_version`/`produced_at` payload fields, duplicate CDC defect, producer/consumer unknown-field rule, 2-decimal money strings; v7.1: orders carry embedded line items; static product seed; `schema_version` in the envelope; schema-evolution demo moved to orders; reconciliation adds `stale_cdc_noop` — DELIVERY_PLAN v8, ADR-0009)
 > **Status**: 🟡 DRAFT — aligned with [PROJECT_CHARTER.md](PROJECT_CHARTER.md) v7. **Not yet enforced in code**; each contract becomes enforced when the corresponding PROGRESS task is ✅ with evidence.
 > **Target Platform**: Multi-Tenant CRM Lakehouse (Delta Lake OSS locally; cloud targets documented separately)
 
@@ -305,28 +305,39 @@ Contract and integrity failures detected at the **Bronze → Silver gate** are w
 
 ```json
 {
-  "_dlq_id": "8f3b1e72-51a8-43d9-95a2-c128f73b64bc",
+  "_dlq_id": "<sha256 of coalesce(brand_id,'') | _source_table | _source_ref>",
   "brand_id": "brand_alpha",
-  "_source_table": "bronze.raw_orders",
-  "_bronze_ref": "landing/brand_alpha/orders/2026-10-20/batch_0007.json#L42",
-  "_error_category": "REFERENTIAL_INTEGRITY_VIOLATION",
-  "_rejection_reason": "Foreign key (brand_alpha, 9f82d1c0-0000) not found in silver.customers",
-  "_retryable": true,
+  "_source_table": "bronze.raw_customers",
+  "_bronze_ref": "customer_cdc/2/1187",
+  "event_id": "5b0f3c1e-8d2a-4f61-9c4e-2a7d9e1b6f30",
+  "_error_category": "SCHEMA_VIOLATION",
+  "_rejection_reason": "email_invalid",
+  "_rejection_codes": ["email_invalid"],
+  "_retryable": false,
   "_replay_status": "PENDING",
   "_replay_count": 0,
-  "_rejected_at": "2026-10-20T02:15:30.124Z",
-  "_pipeline_run_id": "bronze_to_silver_20261020_02"
+  "_rejected_at": "2026-11-10T18:31:02.114Z",
+  "_pipeline_run_id": "dlq_gate_20261110T183050Z_1a2b3c4d"
 }
 ```
+As built in M1 (D-057, D-062): stream entities only; `_bronze_ref` = the Bronze `_source_ref`
+(`topic/partition/offset`); a landing-file reference (`landing/...#L<n>`) applies to file-based
+entities from M2. `_rejection_codes` lists every failing rule code (stable codes, D-056);
+`_rejection_reason` joins them with `", "`. One Kafka message maps to one `_dlq_id`.
 
 | Field | Rule |
 |---|---|
-| `_error_category` | ENUM: `PARSE_ERROR`, `SCHEMA_VIOLATION`, `BUSINESS_RULE_VIOLATION`, `REFERENTIAL_INTEGRITY_VIOLATION`, `TIMESTAMP_OUT_OF_BOUNDS` |
+| `_error_category` | ENUM: `PARSE_ERROR`, `SCHEMA_VIOLATION`, `BUSINESS_RULE_VIOLATION`, `REFERENTIAL_INTEGRITY_VIOLATION`, `TIMESTAMP_OUT_OF_BOUNDS`. `PARSE_ERROR` is reserved and not written: parse failures stay in Bronze with `_parse_error` (§3.1, D-056) |
+| `_rejection_codes` | `ARRAY<STRING>`, non-empty: every failing rule code of `lakehouse.quality.rules`, in rule order; `_error_category` and `_retryable` follow the first hit and any hit respectively |
+| `event_id` | Payload `event_id` as a string (may be NULL or invalid for a rejected row; masked in reports) |
 | `_retryable` | `true` only when the failure can resolve later (e.g. late parent) |
 | `_replay_status` | ENUM: `PENDING`, `REPLAYED`, `FAILED_AGAIN`, `DISCARDED` (discard is an audited manual action) |
+| Transport rules (Q-002) | Part of the envelope rules in `lakehouse.quality.rules`, `SCHEMA_VIOLATION`, `_retryable = false`, applied to both stream tables and to parsed rows only (rows with `_parse_error` stay in Bronze). `kafka_key_missing`: `_kafka_key` is NULL or empty. `brand_header_missing`: no `brand_id` header in `_kafka_headers`, or its value is NULL. `brand_key_mismatch` / `brand_header_mismatch` fire only when the key / header is present. These are Kafka-transport checks with no Pydantic counterpart. |
 | Replay | Preserves `event_id` and `_bronze_ref`; replaying the same subset twice creates no Silver duplicates |
 
 **Reconciliation invariant (per batch, counted in events)**: `input = bronze` and `bronze = silver_accepted + dlq + duplicates_removed + stale_cdc_noop + late_beyond_window`, checked against the generator's ground-truth manifest. `stale_cdc_noop` counts CDC events whose `_cdc_sequence` is not newer than the Silver state. All terms are written to `ops.pipeline_metrics`.
+
+**Duplicate terms (do not mix them)**: `rejected_duplicates` (extra copies of an already rejected `_dlq_id` inside one gate run) and `bronze_duplicate_rows` (`rows_read - distinct _source_ref`, i.e. a re-read of the same Kafka offsets) are M1 gate counters and are not reconciliation terms; `duplicates_removed` is the manifest/reconciliation term for duplicate CDC events removed by Silver dedup (M2).
 
 **Injection is exact, not probabilistic**: the generator selects exactly `round(n × rate)` records per defect type with a seeded RNG, so tests assert exact counts against the manifest; the ± tolerances above describe the configured rate only.
 

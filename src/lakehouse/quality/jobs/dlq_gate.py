@@ -46,6 +46,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from lakehouse.common.brand_key import brand_key
 from lakehouse.common.jobs import SparkJob
 from lakehouse.common.logging import get_logger
 from lakehouse.common.tables import (
@@ -57,7 +58,6 @@ from lakehouse.common.tables import (
     table_exists,
     verify_location,
 )
-from lakehouse.contracts.models import BRAND_ID_PATTERN
 from lakehouse.quality.rules import RULES_BY_TABLE, apply_rules
 
 
@@ -71,27 +71,11 @@ if TYPE_CHECKING:
 
 DEFAULT_TABLES = tuple(RULES_BY_TABLE)
 DLQ_TABLE_BY_BRONZE = {"raw_customers": "dlq_customers", "raw_clickstream": "dlq_clickstream"}
-NULL_BRAND_KEY = "__null__"
-INVALID_BRAND_KEY = "__invalid__"
-# Java's ``$`` also matches before a trailing newline; ``\z`` is the true end of input.
-_BRAND_RLIKE = BRAND_ID_PATTERN.removesuffix("$") + r"\z"
 _log = get_logger(__name__)
 
 
 class ReconciliationError(RuntimeError):
     """A post-write check of the gate failed (counts do not add up or DLQ rows are missing)."""
-
-
-def _brand_key(column: str = "brand_id") -> Any:
-    """Log-safe tenant key: a brand outside the contract is never reported verbatim (D-054)."""
-    from pyspark.sql import functions as F
-
-    brand = F.col(column)
-    return (
-        F.when(brand.isNull(), F.lit(NULL_BRAND_KEY))
-        .when(brand.rlike(_BRAND_RLIKE), brand)
-        .otherwise(F.lit(INVALID_BRAND_KEY))
-    )
 
 
 def _dlq_rows(checked: DataFrame, source_table: str, run_id: str) -> DataFrame:
@@ -166,7 +150,7 @@ def _breakdowns(rejected: DataFrame) -> tuple[dict[str, int], dict[str, int]]:
     }
     by_brand = {
         str(r["brand_key"]): int(r["n"])
-        for r in rejected.groupBy(_brand_key().alias("brand_key"))
+        for r in rejected.groupBy(brand_key().alias("brand_key"))
         .agg(F.count(F.lit(1)).alias("n"))
         .collect()
     }
