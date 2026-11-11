@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-05 (v9.0: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W2.D11 closed** (3/3 ✅) → next **W2.D12** (M1 review, demo and release)
+> **Active**: **W2.D12 closed** (M1: 36/37 ✅, `v0.1.0` tag owner-only) → next **W3.D13** (batch landing + Bronze batch)
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,19 +13,18 @@
 
 ## Current State
 
-- **Updated**: 2026-11-10 (W2.D11 closed) · **Branch**: `feat/w2-d11-catalog-spike`; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
-- **Last delivered**: W2.D11.1–D11.3 ✅ — Postgres-backed Hive metastore, Bronze/DLQ registered by name (`register_tables`, D-060), gate/reports read by name; Spark Thrift Server + dbt 1.12.6/dbt-spark 1.11.0 probes (merge, composite key, contracts, persist_docs), Thrift kept ([ADR-0004](adr/0004-spark-dbt-ownership-and-adapter-capabilities.md), D-061). Earlier: W2.D10 DLQ gate (D-056/D-057).
-- **Unfinished**: W1 tutor re-test and W2.D7–D11 learning gates (Learning queue of [TASKS.md](TASKS.md)).
-- **Tests & results**: after review and CI fixes: unit 1215 passed, 1 skipped, coverage 81 % (CI gate 80 %); Spark 269 (container); day-close integration 34 passed, 1 skipped (71 min); dbt `build --select spike` PASS=8 ×2; ruff/mypy/import-linter clean.
+- **Updated**: 2026-11-11 (W2.D12 closed; M1 complete except the owner-only `v0.1.0` tag) · **Branch**: `feat/w2-d12-m1-release`; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
+- **Last delivered**: W2.D12.1–D12.2 ✅, D12.3 🔄 (tag) — demo runbook recorded from a stopped stack ([m1-streaming-demo.md](runbooks/m1-streaming-demo.md), 16 min 11 s); M1 review fixes: transport gate rules (D-064), shared brand key (D-065), smoke readiness wait, `it_*` purge, digest/SHA-256-pinned Spark image (D-066); README can/cannot-claim section. V-13 deferred (D-067).
+- **Unfinished**: M1 learning gate (V-11; round 1 questions asked 2026-11-11, owner answers pending) — owner returns to it later.
+- **Tests & results**: M1 release regression 2026-11-11 on the rebuilt image: unit 1222 passed, 1 skipped; Spark 291 passed; integration 35 passed incl. broker chaos (1 h 24 min); ruff/mypy/import-linter clean. After the post-review fixes (`782ec39`): unit 1222/1 skipped, Spark 293.
 - **Test cadence (D-059)**: only the relevant tests while developing, full suite once per day close; broker chaos opt-in (`RUN_BROKER_CHAOS=1`). Single-SparkSession multi-step runner queued as TASKS Q-001.
-- **Owner action**: register rows V-09, V-10, V-11 (unchanged); V-13 optional: approve downloading the official Hive 2.3 PostgreSQL schema script to replace the FK-less auto-created schema. None blocking.
-- **Stack**: stopped (`docker compose --profile core --profile sql stop`). Thrift Server needs `--profile sql` and takes 1 of 2 worker cores: stop it before jobs/integration tests.
-- **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; Glue 5.0 (ADR-0011); Databricks Free Edition W6 (ADR-0012); budget ≤ USD 50; contracts strict producer / tolerant consumer; Silver gate order DLQ → dedup → MERGE (D-022); outcome precedence DLQ → DUPLICATE → NOOP → ACCEPT (D-023/D-029); jobs resolved by convention, `--py-files` zip (D-044); money and timestamps strings until Silver (D-045); stable parse codes (D-047); writers own the location, readers use the catalog name, namespaced runs never registered (D-060); dbt via Thrift in `.venv-dbt`, NOT NULL as model-level `check` (D-061).
-- **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); open items with owner days in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) (D-030 late CDC → W3.D14.0; Delta commit safety on S3 → W5; metastore concurrency job + dbt → W3, V-15).
-- **Way of working**: Claude implements everything, priority is speed, every pipeline step is mapped in [DATA_FLOW.md](DATA_FLOW.md) (D-046); every decision in DECISION_LOG; per-session trace in [SESSION_LOG.md](SESSION_LOG.md); replies with executive/technical summary, file links, senior Q&A; personal glossary `.claude/learning/GLOSSARY.md`.
-- **Next task ("Start today's task")**: **W2.D12** — M1 review, demo and release (DELIVERY_PLAN D12 card); `v0.1.0` tag needs the owner.
-- **Next mode**: coordinator; `reviewer` (milestone, code + data + security) ‖ `evidence-auditor` (milestone); owner runs `/security-review` once.
-- **Autonomous run**: not started (setup on `chore/autonomous-run`, D-041/D-042; pre-flight verified: refuses to start with uncommitted guardrail files)
+- **Owner action (the only open M1 items)** — rows in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) class *Owner action*: V-17 guard-hook regex patch + `--self-test` + commit · V-18 `v0.1.0` tag after merge · V-11 M1 learning gate · V-19 one `/security-review` run · V-10 remove the legacy anonymous volume · V-09 fix `COMPOSE_PROJECT_NAME` in the local env file · V-13 (deferred, D-067) download the official Hive 2.3 schema only if wanted.
+- **Stack**: stopped. Thrift Server needs `--profile sql` and takes 1 of 2 worker cores: stop it before jobs/integration tests.
+- **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; Glue 5.0 (ADR-0011); Databricks Free Edition W6 (ADR-0012); budget ≤ USD 50; contracts strict producer / tolerant consumer; Silver gate order DLQ → dedup → MERGE (D-022); outcome precedence DLQ → DUPLICATE → NOOP → ACCEPT (D-023/D-029); jobs resolved by convention, `--py-files` zip (D-044); money and timestamps strings until Silver (D-045); stable parse codes (D-047); writers own the location, readers use the catalog name (D-060); dbt via Thrift in `.venv-dbt` (D-061); missing Kafka key / `brand_id` header → DLQ (D-064).
+- **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); open items in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) (D-030 late CDC → W3.D14.0; Silver `_parse_error` exclusion → W3.D14, Q-003; metastore concurrency job + dbt → W3, V-15; Delta commit safety on S3 → W5).
+- **Way of working**: Claude implements everything, priority is speed, every pipeline step is mapped in [DATA_FLOW.md](DATA_FLOW.md) (D-046); every decision in DECISION_LOG; per-session trace in [SESSION_LOG.md](SESSION_LOG.md).
+- **Next task ("Start today's task")**: **W3.D13** — batch landing (orders + products, boto3 landing writer, manifest) and `ingestion.bronze_batch` (DELIVERY_PLAN D13 card). Owner, 2026-11-11: continue with W3.D13; the M1 learning gate is revisited later.
+- **Autonomous run**: not started (setup on `chore/autonomous-run`, D-041/D-042)
 
 ---
 
@@ -52,7 +51,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 ## 📊 Macro Status (count of ✅ tasks / planned tasks)
 
 ```
-M1 (D1–D12)   [██████████████████░░] 34 / 37
+M1 (D1–D12)   [███████████████████░] 36 / 37
 M2 (D13–D24)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 ```
@@ -226,11 +225,17 @@ M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  
 #### D12 · M1 review and release
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
-| W2.D12.1 | M1 demo runbook | `docs/runbooks/m1-streaming-demo.md` runs from a stopped stack | demo transcript | ⏳ |
-| W2.D12.2 | Full regression | unit + spark + integration + smoke green; CI job 1 green on `main` | outputs + CI link | ⏳ |
-| W2.D12.3 | Milestone review + tag | reviewer APPROVE, auditor PASS, README evidence links, claim note, `v0.1.0` (owner) | `checkpoint milestone M1` | ⏳ |
+| W2.D12.1 | M1 demo runbook | `docs/runbooks/m1-streaming-demo.md` runs from a stopped stack | demo transcript | ✅ |
+| W2.D12.2 | Full regression | unit + spark + integration + smoke green; CI job 1 green on `main` | outputs + CI link | ✅ |
+| W2.D12.3 | Milestone review + tag | reviewer APPROVE, auditor PASS, README evidence links, claim note, `v0.1.0` (owner) | `checkpoint milestone M1` | 🔄 (tag: owner, V-18) |
 
-**M1 checkpoint**: _not run_ · **Can claim / cannot claim**: _filled at gate_
+Evidence:
+- W2.D12.1: runbook `2aaa8d0`, recorded 2026-11-10 from a stopped stack on `aa7f9e9` — steps 1–8 in 16 min 11 s; Bronze 4284 / 21840 rows = refs, one lineage, partitions contiguous; DLQ rerun inserted 0; table in [m1-streaming-demo.md](runbooks/m1-streaming-demo.md#recorded-run-2026-11-10-from-a-stopped-stack-commit-aa7f9e9).
+- W2.D12.2: `0ba2cc2` (M1 review fixes, D-064–D-066), rebuilt pinned Spark image: ruff/format/mypy/import-linter clean; unit **1222 passed, 1 skipped**; Spark container **291 passed**; integration **35 passed** with `RUN_BROKER_CHAOS=1` (1 h 24 min), `it_*` purge ran without warnings; smoke after `up -d` 24/24 (waited 8 s). CI job 1: PR run and `main` run linked in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md) (W2.D12 merge status).
+- W2.D12.2 (post-review fixes, `782ec39`, D-068): unit **1222 passed, 1 skipped**; Spark container **293 passed** (+`key_not_utf8` on both tables); `tests/integration/test_it_purge_glob.py` **9 passed**; ruff/format/mypy clean.
+- W2.D12.3: milestone review (reviewer) findings applied in `0ba2cc2` (D-062–D-065); post-fix code review APPROVE WITH NITS (applied in `782ec39`, D-068) and `evidence-auditor` results in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md); README §"What Milestone 1 Can and Cannot Claim". Open: `v0.1.0` tag (owner, V-18).
+
+**M1 checkpoint**: run 2026-11-11 (technical gate passed; learning gate V-11 open) · **Can claim / cannot claim**: [README.md](../README.md) §"What Milestone 1 Can and Cannot Claim"
 
 ---
 

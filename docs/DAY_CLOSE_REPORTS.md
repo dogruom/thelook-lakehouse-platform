@@ -1,11 +1,30 @@
 # Day Close Reports
 
 > **Document Version**: 1.0
-> **Last Updated**: 2026-11-10
+> **Last Updated**: 2026-11-11
 > **Purpose**: one readable report per planned day (newest first), written by the `checkpoint` skill.
 > Raw evidence lives in [PROGRESS.md](PROGRESS.md), the per-session file trace in
 > [SESSION_LOG.md](SESSION_LOG.md), the reasons in [DECISION_LOG.md](DECISION_LOG.md).
 > Days W1.D1–W1.D3 closed before this log existed; their evidence is in PROGRESS and SESSION_LOG.
+
+---
+
+## W2.D12 · M1 review, demo and release — closed 2026-11-11
+
+**Executive summary.** Milestone 1 (reliable streaming ingestion) is technically complete. The demo
+runs from a stopped stack in about 16 minutes and is written down step by step; the milestone
+review found gaps in the tenant checks on the Kafka key and header, a flaky smoke start and
+unpinned image downloads, and all of them were fixed and re-tested on the full suite. What is left
+needs the owner: the `v0.1.0` tag, the learning gate and a few local clean-ups.
+- **Delivered**: W2.D12.1 ✅ demo runbook · W2.D12.2 ✅ full regression · W2.D12.3 🔄 review, README status and can/cannot-claim note done; `v0.1.0` tag owner-only (V-18).
+- **Evidence**: demo recorded on `aa7f9e9` (16 min 11 s, numbers in the [runbook](runbooks/m1-streaming-demo.md)); `0ba2cc2` review fixes; regression on the rebuilt pinned image: unit 1222 passed / 1 skipped, Spark 291 passed, integration 35 passed with broker chaos (1 h 24 min), lint/types/boundaries clean; smoke 24/24 after an 8 s readiness wait. Runbook `2aaa8d0`. Post-review fixes `782ec39`: unit 1222 passed / 1 skipped, Spark 293 passed, purge-glob test 9 passed.
+- **Reviews / audit**: milestone review (reviewer, code + data + security) → findings applied (D-062–D-066). Post-fix code review: APPROVE WITH NITS — purge glob too wide (`*/it_*`), non-UTF-8 Kafka key passed unchecked, unused import; all applied (D-068), the two optional robustness nits (container without healthcheck, JAR hashes taken from the earlier image) recorded below. `evidence-auditor` (milestone): 4 MISMATCH, all docs — TASKS D12.3 status vs owner tag, runbook not yet committed (now `2aaa8d0`), README Spark count 291 → 293, README "delivered" → "technically complete" while the tag is pending; all fixed. Offline re-runs by the auditor: unit 1222/1 skipped, purge-glob 9 passed, ruff/mypy/import-linter clean.
+- **Decisions**: D-062 DLQ envelope as built · D-063/D-064 transport rules · D-065 shared brand key · D-066 smoke wait, `it_*` purge, image pins, CI concurrency · D-067 Hive schema deferred · D-068 non-UTF-8 key, narrowed purge.
+- **Not verified / limitations**: JAR SHA-256 pins were computed from the previously built image, not checked against Maven Central independently (agent network blocked); `stack_ready` assumes every core container has a healthcheck (true today). Owner actions V-09, V-10, V-11, V-13 (deferred), V-17, V-18, V-19 in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md).
+- **Carry-overs**: none for M1 code. Q-003 (Silver `_parse_error` exclusion) belongs to W3.D14; D-030 late CDC to W3.D14.0.
+- **Learning**: M1 learning gate started (round 1 asked); owner continues it later (V-11).
+- **Next**: W3.D13 batch landing + Bronze batch.
+- **Merge status**: _pending — filled after PR / CI_.
 
 ---
 
