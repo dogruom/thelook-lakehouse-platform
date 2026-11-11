@@ -215,7 +215,6 @@ modules = [
     "lakehouse.silver",
     "lakehouse.ops",
 ]
-ignore_imports = ["lakehouse.silver.** -> lakehouse.quality.**"]
-# The allowed silver -> quality import does not exist yet (W3.D17): warn (exit 0) instead of
-# failing. When it exists, remove this line and narrow the ignore to lakehouse.quality.rules.
-unmatched_ignore_imports_alerting = "warn"
+ignore_imports = ["lakehouse.silver.** -> lakehouse.quality.rules"]
+# Silver evaluates the customer_cdc contract rules inline (W3.D14, D-022); only that one module may
+# be imported, not the quality jobs.

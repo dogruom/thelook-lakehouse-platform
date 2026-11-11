@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     from lakehouse.generator.config import GeneratorConfig
 
 
-GENERATOR_VERSION = "cdc-1.0.0"
+GENERATOR_VERSION = "cdc-1.1.0"
 LOCALES = {"DE": "de_DE", "GB": "en_GB", "TR": "tr_TR"}
 COUNTRIES = tuple(LOCALES)
 # Phone numbers come only from ranges reserved for fiction, so no real subscriber can be hit:
@@ -107,6 +107,7 @@ class _Event:
     pos: int = -1
     defect: CdcDefect | None = None
     protected: bool = False  # anchor of a moved event: must stay valid and in place
+    anchor: _Event | None = None  # out_of_order only: later event of the customer it lands after
 
 
 @dataclass(slots=True)
@@ -346,7 +347,12 @@ def _apply_collisions(config: GeneratorConfig, customers: list[_Customer], brand
 
 
 def _apply_out_of_order(config: GeneratorConfig, order: list[_Event], n: int) -> None:
-    """Mark ``n`` events to be emitted after the last event of their customer (always stale)."""
+    """Mark ``n`` events to be emitted after a later event (anchor) of the same customer.
+
+    The anchor is drawn from the later events of the customer that were not themselves chosen;
+    the last event is always eligible. Anchor < last = intermediate late event (backfill),
+    anchor == last = late event after the last one. Every moved event stays a stale NOOP.
+    """
     if n == 0:
         return
     if config.cdc_max_updates == 0:
@@ -355,9 +361,13 @@ def _apply_out_of_order(config: GeneratorConfig, order: list[_Event], n: int) ->
         )
     rng = sub_rng(config.seed, "defect:out_of_order")
     pool = [ev for ev in order if ev.defect is None and ev is not ev.customer.events[-1]]
-    for ev in _pick(rng, pool, n, "out_of_order (events with a later event of the same customer)"):
+    chosen = _pick(rng, pool, n, "out_of_order (events with a later event of the same customer)")
+    for ev in chosen:
         ev.defect = CdcDefect.out_of_order
-        ev.customer.events[-1].protected = True
+    for ev in chosen:
+        later = [e for e in ev.customer.events[ev.seq :] if e.defect is not CdcDefect.out_of_order]
+        ev.anchor = rng.choice(later)
+        ev.anchor.protected = True
 
 
 def _apply_dlq_defects(config: GeneratorConfig, order: list[_Event], n_by: dict[str, int]) -> None:
@@ -386,8 +396,8 @@ def _emission_order(
     keyed: list[tuple[float, int, int]] = []
     for ev in order:
         if ev.defect is CdcDefect.out_of_order:
-            anchor = ev.customer.events[-1].pos
-            key = anchor + rng.randint(0, MAX_LATE_POSITIONS) + rng.uniform(0.01, 0.99)
+            assert ev.anchor is not None
+            key = ev.anchor.pos + rng.randint(0, MAX_LATE_POSITIONS) + rng.uniform(0.01, 0.99)
         else:
             key = float(ev.pos)
         keyed.append((key, ev.pos, 0))
@@ -528,6 +538,7 @@ def generate_cdc(config: GeneratorConfig, *, brands: int, events: int) -> CdcRun
                 cdc_sequence=ev.seq,
                 cdc_action=ev.action,
                 defect=defect,
+                late_after_sequence=ev.anchor.seq if ev.anchor is not None else None,
             )
         )
         lines.append(_line(payload))

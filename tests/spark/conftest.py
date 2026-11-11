@@ -22,7 +22,14 @@ def spark() -> Iterator[SparkSession]:
         SparkSettings(master="local[2]"),
         app_name="spark-tests",
         run_id=new_run_id("spark_tests"),
-        extra_conf={"spark.sql.shuffle.partitions": "2", "spark.ui.enabled": "false"},
+        extra_conf={
+            "spark.ui.enabled": "false",
+            # Tiny test data: fewer partitions/tasks per Delta log replay and shuffle.
+            "spark.databricks.delta.snapshotPartitions": "2",
+            "spark.sql.shuffle.partitions": "1",
+            "spark.default.parallelism": "1",
+            "spark.sql.adaptive.enabled": "false",
+        },
     )
     yield session
     session.stop()

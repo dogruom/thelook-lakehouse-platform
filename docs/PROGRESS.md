@@ -247,12 +247,12 @@ Evidence:
 | W3.D13.1 | Orders + products + landing writer | orders embed items; product seed per brand; boto3 writer with retries; manifest per batch; `sales_channel` from batch 10 | `pytest tests/unit/generator/test_landing.py -q` (moto) | ✅ |
 | W3.D13.2 | `ingestion.bronze_batch` | incremental file source; `_source_ref` file + line; `mergeSchema` | job run | ✅ |
 | W3.D13.3 | Batch count test | Bronze rows = landed rows; schema evolution visible | `pytest tests/integration/test_bronze_batch.py -q` | ✅ |
-| W3.D14.1 | `silver_customers` | dedup to max sequence; MERGE guarded by sequence; tombstones; HMAC token; phone mask; `stale_cdc_noop` metric | job run | ⏳ |
+| W3.D14.1 | `silver.customers` (job `silver_customers`) | dedup to max sequence; MERGE guarded by sequence; tombstones; HMAC token; phone mask; `stale_cdc_noop` metric | job run | ⏳ |
 | W3.D14.2 | Merge unit tests | I/U/D, stale, duplicate on tiny frames | `pytest tests/spark/test_silver_customers.py -q` | ⏳ |
 | W3.D15.1 | 🔺 CDC suite | 6 scenarios pass | `pytest tests/integration/test_cdc_correctness.py -q` | ⏳ |
 | W3.D15.2 | PII tests | no raw email/phone in Silver; key from env; key change → token change | `pytest tests/integration/test_pii.py -q` | ⏳ |
 | W3.D15.3 | ADR-0004 final | ownership + spike results | file review | ⏳ |
-| W3.D16.1 | `silver_customers_history` | rebuild affected keys ordered by sequence | job run | ⏳ |
+| W3.D16.1 | `silver.customers_history` | rebuild affected keys ordered by sequence | job run | ⏳ |
 | W3.D16.2 | SCD2 scenarios | 4 scenarios incl. shuffled = identical hash | `pytest tests/integration/test_scd2_history.py -q` | ⏳ |
 | W3.D17.1 | Silver orders + items | explode; dedup; composite FK; orphans → DLQ retryable | `pytest tests/integration/test_silver_orders.py -q` | ⏳ |
 | W3.D17.2 | Silver clickstream | windowed dedup; `late_beyond_window` metric | 0 duplicates on `(brand_id, event_id)` | ⏳ |

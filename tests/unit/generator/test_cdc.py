@@ -332,6 +332,59 @@ def test_every_moved_event_is_stale_noop_and_its_customer_has_a_later_sequence_e
         seen_max[k] = max(seen_max[k], entry.cdc_sequence)
 
 
+def _last_sequence(case: Case) -> dict[tuple[str, str], int]:
+    last: dict[tuple[str, str], int] = defaultdict(int)
+    for entry in case.entries:
+        k = (entry.brand_id, entry.customer_id)
+        last[k] = max(last[k], entry.cdc_sequence)
+    return last
+
+
+def test_moved_events_have_both_intermediate_and_after_last_cases(case: Case) -> None:
+    last = _last_sequence(case)
+    moved = [e for e in case.entries if e.defect == CdcDefect.out_of_order]
+    assert moved
+    assert all(e.late_after_sequence is not None for e in moved)
+    intermediate = [
+        e for e in moved
+        if e.late_after_sequence < last[(e.brand_id, e.customer_id)]  # type: ignore[operator]
+    ]  # fmt: skip
+    after_last = [e for e in moved if e.late_after_sequence == last[(e.brand_id, e.customer_id)]]
+    assert intermediate and after_last
+    assert len(intermediate) + len(after_last) == len(moved)
+    assert case.run.manifest.counts["out_of_order_intermediate"] == len(intermediate)
+    assert case.run.manifest.counts["out_of_order_intermediate"] < len(moved)
+
+
+def test_late_after_sequence_is_set_only_on_moved_events(case: Case) -> None:
+    for entry in case.entries:
+        assert (entry.late_after_sequence is not None) == (entry.defect == CdcDefect.out_of_order)
+
+
+def test_anchor_is_valid_later_and_emitted_before_its_late_event(case: Case) -> None:
+    first_index: dict[tuple[str, str, int], int] = {}
+    for i, entry in enumerate(case.entries):
+        first_index.setdefault((entry.brand_id, entry.customer_id, entry.cdc_sequence), i)
+    for i, entry in enumerate(case.entries):
+        if entry.defect != CdcDefect.out_of_order:
+            continue
+        anchor_seq = entry.late_after_sequence
+        assert anchor_seq is not None and anchor_seq > entry.cdc_sequence
+        j = first_index[(entry.brand_id, entry.customer_id, anchor_seq)]
+        anchor = case.entries[j]
+        assert j < i
+        assert case.valid[j]  # the anchor is never a DLQ defect
+        assert anchor.defect != CdcDefect.out_of_order  # and never itself a moved event
+        assert anchor.expected_outcome in (Outcome.ACCEPT, Outcome.NOOP)
+
+
+def test_default_config_late_event_split_is_stable() -> None:
+    run = generate_cdc(make(seed=42), brands=3, events=1000)
+    c = run.manifest.counts
+    assert c["out_of_order"] == c["stale_cdc_noop"]
+    assert 0 < c["out_of_order_intermediate"] < c["out_of_order"]
+
+
 # ------------------------------------------------------------------------- reference MERGE
 
 
