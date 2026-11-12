@@ -20,7 +20,7 @@ Two proofs ran on the real stack. First, a job killed in the middle of a batch a
 - **Delivered**: W3.D14.1–D14.2 ✅ · W3.D15.1–D15.3 ✅ · W3.D16.1–D16.2 ✅ · W3.D17.1–D17.3 ✅ · W3.D18.1–D18.4 ✅ (details and evidence in [PROGRESS Week 3](PROGRESS.md)).
 - **Evidence**:
   - Commits: `505143c`, `bbba657`, `51ca27b`, `8f495d5`, `04d5f20`, `c6ab4b9`.
-  - Unit 1597 passed / 1 skipped; Spark full suite 514 passed (+ `test_isolation.py` 6 after the fix).
+  - Unit 1634 passed / 1 skipped, coverage 80.91 %; Spark full suite 514 passed (+ `test_isolation.py` 6 after the fix).
   - Integration W3 set: CDC 23, SCD2 11, orders 13, replay 9, reconciliation 9, tenant isolation 7, idempotent re-run 5 (0 skipped; the checkpoint proves the kill landed mid-batch).
   - M1 regression integration 50 passed / 1 skipped (broker chaos opt-in).
   - ruff/format/mypy/import-linter clean.
@@ -30,6 +30,7 @@ Two proofs ran on the real stack. First, a job killed in the middle of a batch a
   - `isolation_check` crashed with an ambiguous self-join on the first stack run. The Spark unit tests had used two separate frames, which hid it. Fixed with a regression test.
   - The test world's 1 % collision rate produced no cross-brand collisions, so the leaky-join check was vacuous. The test now uses 10 % (D-087).
   - The S3 listing helper used an option that `aws s3 ls` rejects, so checkpoints looked empty.
+  - PR CI failed the unit coverage gate (78.71 % < 80 %): Spark-container tests do not count towards host coverage. 37 host unit tests for the pure-Python parts brought it to 80.91 %; threshold unchanged (V-24 thin headroom).
   - The re-run comparison included `_bronze_batch_id`, which differs per namespace, so it is now excluded (D-087).
 - **Not verified / limitations**: V-23 customers data-level reconciliation is weak; the M1 regression wall time is not representative (host idle); the demo was not run separately; the tutor gate is pending.
 - **Carry-overs**: none (V-15 metastore concurrency → W4.D19 by plan).
