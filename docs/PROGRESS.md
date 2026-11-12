@@ -13,7 +13,7 @@
 
 ## Current State
 
-- **Updated**: 2026-11-13 (Week 3 closed) · **Branch**: `feat/w3-d14-silver-customers` → PR to `main` under D-032; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
+- **Updated**: 2026-11-13 (Week 3 closed) · **Branch**: `feat/w4-d19-dbt-staging` (Week 3 merged as `23cdb97`, PR #15); merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
 - **Last delivered**: W3.D14–D18 ✅ — `silver_customers` (sequence-guarded CDC MERGE, tombstones, HMAC `email_token`, late CDC generator), SCD2 history rebuilt by `_cdc_sequence`, `silver_orders`/`order_items` with FK orphans → retryable DLQ + `replay`, `silver_clickstream` lookback MERGE, `ops.pipeline_metrics` + `reconcile`, tenant views + `isolation_check`, crash-mid-batch re-run proof (`505143c` … `c6ab4b9`).
 - **Unfinished**: tutor gates with the owner — M1 (V-11, round 1 answers pending) and W3 (Learning queue). V-23 customers data-level reconciliation is weak (known limit, covered by the CDC suite).
 - **Tests & results**: Week 3 close: unit 1634 passed, 1 skipped, coverage 80.91 % (gate 80 %); Spark full suite 514 passed (+ `test_isolation.py` 6 after the fix); integration W3 set 77 tests, all passing after the fixes (tenant 7/7, re-run 5/5); M1 regression integration 50 passed, 1 skipped (broker chaos opt-in); ruff/format/mypy/import-linter clean.

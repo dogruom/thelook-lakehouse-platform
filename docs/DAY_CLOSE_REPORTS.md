@@ -36,7 +36,7 @@ Two proofs ran on the real stack. First, a job killed in the middle of a batch a
 - **Carry-overs**: none (V-15 metastore concurrency → W4.D19 by plan).
 - **Learning queued**: CDC ordering, SCD2 rebuild, retryable DLQ/replay, reconciliation equation, crash-safety proof, tenant isolation (TASKS Learning queue).
 - **Next**: W4.D19 dbt foundations.
-- **Merge status**: MERGE_STATUS_PLACEHOLDER
+- **Merge status**: PR [#15](https://github.com/dogruom/thelook-lakehouse-platform/pull/15) merged as `23cdb97` (merge commit) on 2026-11-13 under D-032: PR CI green after the coverage fix (`769ab4f`), `main` CI [run 43326199577](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/43326199577) success.
 
 ---
 
