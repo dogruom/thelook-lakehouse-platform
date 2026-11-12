@@ -310,11 +310,11 @@ class ReconcileJob(SparkJob):
         namespace: str | None = args.namespace
         path = metrics_path(ctx.settings, namespace)
         batch = _batch_rows(spark, path)
+        violations = batch_violations(batch)
         problems: list[dict[str, Any]] = [
-            {"check": "batch_row_unbalanced", **v}
-            for v in batch_violations(batch)[:_MAX_LOGGED_VIOLATIONS]
+            {"check": "batch_row_unbalanced", **v} for v in violations[:_MAX_LOGGED_VIOLATIONS]
         ]
-        if len(batch_violations(batch)) > _MAX_LOGGED_VIOLATIONS:
+        if len(violations) > _MAX_LOGGED_VIOLATIONS:
             problems.append({"check": "batch_row_unbalanced", "reasons": ["more_not_listed"]})
         batch_failed = bool(problems)
 

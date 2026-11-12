@@ -31,7 +31,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 GATE_TABLES = ("raw_customers", "raw_clickstream", "raw_orders", "raw_products")
-_AWS = 'aws --endpoint-url "http://$S3_HOST:$S3_PORT" --no-cli-pager --only-show-errors s3'
+#: ``aws s3 ls`` rejects ``--only-show-errors`` (a cp/sync/rm option): the listing then failed and
+#: returned nothing, which made every checkpoint look empty. Do not add it back.
+_AWS = 'aws --endpoint-url "http://$S3_HOST:$S3_PORT" --no-cli-pager s3'
 
 
 @dataclass
@@ -117,8 +119,14 @@ def build_world(
     order_batches: int,
     orders_per_batch: int,
     products_per_brand: int = 10,
+    cdc_cross_tenant_collision_rate: float | None = None,
 ) -> World:
-    config = GeneratorConfig(_env_file=None, products_per_brand=products_per_brand)  # type: ignore[call-arg]
+    # The default collision rate (1 %) rounds to zero collisions on a few dozen customers; a test
+    # that needs collisions sets a higher rate explicitly.
+    overrides: dict[str, float] = {}
+    if cdc_cross_tenant_collision_rate is not None:
+        overrides["cdc_cross_tenant_collision_rate"] = cdc_cross_tenant_collision_rate
+    config = GeneratorConfig(_env_file=None, products_per_brand=products_per_brand, **overrides)  # type: ignore[call-arg]
     cdc = generate_cdc(config, brands=brands, events=cdc_events)
     pools = customer_pools_from_cdc(cdc)
     click = (
@@ -214,6 +222,10 @@ def s3_names(prefix: str) -> list[str]:
         timeout=DOCKER_TIMEOUT_S,
         check=False,
     )
+    # A missing prefix exits 1 with no output (legitimately empty); an aws error is never silent.
+    assert (
+        "aws: [ERROR]" not in proc.stderr and "An error occurred" not in proc.stderr
+    ), proc.stderr[-500:]
     names = []
     for line in proc.stdout.splitlines():
         parts = line.split()

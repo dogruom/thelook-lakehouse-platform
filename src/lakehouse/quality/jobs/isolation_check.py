@@ -106,12 +106,19 @@ def _crafted_probe(spark: SparkSession) -> bool:
 
 
 def _self_join(customers: DataFrame, *, composite: bool) -> DataFrame:
+    """Self-join on ``customer_id`` (plus ``brand_id`` when ``composite``).
+
+    Columns are addressed by alias name (``l.x`` / ``r.x``): ``left["x"]`` on two aliases of the
+    same DataFrame resolves to the same attribute and Spark rejects it as an ambiguous self-join.
+    """
+    from pyspark.sql import functions as F
+
     left, right = customers.alias("l"), customers.alias("r")
-    cond = left["customer_id"] == right["customer_id"]
+    cond = F.col("l.customer_id") == F.col("r.customer_id")
     if composite:
-        cond = cond & (left["brand_id"] == right["brand_id"])
+        cond = cond & (F.col("l.brand_id") == F.col("r.brand_id"))
     return left.join(right, cond).select(
-        left["brand_id"], right["brand_id"].alias("right_brand_id")
+        F.col("l.brand_id").alias("brand_id"), F.col("r.brand_id").alias("right_brand_id")
     )
 
 

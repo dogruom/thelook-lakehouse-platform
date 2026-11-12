@@ -89,3 +89,21 @@ def test_leak_error_is_an_exception_that_names_the_brands(spark: SparkSession) -
         assert_no_cross_tenant_rows(leaky_join(spark), A, B)
     assert isinstance(info.value, Exception)
     assert A in str(info.value) and B in str(info.value)
+
+
+# ---- isolation_check's self-join over one customers frame (regression: ambiguous self-join) ----
+
+
+def test_job_self_join_on_one_frame_resolves_and_finds_the_collision(spark: SparkSession) -> None:
+    from lakehouse.quality.jobs.isolation_check import _self_join
+
+    customers = _customers(spark)
+    composite = _self_join(customers, composite=True)
+    assert composite.columns == ["brand_id", "right_brand_id"]
+    assert composite.count() == 4  # every row matches only itself
+    assert_no_cross_tenant_rows(composite, A, B)
+
+    by_id_only = _self_join(customers, composite=False)
+    assert by_id_only.filter("NOT (brand_id <=> right_brand_id)").count() == 2  # A<->B on SHARED
+    with pytest.raises(CrossTenantLeakError):
+        assert_no_cross_tenant_rows(by_id_only, A, B)

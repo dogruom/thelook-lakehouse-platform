@@ -31,6 +31,9 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.integration
 
 BRANDS = 3
+#: 10 % of the ~32 customers of brands 2..3 reuse an earlier brand's id (the 1 % default
+#: rounds to zero collisions at this size, which made the leaky-join check vacuous).
+COLLISION_RATE_PCT = 10.0
 
 
 def cross_brand_pairs(left: list[Row], right: list[Row], key: str, *, composite: bool) -> int:
@@ -64,7 +67,12 @@ def scenario(
     namespace = f"it_{uuid.uuid4().hex[:8]}"
     tmp: Path = tmp_path_factory.mktemp("isolation")
     world = build_world(
-        brands=BRANDS, cdc_events=240, click_events=0, order_batches=3, orders_per_batch=20
+        brands=BRANDS,
+        cdc_events=240,
+        click_events=0,
+        order_batches=3,
+        orders_per_batch=20,
+        cdc_cross_tenant_collision_rate=COLLISION_RATE_PCT,
     )
     with temp_topics(bootstrap_servers, "ti_cdc", "ti_click") as (cdc_topic, click_topic):
         produce_world(bootstrap_servers, world, cdc_topic, click_topic)

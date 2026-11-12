@@ -86,8 +86,12 @@ def _normalise(namespace: str, rows: list[Row]) -> list[str]:
     return sorted(out)
 
 
-def _crash(job: str, table: str, namespace: str) -> bool:
-    """Kill ``job`` at the start of batch ``KILL_AT_BATCH``, re-submit it; True when mid-batch."""
+def _crash(job: str, table: str, namespace: str) -> tuple[int, int]:
+    """Kill ``job`` at the start of batch ``KILL_AT_BATCH``, re-submit it.
+
+    Returns the checkpoint's (planned, committed) batch counts right after the kill; planned >
+    committed proves the kill landed mid-batch.
+    """
     streaming = submit_streaming(
         ["--skip-build", job, "--namespace", namespace, "--max-files-per-trigger", "1"],
         timeout_s=600,
@@ -106,7 +110,7 @@ def _crash(job: str, table: str, namespace: str) -> bool:
     assert code != 0 and "job.succeeded" not in out, "job finished before the kill (vacuous)"
     planned, committed = checkpoint_progress(job, table, namespace)
     run_ok(["--skip-build", job, "--namespace", namespace])
-    return planned > committed
+    return planned, committed
 
 
 @pytest.fixture(scope="module")
@@ -124,11 +128,17 @@ def outcome(bootstrap_servers: str, tmp_path_factory: pytest.TempPathFactory) ->
     run(["silver_customers", "--namespace", ref])
     run(["silver_orders", "--namespace", ref])
 
-    mid = _crash("silver_customers", "customers", crash)
-    mid_orders = _crash("silver_orders", "orders", crash) if mid else False
+    # Both crashes always run: every table must exist in the crash namespace before hashing.
+    progress = {
+        "customers": _crash("silver_customers", "customers", crash),
+        "orders": _crash("silver_orders", "orders", crash),
+    }
     reason = None
-    if not (mid and mid_orders):
-        reason = "the kill did not land between offset planning and commit (not a mid-batch crash)"
+    if not all(planned > committed for planned, committed in progress.values()):
+        reason = (
+            "the kill did not land between offset planning and commit (not a mid-batch crash): "
+            f"(planned, committed) per table = {progress}"
+        )
 
     yield Outcome(
         reason,

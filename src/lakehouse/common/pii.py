@@ -91,7 +91,8 @@ def pii_key_broadcast(spark: SparkSession, key: bytes) -> Iterator[Broadcast[byt
     """Broadcast of the HMAC key that is destroyed on exit, also when the body raises.
 
     Every action that evaluates :func:`email_token_column` with this handle must finish inside the
-    ``with`` block; afterwards executors and the driver no longer hold the key.
+    ``with`` block; afterwards the broadcast blocks are destroyed. (The key itself still lives in
+    the driver's environment and in local variables; this limits its spread, it does not erase it.)
     """
     broadcast = spark.sparkContext.broadcast(key)
     try:
