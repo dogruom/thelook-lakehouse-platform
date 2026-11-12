@@ -269,6 +269,10 @@ services:
       SPARK_MASTER_WEBUI_PORT: "8181"
       LAKEHOUSE_BUCKET: ${LAKEHOUSE_BUCKET:-lakehouse}
       ENVIRONMENT: local   # job drivers run here (client mode): JSON logs, not console colours
+      # Driver only (silver_customers): pseudonymisation key; never in Spark conf (workers get a broadcast).
+      # Pass-through (null value): no default, and no `${VAR:?}` that would break interpolation of
+      # the whole file (even `stop`). load_pii_key() is the loud check, before any read or write.
+      PII_HMAC_KEY:
     volumes:
       - *spark-conf
       - ./src:/opt/spark-apps/src:ro

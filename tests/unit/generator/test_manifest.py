@@ -7,10 +7,17 @@ Expectations are written by hand and cross-checked against an independent refere
 from __future__ import annotations
 
 import random
+from dataclasses import replace
 
 import pytest
 
-from lakehouse.generator.manifest import ManifestEntry, Outcome, classify_outcomes
+from lakehouse.generator.manifest import (
+    CdcDefect,
+    ManifestEntry,
+    Outcome,
+    build_counts,
+    classify_outcomes,
+)
 
 from . import _reference as ref
 
@@ -149,3 +156,36 @@ def test_classify_outcomes_matches_independent_reference_on_random_streams(seed:
         got = classify_outcomes(entries, valid, batch_ends)
         want = ref.reference_outcomes(events, valid, batch_ends)
         assert [o.value for o in got] == want
+
+
+# --------------------------------------------------------------- out_of_order_intermediate count
+
+
+def _late(i: int, seq: int, after: int | None, cust: str = "c1") -> ManifestEntry:
+    base = entry(i, seq, cust=cust, expected=N if after is not None else A)
+    defect = CdcDefect.out_of_order if after is not None else None
+    return replace(base, defect=defect, late_after_sequence=after)
+
+
+def test_build_counts_splits_intermediate_from_after_last_late_events() -> None:
+    entries = [
+        _late(0, 1, None),
+        _late(1, 3, None),
+        _late(2, 4, None),
+        _late(3, 2, 3),  # anchor 3 < last 4 -> intermediate
+        _late(4, 2, 4, cust="c1"),  # anchor == last -> after-last
+        _late(5, 1, None, cust="c2"),
+        _late(6, 2, None, cust="c2"),
+        _late(7, 1, 2, cust="c2"),  # anchor == last of c2 -> after-last
+    ]
+    counts = build_counts(entries)
+    assert counts["out_of_order"] == 3
+    assert counts["out_of_order_intermediate"] == 1
+
+
+def test_build_counts_without_late_events_has_zero_intermediate() -> None:
+    assert build_counts([entry(0, 1), entry(1, 2)])["out_of_order_intermediate"] == 0
+
+
+def test_late_after_sequence_defaults_to_none() -> None:
+    assert entry(0, 1).late_after_sequence is None

@@ -1,11 +1,42 @@
 # Day Close Reports
 
 > **Document Version**: 1.0
-> **Last Updated**: 2026-11-11
+> **Last Updated**: 2026-11-13
 > **Purpose**: one readable report per planned day (newest first), written by the `checkpoint` skill.
 > Raw evidence lives in [PROGRESS.md](PROGRESS.md), the per-session file trace in
 > [SESSION_LOG.md](SESSION_LOG.md), the reasons in [DECISION_LOG.md](DECISION_LOG.md).
 > Days W1.D1–W1.D3 closed before this log existed; their evidence is in PROGRESS and SESSION_LOG.
+
+---
+
+## W3.D14–D18 · Silver correctness — Week 3 closed 2026-11-13
+
+**Executive summary.** Silver now holds data that can be trusted:
+- Customer changes are applied in source order, even when they arrive late or twice, and customer history is rebuilt correctly.
+- Orders whose customer is not there yet wait in a retryable DLQ, and a replay recovers them.
+- Every batch balances: Bronze in = accepted + DLQ + duplicates + no-ops + too late (the customers data-level check is weak, V-23).
+
+Two proofs ran on the real stack. First, a job killed in the middle of a batch and then re-run produced exactly the same Silver content as a clean run. Second, a join that forgets `brand_id` was detected.
+- **Delivered**: W3.D14.1–D14.2 ✅ · W3.D15.1–D15.3 ✅ · W3.D16.1–D16.2 ✅ · W3.D17.1–D17.3 ✅ · W3.D18.1–D18.4 ✅ (details and evidence in [PROGRESS Week 3](PROGRESS.md)).
+- **Evidence**:
+  - Commits: `505143c`, `bbba657`, `51ca27b`, `8f495d5`, `04d5f20`, `c6ab4b9`.
+  - Unit 1634 passed / 1 skipped, coverage 80.91 %; Spark full suite 514 passed (+ `test_isolation.py` 6 after the fix).
+  - Integration W3 set: CDC 23, SCD2 11, orders 13, replay 9, reconciliation 9, tenant isolation 7, idempotent re-run 5 (0 skipped; the checkpoint proves the kill landed mid-batch).
+  - M1 regression integration 50 passed / 1 skipped (broker chaos opt-in).
+  - ruff/format/mypy/import-linter clean.
+- **Reviews / audit**: code review APPROVE WITH NITS, no must-fix; should-fix 2–3 applied (`04d5f20`), should-fix 1 recorded as V-23. `evidence-auditor` (Haiku): gate PASS, 5 MISMATCH, all docs — a W3.D15.2 verify command naming a non-existent `test_pii.py` integration file, the Spark count missing the 6 post-fix isolation tests, a portfolio line generalising one crash point to "crashes", the balance claim without the V-23 caveat, and a stale PROGRESS header date; all fixed. Auditor re-runs: unit 1597 passed / 1 skipped, ruff/format/mypy clean.
+- **Decisions**: D-073 … D-087.
+- **Found during the close (not in the plan)**:
+  - `isolation_check` crashed with an ambiguous self-join on the first stack run. The Spark unit tests had used two separate frames, which hid it. Fixed with a regression test.
+  - The test world's 1 % collision rate produced no cross-brand collisions, so the leaky-join check was vacuous. The test now uses 10 % (D-087).
+  - The S3 listing helper used an option that `aws s3 ls` rejects, so checkpoints looked empty.
+  - PR CI failed the unit coverage gate (78.71 % < 80 %): Spark-container tests do not count towards host coverage. 37 host unit tests for the pure-Python parts brought it to 80.91 %; threshold unchanged (V-24 thin headroom).
+  - The re-run comparison included `_bronze_batch_id`, which differs per namespace, so it is now excluded (D-087).
+- **Not verified / limitations**: V-23 customers data-level reconciliation is weak; the M1 regression wall time is not representative (host idle); the demo was not run separately; the tutor gate is pending.
+- **Carry-overs**: none (V-15 metastore concurrency → W4.D19 by plan).
+- **Learning queued**: CDC ordering, SCD2 rebuild, retryable DLQ/replay, reconciliation equation, crash-safety proof, tenant isolation (TASKS Learning queue).
+- **Next**: W4.D19 dbt foundations.
+- **Merge status**: MERGE_STATUS_PLACEHOLDER
 
 ---
 
@@ -26,7 +57,7 @@ defects with a manifest that says, line by line, what should happen to each one 
 - **Carry-overs**: none.
 - **Learning queued**: incremental file ingestion, line lineage, path vs payload brand, schema evolution, PERMISSIVE parsing (TASKS Learning queue).
 - **Next**: W3.D14 Silver customers (with D14.0 late CDC generator, Q-003).
-- **Merge status**: _pending — filled after PR / CI_.
+- **Merge status**: PR [#14](https://github.com/dogruom/thelook-lakehouse-platform/pull/14) merged as `b37a5a6` (merge commit) on 2026-11-11 under D-032: PR CI green, `main` CI [run 42938974449](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/42938974449) success.
 
 ---
 

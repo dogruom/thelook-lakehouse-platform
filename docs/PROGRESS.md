@@ -1,10 +1,10 @@
 # Progress Tracker — Tasks, Statuses and Evidence
 
 > **Document Version**: 9.0
-> **Last Updated**: 2026-11-05 (v9.0: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
+> **Last Updated**: 2026-11-13 (Week 3 closed; v9.0 2026-11-05: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W3.D13 closed** (3/3 ✅) → next **W3.D14** (Silver customers: sequence-ordered CDC MERGE) · M1: 36/37 ✅ (`v0.1.0` tag owner-only)
+> **Active**: **Week 3 closed** (W3.D13–D18 ✅) → next **W4.D19** (dbt project + staging on Silver) · M1: 36/37 ✅ (`v0.1.0` tag owner-only)
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,17 +13,17 @@
 
 ## Current State
 
-- **Updated**: 2026-11-11 (W3.D13 closed; M1 merged as `ac239b3`, only owner items left) · **Branch**: `feat/w3-d13-batch-landing`; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
-- **Last delivered**: W3.D13.1–D13.3 ✅ (`be2ae2b`) — orders/products generator + S3 landing writer + `land` CLI (D-070), `bronze_batch` file ingest with exact line refs and namespaced landing (D-069, D-071), integration count test 7 passed. Before: W2.D12 M1 release (PR #13, `ac239b3`).
-- **Unfinished**: M1 learning gate (V-11; round 1 questions asked 2026-11-11, owner answers pending) — owner returns to it later.
-- **Tests & results**: W3.D13 close: unit 1293 passed, 1 skipped, coverage 83 %; Spark full suite 307 passed (final tree, incl. 14 batch-file tests); integration `test_bronze_batch.py` 7 passed (final tree, 173 s); ruff/mypy/import-linter clean. M1 release regression (2026-11-11): integration 35 passed incl. broker chaos.
-- **Test cadence (D-059)**: only the relevant tests while developing, full suite once per day close; broker chaos opt-in (`RUN_BROKER_CHAOS=1`). Single-SparkSession multi-step runner queued as TASKS Q-001.
-- **Owner action (the only open M1 items)** — rows in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) class *Owner action*: V-17 guard-hook regex patch + `--self-test` + commit · V-18 `v0.1.0` tag after merge · V-11 M1 learning gate · V-19 one `/security-review` run · V-10 remove the legacy anonymous volume · V-09 fix `COMPOSE_PROJECT_NAME` in the local env file · V-13 (deferred, D-067) download the official Hive 2.3 schema only if wanted.
-- **Stack**: Thrift Server needs `--profile sql` and takes 1 of 2 worker cores: stop it before jobs/integration tests. Core stack currently running (W3.D13 tests).
-- **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): Spark 3.5.9/Delta 3.3.3/Python 3.11; Glue 5.0 (ADR-0011); Databricks Free Edition W6 (ADR-0012); budget ≤ USD 50; contracts strict producer / tolerant consumer; Silver gate order DLQ → dedup → MERGE (D-022); outcome precedence DLQ → DUPLICATE → NOOP → ACCEPT (D-023/D-029); jobs resolved by convention, `--py-files` zip (D-044); money and timestamps strings until Silver (D-045); stable parse codes (D-047); writers own the location, readers use the catalog name (D-060); dbt via Thrift in `.venv-dbt` (D-061); missing Kafka key / `brand_id` header → DLQ (D-064).
-- **Risks / blockers**: 7.6 GB Docker memory; host Postgres on 5432 (container 15432); open items in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) (D-030 late CDC → W3.D14.0; Silver `_parse_error` exclusion → W3.D14, Q-003; metastore concurrency job + dbt → W3, V-15; Delta commit safety on S3 → W5).
-- **Way of working**: Claude implements everything, priority is speed, every pipeline step is mapped in [DATA_FLOW.md](DATA_FLOW.md) (D-046); every decision in DECISION_LOG; per-session trace in [SESSION_LOG.md](SESSION_LOG.md).
-- **Next task ("Start today's task")**: **W3.D14** — `silver_customers`: sequence-ordered CDC MERGE, tombstones, HMAC email token, phone mask, `stale_cdc_noop` (DELIVERY_PLAN D14 card). First W3.D14.0: generator late CDC (D-030, V-01) and Q-003 (`_parse_error` exclusion). Needs an HMAC key placeholder in `.env.example` (owner sets the real value).
+- **Updated**: 2026-11-13 (Week 3 closed) · **Branch**: `feat/w3-d14-silver-customers` → PR to `main` under D-032; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
+- **Last delivered**: W3.D14–D18 ✅ — `silver_customers` (sequence-guarded CDC MERGE, tombstones, HMAC `email_token`, late CDC generator), SCD2 history rebuilt by `_cdc_sequence`, `silver_orders`/`order_items` with FK orphans → retryable DLQ + `replay`, `silver_clickstream` lookback MERGE, `ops.pipeline_metrics` + `reconcile`, tenant views + `isolation_check`, crash-mid-batch re-run proof (`505143c` … `c6ab4b9`).
+- **Unfinished**: tutor gates with the owner — M1 (V-11, round 1 answers pending) and W3 (Learning queue). V-23 customers data-level reconciliation is weak (known limit, covered by the CDC suite).
+- **Tests & results**: Week 3 close: unit 1634 passed, 1 skipped, coverage 80.91 % (gate 80 %); Spark full suite 514 passed (+ `test_isolation.py` 6 after the fix); integration W3 set 77 tests, all passing after the fixes (tenant 7/7, re-run 5/5); M1 regression integration 50 passed, 1 skipped (broker chaos opt-in); ruff/format/mypy/import-linter clean.
+- **Test cadence (D-059)**: only the relevant tests while developing, full suite once per day close; integration tests run sequentially (2 worker cores); broker chaos opt-in (`RUN_BROKER_CHAOS=1`).
+- **Owner action** — rows in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) class *Owner action*: V-17 guard-hook regex patch (pytest `-rs`/`-rf` false block; the working-tree change in `.claude/hooks/guard_commands.py` is left uncommitted for the owner) · V-18 `v0.1.0` tag · V-11 learning gates · V-19 one `/security-review` run · V-10 legacy anonymous volume · V-09 `COMPOSE_PROJECT_NAME` in the local env file · V-13 (deferred) Hive schema.
+- **Stack**: stopped after the close. Docker Desktop needed a forced restart on 2026-11-12 (engine 500).
+- **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): earlier list plus D-073 late CDC generator, D-074 customers MERGE, D-075 HMAC token, D-076 SCD2 rebuild, D-078 orders FK DLQ, D-079/D-086 clickstream lateness, D-080 replay, D-081/D-082 metrics + reconcile, D-083/D-084 crash proof, D-085 tenant views, D-087 test-world collision rate and lineage exclusion.
+- **Risks / blockers**: 7.6 GB Docker memory, 2 worker cores (integration suites are slow); metastore concurrency job + dbt (V-15 → W4.D19); Delta commit safety on S3 → W5.
+- **Way of working**: Claude implements everything; every pipeline step is mapped in [DATA_FLOW.md](DATA_FLOW.md) (D-046); per-session trace in [SESSION_LOG.md](SESSION_LOG.md).
+- **Next task ("Start today's task")**: **W4.D19** — dbt project + staging on Silver, tenant-safe tests (`relationships_by_brand`), `dbt parse` in CI (DELIVERY_PLAN D19 card).
 - **Autonomous run**: not started (setup on `chore/autonomous-run`, D-041/D-042)
 
 ---
@@ -52,7 +52,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 
 ```
 M1 (D1–D12)   [███████████████████░] 36 / 37
-M2 (D13–D24)  [██░░░░░░░░░░░░░░░░░░]  3 / 35
+M2 (D13–D24)  [██████████░░░░░░░░░░] 17 / 35
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 ```
 
@@ -247,20 +247,20 @@ Evidence:
 | W3.D13.1 | Orders + products + landing writer | orders embed items; product seed per brand; boto3 writer with retries; manifest per batch; `sales_channel` from batch 10 | `pytest tests/unit/generator/test_landing.py -q` (moto) | ✅ |
 | W3.D13.2 | `ingestion.bronze_batch` | incremental file source; `_source_ref` file + line; `mergeSchema` | job run | ✅ |
 | W3.D13.3 | Batch count test | Bronze rows = landed rows; schema evolution visible | `pytest tests/integration/test_bronze_batch.py -q` | ✅ |
-| W3.D14.1 | `silver_customers` | dedup to max sequence; MERGE guarded by sequence; tombstones; HMAC token; phone mask; `stale_cdc_noop` metric | job run | ⏳ |
-| W3.D14.2 | Merge unit tests | I/U/D, stale, duplicate on tiny frames | `pytest tests/spark/test_silver_customers.py -q` | ⏳ |
-| W3.D15.1 | 🔺 CDC suite | 6 scenarios pass | `pytest tests/integration/test_cdc_correctness.py -q` | ⏳ |
-| W3.D15.2 | PII tests | no raw email/phone in Silver; key from env; key change → token change | `pytest tests/integration/test_pii.py -q` | ⏳ |
-| W3.D15.3 | ADR-0004 final | ownership + spike results | file review | ⏳ |
-| W3.D16.1 | `silver_customers_history` | rebuild affected keys ordered by sequence | job run | ⏳ |
-| W3.D16.2 | SCD2 scenarios | 4 scenarios incl. shuffled = identical hash | `pytest tests/integration/test_scd2_history.py -q` | ⏳ |
-| W3.D17.1 | Silver orders + items | explode; dedup; composite FK; orphans → DLQ retryable | `pytest tests/integration/test_silver_orders.py -q` | ⏳ |
-| W3.D17.2 | Silver clickstream | windowed dedup; `late_beyond_window` metric | 0 duplicates on `(brand_id, event_id)` | ⏳ |
-| W3.D17.3 | DLQ replay | late parent recovered; second replay adds nothing | `pytest tests/integration/test_dlq_replay.py -q` | ⏳ |
-| W3.D18.1 | Reconciliation | equation per batch = manifest; metrics in `ops.pipeline_metrics` | `pytest tests/integration/test_reconciliation.py -q` | ⏳ |
-| W3.D18.2 | Idempotent re-run + crash | identical Silver content hash; no partial commit | `pytest tests/integration/test_idempotent_rerun.py -q` | ⏳ |
-| W3.D18.3 | 🔺 Tenant isolation | per-tenant counts = manifest; joins keyed on `brand_id`; leaky fixture fails; scoped views | `pytest tests/integration/test_tenant_isolation.py -q` | ⏳ |
-| W3.D18.4 | ADR-0003, ADR-0005 | written and linked | file review | ⏳ |
+| W3.D14.1 | `silver.customers` (job `silver_customers`) | dedup to max sequence; MERGE guarded by sequence; tombstones; HMAC token; phone mask; `stale_cdc_noop` metric | job run | ✅ |
+| W3.D14.2 | Merge unit tests | I/U/D, stale, duplicate on tiny frames | `pytest tests/spark/test_silver_customers.py -q` | ✅ |
+| W3.D15.1 | 🔺 CDC suite | 6 scenarios pass | `pytest tests/integration/test_cdc_correctness.py -q` | ✅ |
+| W3.D15.2 | PII tests | no raw email/phone in Silver; key from env; key change → token change | `pytest tests/unit/common/test_pii.py -q`; `pytest tests/integration/test_cdc_correctness.py -q -k pii` (no separate integration `test_pii.py`) | ✅ |
+| W3.D15.3 | ADR-0004 final | ownership + spike results | file review | ✅ |
+| W3.D16.1 | `silver.customers_history` | rebuild affected keys ordered by sequence | job run | ✅ |
+| W3.D16.2 | SCD2 scenarios | 4 scenarios incl. shuffled = identical hash | `pytest tests/integration/test_scd2_history.py -q` | ✅ |
+| W3.D17.1 | Silver orders + items | explode; dedup; composite FK; orphans → DLQ retryable | `pytest tests/integration/test_silver_orders.py -q` | ✅ |
+| W3.D17.2 | Silver clickstream | windowed dedup; `late_beyond_window` metric | 0 duplicates on `(brand_id, event_id)` | ✅ |
+| W3.D17.3 | DLQ replay | late parent recovered; second replay adds nothing | `pytest tests/integration/test_dlq_replay.py -q` | ✅ |
+| W3.D18.1 | Reconciliation | equation per batch = manifest; metrics in `ops.pipeline_metrics` | `pytest tests/integration/test_reconciliation.py -q` | ✅ |
+| W3.D18.2 | Idempotent re-run + crash | identical Silver content hash; no partial commit | `pytest tests/integration/test_idempotent_rerun.py -q` | ✅ |
+| W3.D18.3 | 🔺 Tenant isolation | per-tenant counts = manifest; joins keyed on `brand_id`; leaky fixture fails; scoped views | `pytest tests/integration/test_tenant_isolation.py -q` | ✅ |
+| W3.D18.4 | ADR-0003, ADR-0005 | written and linked | file review | ✅ |
 
 **Evidence**:
 - W3.D13.1: `be2ae2b` — orders (embedded items, 4 defect kinds, run-level exact budget, duplicates within/across batches, `sales_channel` key from batch 10), product seed per brand, S3 landing writer (data first, manifest last, bounded retries), `land` CLI (D-069, D-070). `pytest tests/unit/generator -q` → 437 passed (incl. `test_landing.py` with moto: keys, write order, sha256/line count, idempotent rerun, retry, exhausted retries); same seed twice → byte-identical `--dry-run` trees (78 files).
@@ -269,7 +269,19 @@ Evidence:
 - Gates: ruff/format/mypy (46 files)/import-linter clean; unit **1293 passed, 1 skipped**, coverage **83 %**; smoke 24/24.
 - Review: APPROVE WITH NITS; should-fix (mergeSchema docstring overclaim, untested run-level defect budget) and nits (vacuous cross-tenant test, wrong-type/empty-file/rewound tests, immutable landing keys note) applied in `be2ae2b`; contract wording aligned (DATA_CONTRACTS v7.8).
 
-**Week 3 checkpoint**: _not run_
+- W3.D14.1–D14.2: `505143c` — `silver_customers` (Delta stream on Bronze, parse/contract exclusion inline (Q-003), dedup to max `_cdc_sequence`, sequence-guarded MERGE with tombstones, multiple-match guard, counters checked against MERGE metrics, D-074), HMAC `email_token` + phone last 4 (D-075), generator late CDC `cdc-1.1.0` (D-073, closes V-01). Spark `test_silver_customers.py` (35 tests) in the full Spark suite **514 passed** (2026-11-12, 29 min).
+- W3.D15.1–D15.2: `tests/integration/test_cdc_correctness.py` → **23 passed** (2026-11-12, tree `8f495d5`): the six scenarios (in-order, stale `U`, late `U` after `D`, duplicate, multi-event batch, same `customer_id` in two brands), exact round counters, generated run = manifest; PII: no raw email/phone in any string column, token 64-hex and not a plain hash, phone = last 4. Key from env / key change → token change: unit `tests/unit/common/test_pii.py` (`test_email_token_depends_on_key`, `load_pii_key` rejections without leaking the value). No separate `test_pii.py` integration file: the PII checks run on the same Silver as the CDC suite.
+- W3.D15.3: ADR-0004 Accepted (ownership section 2026-11-11, `bbba657`) — file review.
+- W3.D16.1–D16.2: `bbba657`, `51ca27b` — `silver_customers_history` rebuilds affected keys from the Bronze CDC log ordered by `_cdc_sequence` (D-076). `tests/integration/test_scd2_history.py` → **11 passed** (2026-11-12): expected versions per key, structurally sound and tenant-isolated, shuffled delivery = identical content hash, re-run adds nothing; Spark `test_customers_history.py` (21) in the 514.
+- W3.D17.1–D17.3: `bbba657` — `silver_orders` + `order_items` (first copy wins, composite FKs with `brand_id`, orphans → `dlq_orders` retryable, D-078), `silver_clickstream` (in-batch dedup + lookback MERGE on `(brand_id, event_id, event_date)`, `late_beyond_window` from payload times, D-079/D-086), `replay` (D-080). `test_silver_orders.py` → **13 passed**, `test_dlq_replay.py` → **9 passed** (late parent recovered, second replay adds nothing); clickstream 0 duplicates: Spark `test_silver_clickstream.py` (16, incl. same events in one vs many batches = identical Silver) and the clickstream totals in `test_reconciliation.py`.
+- W3.D18.1: `8f495d5` — `ops.pipeline_metrics` + `record_batch` in every Silver job, `reconcile` job (D-081/D-082). `test_reconciliation.py` → **9 passed** (every batch row balanced, data totals = sum of batch terms, totals per table and brand = manifests, tampered metrics row → non-zero exit). Limit: customers' data-level check is weak (V-23).
+- W3.D18.2: `c6ab4b9` — `test_idempotent_rerun.py` → **5 passed, 0 skipped** (2026-11-12, 41 min): SIGKILL of `silver_customers` and `silver_orders` at batch 1, checkpoint shows planned > committed (mid-batch proven), re-submit → content hash and row multiset equal the reference namespace, no duplicate business keys. First runs failed on test defects, fixed in `04d5f20`/`c6ab4b9`: the S3 listing helper used an option `aws s3 ls` rejects (every checkpoint looked empty), and the comparison included `_bronze_batch_id`, which differs per Bronze load.
+- W3.D18.3: `04d5f20` — `test_tenant_isolation.py` → **7 passed** (2026-11-12): per-brand counts = manifest, every brand view holds only its rows, real collisions present (10 % collision rate in the test world; the 1 % default gave 0 collisions, which made the leaky-join check vacuous), `isolation_check` passes on clean Silver and fails on wrong expectations. Found on the first stack run: `isolation_check` crashed with an ambiguous self-join (fixed, Spark regression test fails on the old code).
+- W3.D18.4: ADR-0003 and ADR-0005 Accepted (`8f495d5`), linked from PROJECT_CHARTER and DATA_CONTRACTS — file review.
+- Gates (final tree): ruff/format/mypy (66 files)/import-linter clean; unit **1597 passed, 1 skipped** → **1634 passed, 1 skipped, coverage 80.91 %** after the PR CI coverage fix (see below); Spark full suite **514 passed** (tree `8f495d5`) + `test_isolation.py` 6 passed after the fix; integration W3 set 77 tests: 71 passed on the first run, the 6 failing/erroring ones passed after the fixes above (tenant 7/7, re-run 5/5).
+- Review: code review (W3 week gate) **APPROVE WITH NITS**, no must-fix; should-fix 2 and 3 applied (`04d5f20`), should-fix 1 recorded as V-23.
+
+**Week 3 checkpoint** (2026-11-13): acceptance of W3.D14–D18 met (all W3.D14–D18 rows ✅). M1 regression on the final W3 tree: integration M1 set (Bronze stream/batch, DLQ reconciliation, purge, producer CLI/round-trip/failure modes, stream restart, submit guards) **50 passed, 1 skipped** (broker chaos opt-in, D-059); its wall time (18 h 12 min) is not representative: the host was idle or asleep during the run. Demo: not run separately; the integration suites exercise the same flow. Tutor week gate pending with the owner (TASKS Learning queue, V-11). PR #15 CI first failed the unit coverage gate (78.71 % < 80 %; the W3 Spark modules are tested in the Spark container, which does not count): 37 host unit tests for the pure-Python parts (reconcile equation, metrics rows, isolation helpers, contract export) raised it to 80.91 %; threshold and omit list unchanged. Headroom is thin (V-24).
 
 ### Week 4
 | ID | Task | Acceptance | Verify | Status |

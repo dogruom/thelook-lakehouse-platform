@@ -1,7 +1,7 @@
 # Data Contracts & Medallion Specifications
 
-> **Document Version**: 7.8
-> **Last Updated**: 2026-11-11 (v7.8: landing → Bronze as built — `sales_channel` via contract schema, `mergeSchema` only on the Bronze write of landing files, D-071; v7.7: non-UTF-8 Kafka key → `brand_key_mismatch`, D-068; v7.6: gate transport rules `kafka_key_missing` / `brand_header_missing`, `rejected_duplicates` vs `duplicates_removed` glossary, Q-002/Q-004; v7.5: DLQ envelope §3.2 as built — `_rejection_codes`, `event_id`, Kafka `_bronze_ref`, `PARSE_ERROR` reserved, D-062; v7.4: Bronze metadata columns as built §3.1, stable `_parse_error` codes, headers persisted, no `mergeSchema` on Bronze, D-047; v7.3: CDC ground-truth manifest §2.1.1, gate order and outcome precedence §4.1; v7.2: `event_id`/`schema_version`/`produced_at` payload fields, duplicate CDC defect, producer/consumer unknown-field rule, 2-decimal money strings; v7.1: orders carry embedded line items; static product seed; `schema_version` in the envelope; schema-evolution demo moved to orders; reconciliation adds `stale_cdc_noop` — DELIVERY_PLAN v8, ADR-0009)
+> **Document Version**: 8.0
+> **Last Updated**: 2026-11-11 (v8.0: orders/products gate rules, insert-only orders with first-copy-wins, FK orphans and replay, clickstream lookback window, no items DLQ, D-077..D-080; v7.9: reconciliation term definitions — `bronze` = distinct parseable `_source_ref`, `reread_rows`/`parse_errors` reported beside the equation, CDC `late_beyond_window` = 0 by design, D-072; v7.8: landing → Bronze as built — `sales_channel` via contract schema, `mergeSchema` only on the Bronze write of landing files, D-071; v7.7: non-UTF-8 Kafka key → `brand_key_mismatch`, D-068; v7.6: gate transport rules `kafka_key_missing` / `brand_header_missing`, `rejected_duplicates` vs `duplicates_removed` glossary, Q-002/Q-004; v7.5: DLQ envelope §3.2 as built — `_rejection_codes`, `event_id`, Kafka `_bronze_ref`, `PARSE_ERROR` reserved, D-062; v7.4: Bronze metadata columns as built §3.1, stable `_parse_error` codes, headers persisted, no `mergeSchema` on Bronze, D-047; v7.3: CDC ground-truth manifest §2.1.1, gate order and outcome precedence §4.1; v7.2: `event_id`/`schema_version`/`produced_at` payload fields, duplicate CDC defect, producer/consumer unknown-field rule, 2-decimal money strings; v7.1: orders carry embedded line items; static product seed; `schema_version` in the envelope; schema-evolution demo moved to orders; reconciliation adds `stale_cdc_noop` — DELIVERY_PLAN v8, ADR-0009)
 > **Status**: 🟡 DRAFT — aligned with [PROJECT_CHARTER.md](PROJECT_CHARTER.md) v7. **Not yet enforced in code**; each contract becomes enforced when the corresponding PROGRESS task is ✅ with evidence.
 > **Target Platform**: Multi-Tenant CRM Lakehouse (Delta Lake OSS locally; cloud targets documented separately)
 
@@ -45,7 +45,7 @@ graph LR
     subgraph DLQLayer["☠️ Dead Letter Queue (DLQ Delta)"]
         DLQ_C["dead_letter.dlq_customers"]
         DLQ_O["dead_letter.dlq_orders"]
-        DLQ_I["dead_letter.dlq_order_items"]
+        DLQ_P["dead_letter.dlq_products"]
         DLQ_E["dead_letter.dlq_clickstream"]
     end
 
@@ -169,7 +169,7 @@ All injected defects are recorded in the ground-truth manifest, **not** in the p
 | `order_id` | STRING (UUIDv4) | No | Lowercase UUIDv4 | Transaction identifier |
 | `brand_id` | STRING | No | Tenant identifier | Tenant context |
 | `customer_id` | STRING (UUIDv4) | No | `(brand_id, customer_id)` must exist in `silver.customers` | Foreign key (composite) |
-| `order_timestamp` | TIMESTAMP | No | `order_timestamp <= CURRENT_TIMESTAMP()` | Transaction timestamp |
+| `order_timestamp` | TIMESTAMP | No | `order_timestamp <= _ingest_ts` (deterministic on re-runs, D-077) | Transaction timestamp |
 | `order_status` | STRING | No | ENUM (`pending`, `completed`, `cancelled`, `returned`) | Fulfilment status |
 | `payment_method` | STRING | No | ENUM (`credit_card`, `paypal`, `sepa_debit`, `apple_pay`) | Payment vehicle |
 | `currency` | STRING | No | ISO 4217 (`EUR`, `USD`, `TRY`) | Currency code |
@@ -190,7 +190,7 @@ All injected defects are recorded in the ground-truth manifest, **not** in the p
 
 ### 2.3 `order_items` (Order Line Items)
 - **Ingestion Mode**: embedded in `orders.items` (no separate landing entity); exploded at the Bronze → Silver gate
-- **Silver Target**: `silver.order_items`; failures → `dead_letter.dlq_order_items`
+- **Silver Target**: `silver.order_items`; item failures are rejected with their order line into `dead_letter.dlq_orders` (no separate items DLQ, D-077)
 - **Business / dedup key**: `(brand_id, order_id, item_id)`
 
 | Column Name | Ingestion Type | Nullable | Constraint | Description |
@@ -337,6 +337,8 @@ entities from M2. `_rejection_codes` lists every failing rule code (stable codes
 
 **Reconciliation invariant (per batch, counted in events)**: `input = bronze` and `bronze = silver_accepted + dlq + duplicates_removed + stale_cdc_noop + late_beyond_window`, checked against the generator's ground-truth manifest. `stale_cdc_noop` counts CDC events whose `_cdc_sequence` is not newer than the Silver state. All terms are written to `ops.pipeline_metrics`.
 
+**Term definitions (D-072)**: `bronze` counts events, i.e. distinct `_source_ref` rows with `_parse_error IS NULL`; a Bronze row that re-reads an already stored `_source_ref` (D-057) is counted as `reread_rows`, and unparseable rows as `parse_errors` — both reported next to the equation, never inside it. For CDC `late_beyond_window` is 0 by design: the sequence-guarded MERGE has no watermark, so a late event is applied or becomes `stale_cdc_noop`. Silver table names: `silver.customers`, `silver.customers_history`.
+
 **Duplicate terms (do not mix them)**: `rejected_duplicates` (extra copies of an already rejected `_dlq_id` inside one gate run) and `bronze_duplicate_rows` (`rows_read - distinct _source_ref`, i.e. a re-read of the same Kafka offsets) are M1 gate counters and are not reconciliation terms; `duplicates_removed` is the manifest/reconciliation term for duplicate CDC events removed by Silver dedup (M2).
 
 **Injection is exact, not probabilistic**: the generator selects exactly `round(n × rate)` records per defect type with a seeded RNG, so tests assert exact counts against the manifest; the ± tolerances above describe the configured rate only.
@@ -373,8 +375,8 @@ Single history owner: Spark (Charter invariant 6). No dbt snapshots on customers
 - `D` closes the current version. Out-of-order arrivals trigger a deterministic rebuild of the affected keys' history; the same events in any arrival order produce identical history.
 
 ### 4.3 Transactions & interactions
-- `silver.orders` / `silver.order_items`: idempotent MERGE on their business keys (latest `_ingest_ts`); composite FK checks; orphans → DLQ (`_retryable = true`).
-- `silver.clickstream`: in-batch dedup on `(brand_id, event_id)` + insert-only MERGE bounded by a configurable `event_date` lookback window.
+- `silver.orders` / `silver.order_items`: insert-only MERGE on `(brand_id, order_id)` / `(brand_id, order_id, item_id)`; the first valid Bronze copy wins and later copies (also of an order already in Silver) are counted `duplicates_removed`; composite FK checks against `silver.customers` (a tombstone counts as present) and valid Bronze products of the same brand; orphans → `dead_letter.dlq_orders` with `_retryable = true` (`customer_fk_missing` / `product_fk_missing`, `REFERENTIAL_INTEGRITY_VIOLATION`). A late parent is indistinguishable from an orphan at run time and is recovered by the `replay` job: `PENDING`/`FAILED_AGAIN` rows below `--max-replays` are re-checked, recovered rows inserted into Silver before their DLQ row becomes `REPLAYED` (`_replay_count + 1`). In the reconciliation `dlq` term, `REPLAYED` rows count as `silver_accepted` (D-078, D-080).
+- `silver.clickstream`: in-batch dedup on `(brand_id, event_id)` (lowest Kafka partition/offset wins) + insert-only MERGE on `(brand_id, event_id, event_date)`: an event is `late_beyond_window` when `produced_at − event_timestamp > lookback_days` (default 7, both payload fields on the simulated clock), so outcomes do not depend on batching or on other events (D-086). Generated late events are minutes late, so `late_beyond_window` is 0 on generated data (D-079).
 
 ---
 

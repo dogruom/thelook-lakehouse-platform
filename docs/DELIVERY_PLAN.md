@@ -208,7 +208,7 @@ Branching: one short-lived branch per day or task group (`feat/w1-contracts`, `f
 | | |
 |---|---|
 | Objective | Correct current state under duplicates and reordering, with pseudonymised PII |
-| Work | W3.D14.0 generator: intermediate-late CDC deliveries and CDC `late_beyond_window` in the manifest (closes D-030; the D15 CDC suite depends on it) · W3.D14.1 `silver.silver_customers` (`foreachBatch`: dedup to max sequence per key, MERGE guarded by `_cdc_sequence`, tombstones, HMAC `email_token`, `phone_masked`, `stale_cdc_noop` metric) · W3.D14.2 Spark tests on tiny frames |
+| Work | W3.D14.0 generator: intermediate-late CDC deliveries and CDC `late_beyond_window` in the manifest (closes D-030; the D15 CDC suite depends on it) · W3.D14.1 `silver.customers` (`foreachBatch`: dedup to max sequence per key, MERGE guarded by `_cdc_sequence`, tombstones, HMAC `email_token`, `phone_masked`, `stale_cdc_noop` metric) · W3.D14.2 Spark tests on tiny frames |
 | Learn | Delta MERGE semantics, multiple-match errors, keyed HMAC vs hashing |
 | Verify | `pytest tests/spark/test_silver_customers.py -q` |
 | Depends / blockers | D10, D11; `PII_HMAC_KEY` from `.env` |
@@ -226,7 +226,7 @@ Branching: one short-lived branch per day or task group (`feat/w1-contracts`, `f
 | | |
 |---|---|
 | Objective | History identical regardless of arrival order |
-| Work | W3.D16.1 `silver.silver_customers_history`: deterministic rebuild of affected keys from the Bronze CDC log ordered by `_cdc_sequence` · W3.D16.2 four scenario tests (Istanbul → Berlin, shuffled = identical hash, equal `_cdc_ts` ordered by sequence, re-run adds nothing) |
+| Work | W3.D16.1 `silver.customers_history`: deterministic rebuild of affected keys from the Bronze CDC log ordered by `_cdc_sequence` · W3.D16.2 four scenario tests (Istanbul → Berlin, shuffled = identical hash, equal `_cdc_ts` ordered by sequence, re-run adds nothing) |
 | Learn | SCD2 under late data, rebuild-vs-patch trade-off |
 | Verify | `pytest tests/integration/test_scd2_history.py -q` |
 | Done when | Shuffled and in-order deliveries produce identical history hashes |

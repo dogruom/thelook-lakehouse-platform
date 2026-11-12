@@ -78,9 +78,21 @@ CATALOG_TABLES: Mapping[str, TableSpec] = MappingProxyType(
             TableSpec("bronze", "bronze", "raw_products"),
             TableSpec("dead_letter", "dead_letter", "dlq_customers"),
             TableSpec("dead_letter", "dead_letter", "dlq_clickstream"),
+            TableSpec("dead_letter", "dead_letter", "dlq_orders"),
+            TableSpec("dead_letter", "dead_letter", "dlq_products"),
+            TableSpec("silver", "silver", "customers"),
+            TableSpec("silver", "silver", "customers_history"),
+            TableSpec("silver", "silver", "orders"),
+            TableSpec("silver", "silver", "order_items"),
+            TableSpec("silver", "silver", "clickstream"),
         )
     }
 )
+
+# Operational metrics (W3.D18, D-081): written path-based by the Silver jobs and ``reconcile``.
+# Deliberately not in ``CATALOG_TABLES``: it is not a pipeline dataset and is never registered
+# by ``register_tables`` (that mapping is the charter table list).
+PIPELINE_METRICS = TableSpec("ops", "ops", "pipeline_metrics")
 
 
 def resolve(

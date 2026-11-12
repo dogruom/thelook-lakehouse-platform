@@ -30,6 +30,10 @@ Timestamps (``AwareDatetime``) are accepted when they match an ISO-8601 shape wi
 listed in :data:`KNOWN_DIVERGENCES`. Not checked, by design (D-047): unknown JSON fields and
 trailing content after the JSON object (``from_json`` ignores both).
 
+File-landed tables (``raw_orders``, ``raw_products``, D-077) have no Kafka envelope: their rules
+use the landing-path brand (``brand_id``) and the claimed ``payload_brand_id``; see
+:func:`order_rules`. Foreign keys are not rules here (Silver decides them, retryable).
+
 PySpark is imported lazily, so this module imports on hosts without it. Rows with
 ``_parse_error`` set are never rejected here (they stay in Bronze); ``apply_rules`` gives them an
 empty code list. ``apply_rules`` needs the Bronze columns ``_kafka_key``, ``_kafka_headers`` and
@@ -42,12 +46,23 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from lakehouse.contracts.enums import CdcAction, ClickEventType, DeviceCategory, LoyaltyTier
+from lakehouse.contracts.enums import (
+    CdcAction,
+    ClickEventType,
+    Currency,
+    DeviceCategory,
+    LoyaltyTier,
+    OrderStatus,
+    PaymentMethod,
+    ProductCategory,
+    SalesChannel,
+)
 from lakehouse.contracts.models import (
     BRAND_ID_PATTERN,
     COUNTRY_PATTERN,
     EMAIL_PATTERN,
     PHONE_E164_PATTERN,
+    PRODUCT_ID_PATTERN,
     UUID_V4_PATTERN,
 )
 
@@ -59,10 +74,19 @@ if TYPE_CHECKING:
 
 
 class ErrorCategory(StrEnum):
-    """Subset of the DLQ ``_error_category`` enum (DATA_CONTRACTS section 3.2) used by D10."""
+    """Subset of the DLQ ``_error_category`` enum (DATA_CONTRACTS section 3.2) used by the gates."""
 
     SCHEMA_VIOLATION = "SCHEMA_VIOLATION"
     BUSINESS_RULE_VIOLATION = "BUSINESS_RULE_VIOLATION"
+    REFERENTIAL_INTEGRITY_VIOLATION = "REFERENTIAL_INTEGRITY_VIOLATION"
+    TIMESTAMP_OUT_OF_BOUNDS = "TIMESTAMP_OUT_OF_BOUNDS"
+
+
+# Foreign-key outcomes are decided in Silver (they need the parent tables), never by apply_rules.
+# They are retryable: a late parent may arrive and the DLQ replay re-checks them (D-077).
+CUSTOMER_FK_MISSING = "customer_fk_missing"
+PRODUCT_FK_MISSING = "product_fk_missing"
+FK_ERROR_CATEGORY = ErrorCategory.REFERENTIAL_INTEGRITY_VIOLATION
 
 
 @dataclass(frozen=True)
@@ -129,7 +153,7 @@ def _is_null(name: str) -> Callable[[], Column]:
     return failed
 
 
-def _canonical_ts(col: Column) -> Column:
+def canonical_ts(col: Column) -> Column:
     """Text Spark's cast can parse: upper-case T/Z and a colon in the offset (Pydantic needs
     neither). Shared by the validity check and by every rule that reads the timestamp's value."""
     from pyspark.sql import functions as F
@@ -137,10 +161,13 @@ def _canonical_ts(col: Column) -> Column:
     return F.regexp_replace(F.upper(col), r"([+-][0-9]{2})([0-9]{2})\z", "$1:$2")
 
 
+_canonical_ts = canonical_ts  # private alias kept for existing importers
+
+
 def _aware_ts_ok(col: Column) -> Column:
     from pyspark.sql import functions as F
 
-    return col.rlike(_AWARE_TS_RLIKE) & F.to_timestamp(_canonical_ts(col)).isNotNull()
+    return col.rlike(_AWARE_TS_RLIKE) & F.to_timestamp(canonical_ts(col)).isNotNull()
 
 
 def _date_ok(col: Column) -> Column:
@@ -269,7 +296,7 @@ def _signup_after_produced() -> Column:
     produced = F.col("produced_at")
     signup = F.col("signup_date")
     both_valid = _aware_ts_ok(produced) & _date_ok(signup)
-    epoch_days = F.floor(F.to_timestamp(_canonical_ts(produced)).cast("long") / F.lit(86400)).cast(
+    epoch_days = F.floor(F.to_timestamp(canonical_ts(produced)).cast("long") / F.lit(86400)).cast(
         "int"
     )
     produced_utc_date = F.date_add(F.lit("1970-01-01").cast("date"), epoch_days)
@@ -313,9 +340,244 @@ def clickstream_rules() -> list[Rule]:
     ]
 
 
+# --- file-landed entities (orders, products; D-077) ------------------------------------------
+# Bronze rows of these tables carry ``brand_id`` = the landing *path* brand (the trusted tenant
+# boundary) and ``payload_brand_id`` = what the line claims. There is no Kafka envelope, so the
+# envelope is: path brand, payload brand, path/payload agreement, schema version. Money is a string
+# in Bronze; it is checked with a signed pattern (a negative amount must reach the business rules
+# instead of being reported as a bad shape) before any cast. Stricter than Pydantic, which accepts
+# "5" or "5.0" for a Decimal: the contract serialises exactly two decimal places.
+_MONEY_SIGNED = r"^-?[0-9]{1,8}\.[0-9]{2}\z"
+_ITEM_FIELDS = (
+    "item_id",
+    "order_id",
+    "brand_id",
+    "product_id",
+    "quantity",
+    "unit_price",
+    "line_total",
+)
+_ITEMS_MIN = 1
+_ITEMS_MAX = 5
+_PRODUCT_NAME_MAX = 255
+_MONEY_TYPE = "decimal(10,2)"
+
+
+def _money_shape_ok(col: Column) -> Column:
+    return col.rlike(_MONEY_SIGNED)
+
+
+def _money_positive_ok(col: Column) -> Column:
+    from pyspark.sql import functions as F
+
+    return F.when(_money_shape_ok(col), col.cast(_MONEY_TYPE) > 0).otherwise(F.lit(False))
+
+
+def _wrong_type_when_present(name: str) -> Rule:
+    """Optional field that is NULL after parsing although the raw line holds a non-null value.
+
+    ``from_json`` gives the same NULL for an absent field and for a wrong-typed one; the raw line
+    tells them apart (V-20). JSON ``null`` stays valid (``get_json_object`` returns NULL for it).
+    """
+
+    def failed() -> Column:
+        from pyspark.sql import functions as F
+
+        raw = F.get_json_object(F.col("_raw_value"), f"$.{name}")
+        return _never_null(raw.isNotNull() & F.col(name).isNull())
+
+    return _schema(f"{name}_wrong_type", failed)
+
+
+def _brand_path_mismatch() -> Column:
+    from pyspark.sql import functions as F
+
+    both = F.col("brand_id").isNotNull() & F.col("payload_brand_id").isNotNull()
+    return _never_null(both & (F.col("payload_brand_id") != F.col("brand_id")))
+
+
+def _file_envelope_rules() -> list[Rule]:
+    return [
+        *_field("brand_id", "brand_id", _pattern_ok(BRAND_ID_PATTERN)),
+        *_field("payload_brand_id", "payload_brand_id", _pattern_ok(BRAND_ID_PATTERN)),
+        _schema("brand_path_mismatch", _brand_path_mismatch),
+        _schema("schema_version_invalid", _version_invalid),
+    ]
+
+
+def _items_present() -> Column:
+    from pyspark.sql import functions as F
+
+    return F.col("items").isNotNull()
+
+
+def _items_count_invalid() -> Column:
+    from pyspark.sql import functions as F
+
+    n = F.size(F.col("items"))
+    return _never_null(_items_present() & ((n < _ITEMS_MIN) | (n > _ITEMS_MAX)))
+
+
+def _item_null_or_wrong_type() -> Column:
+    from pyspark.sql import functions as F
+
+    def any_null(i: Column) -> Column:
+        cond = i.isNull()
+        for name in _ITEM_FIELDS:
+            cond = cond | i[name].isNull()
+        return cond
+
+    return _never_null(_items_present() & F.exists(F.col("items"), any_null))
+
+
+def _item_invalid() -> Column:
+    from pyspark.sql import functions as F
+
+    def bad(i: Column) -> Column:
+        def present_not_ok(name: str, ok: Column) -> Column:
+            return i[name].isNotNull() & ~F.coalesce(ok, F.lit(False))
+
+        return (
+            present_not_ok("item_id", i["item_id"].rlike(_java(UUID_V4_PATTERN)))
+            | present_not_ok("product_id", i["product_id"].rlike(_java(PRODUCT_ID_PATTERN)))
+            | present_not_ok("quantity", i["quantity"] > 0)
+            | present_not_ok("unit_price", _money_positive_ok(i["unit_price"]))
+            | present_not_ok("line_total", _money_shape_ok(i["line_total"]))
+        )
+
+    return _never_null(_items_present() & F.exists(F.col("items"), bad))
+
+
+def _item_parent_mismatch() -> Column:
+    from pyspark.sql import functions as F
+
+    def mismatch(i: Column) -> Column:
+        return (i["order_id"].isNotNull() & (i["order_id"] != F.col("order_id"))) | (
+            i["brand_id"].isNotNull() & (i["brand_id"] != F.col("payload_brand_id"))
+        )
+
+    return _never_null(_items_present() & F.exists(F.col("items"), mismatch))
+
+
+def _item_line_total_mismatch() -> Column:
+    from pyspark.sql import functions as F
+
+    def mismatch(i: Column) -> Column:
+        computable = (
+            (i["quantity"] > 0)
+            & _money_shape_ok(i["unit_price"])
+            & _money_shape_ok(i["line_total"])
+        )
+        expected = i["quantity"].cast("decimal(20,2)") * i["unit_price"].cast(_MONEY_TYPE)
+        return F.coalesce(
+            computable & (i["line_total"].cast(_MONEY_TYPE) != expected), F.lit(False)
+        )
+
+    return _never_null(_items_present() & F.exists(F.col("items"), mismatch))
+
+
+def _item_id_duplicate() -> Column:
+    from pyspark.sql import functions as F
+
+    ids = F.transform(F.col("items"), lambda i: i["item_id"])
+    return _never_null(_items_present() & (F.size(ids) != F.size(F.array_distinct(ids))))
+
+
+def _amounts_valid(*names: str) -> Column:
+    from pyspark.sql import functions as F
+
+    cond = F.lit(True)
+    for name in names:
+        cond = cond & F.coalesce(_money_shape_ok(F.col(name)), F.lit(False))
+    return cond
+
+
+def _amount(name: str) -> Column:
+    from pyspark.sql import functions as F
+
+    return F.col(name).cast(_MONEY_TYPE)
+
+
+def _gross_not_positive() -> Column:
+    return _never_null(_amounts_valid("gross_amount") & (_amount("gross_amount") <= 0))
+
+
+def _discount_negative() -> Column:
+    return _never_null(_amounts_valid("discount_amount") & (_amount("discount_amount") < 0))
+
+
+def _net_mismatch() -> Column:
+    ok = _amounts_valid("gross_amount", "discount_amount", "net_amount")
+    expected = _amount("gross_amount") - _amount("discount_amount")
+    return _never_null(ok & (_amount("net_amount") != expected))
+
+
+def _order_in_future() -> Column:
+    from pyspark.sql import functions as F
+
+    ts = F.col("order_timestamp")
+    return _never_null(_aware_ts_ok(ts) & (F.to_timestamp(canonical_ts(ts)) > F.col("_ingest_ts")))
+
+
+def order_rules() -> list[Rule]:
+    """Rules for ``order_event.v1`` rows (Bronze ``raw_orders``), in evaluation order.
+
+    Every rule is non-retryable: foreign keys (customer, product) are checked in Silver.
+    ``sum(items) = gross_amount`` is deliberately not a rule (the Pydantic model has none).
+    The future check compares with the row's ``_ingest_ts`` (deterministic, not the run clock).
+    """
+    business = ErrorCategory.BUSINESS_RULE_VIOLATION
+    return [
+        *_file_envelope_rules(),
+        *_field("order_id", "order_id", _pattern_ok(UUID_V4_PATTERN)),
+        *_field("customer_id", "customer_id", _pattern_ok(UUID_V4_PATTERN)),
+        *_field("order_timestamp", "order_timestamp", _aware_ts_ok),
+        *_field("order_status", "order_status", _enum_ok([m.value for m in OrderStatus])),
+        *_field("payment_method", "payment_method", _enum_ok([m.value for m in PaymentMethod])),
+        *_field("currency", "currency", _enum_ok([m.value for m in Currency])),
+        _invalid_rule("sales_channel", "sales_channel", _enum_ok([m.value for m in SalesChannel])),
+        _wrong_type_when_present("sales_channel"),
+        *_field("gross_amount", "gross_amount", _money_shape_ok),
+        *_field("discount_amount", "discount_amount", _money_shape_ok),
+        *_field("net_amount", "net_amount", _money_shape_ok),
+        _schema("items_null_or_wrong_type", _is_null("items")),
+        _schema("items_count_invalid", _items_count_invalid),
+        _schema("item_null_or_wrong_type", _item_null_or_wrong_type),
+        _schema("item_invalid", _item_invalid),
+        _schema("item_parent_mismatch", _item_parent_mismatch),
+        _schema("item_line_total_mismatch", _item_line_total_mismatch),
+        _schema("item_id_duplicate", _item_id_duplicate),
+        Rule("gross_amount_not_positive", business, False, _gross_not_positive),
+        Rule("discount_amount_negative", business, False, _discount_negative),
+        Rule("net_amount_mismatch", business, False, _net_mismatch),
+        Rule(
+            "order_timestamp_in_future",
+            ErrorCategory.TIMESTAMP_OUT_OF_BOUNDS,
+            False,
+            _order_in_future,
+        ),
+    ]
+
+
+def product_rules() -> list[Rule]:
+    """Rules for ``product.v1`` rows (Bronze ``raw_products``), in evaluation order."""
+    return [
+        *_file_envelope_rules(),
+        *_field("product_id", "product_id", _pattern_ok(PRODUCT_ID_PATTERN)),
+        *_field("product_name", "product_name", _length_ok(1, _PRODUCT_NAME_MAX)),
+        *_field("category", "category", _enum_ok([m.value for m in ProductCategory])),
+        *_field("retail_price", "retail_price", _money_positive_ok),
+        _invalid_rule("cost_price", "cost_price", _money_positive_ok),
+        _wrong_type_when_present("cost_price"),
+        _wrong_type_when_present("is_active"),
+    ]
+
+
 RULES_BY_TABLE: dict[str, Callable[[], list[Rule]]] = {
     "raw_customers": cdc_rules,
     "raw_clickstream": clickstream_rules,
+    "raw_orders": order_rules,
+    "raw_products": product_rules,
 }
 
 

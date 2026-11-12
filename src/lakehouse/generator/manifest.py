@@ -58,6 +58,9 @@ class ManifestEntry:
     cdc_action: str
     defect: CdcDefect | None = None
     expected_outcome: Outcome = Outcome.ACCEPT
+    # out_of_order only: sequence of the same customer's event this one was emitted after (its
+    # anchor); below the customer's last sequence = intermediate late event, equal = after-last.
+    late_after_sequence: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +146,16 @@ def build_counts(entries: Sequence[ManifestEntry]) -> dict[str, int]:
     for entry in entries:
         counts[RECONCILIATION_TERM[entry.expected_outcome]] += 1
     counts["late_beyond_window"] = 0
+    last: dict[tuple[str, str], int] = {}
+    for entry in entries:
+        key = (entry.brand_id, entry.customer_id)
+        last[key] = max(last.get(key, 0), entry.cdc_sequence)
+    counts["out_of_order_intermediate"] = sum(
+        1
+        for e in entries
+        if e.late_after_sequence is not None
+        and e.late_after_sequence < last[(e.brand_id, e.customer_id)]
+    )
     counts["emitted"] = counts["bronze"] = len(entries)
     return counts
 

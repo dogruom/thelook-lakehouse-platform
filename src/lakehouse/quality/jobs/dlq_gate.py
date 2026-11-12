@@ -1,7 +1,8 @@
 """Batch contract gate: Bronze rows that violate their contract go to the dead-letter tables.
 
 Run as ``python scripts/submit_job.py dlq_gate [--namespace <segment>] [--table <name>]...``
-(default tables: ``raw_customers`` and ``raw_clickstream``).
+(default tables: ``raw_customers`` and ``raw_clickstream``; the file tables ``raw_orders`` and
+``raw_products`` are gated only when named, D-077; their DLQ tenant is the landing-path brand).
 
 The job reads a whole Bronze table (one Delta snapshot, not a stream) and splits its rows:
 
@@ -58,6 +59,7 @@ from lakehouse.common.tables import (
     table_exists,
     verify_location,
 )
+from lakehouse.quality.dlq import DLQ_TABLE_BY_BRONZE, dlq_rows, merge_dlq
 from lakehouse.quality.rules import RULES_BY_TABLE, apply_rules
 
 
@@ -69,72 +71,12 @@ if TYPE_CHECKING:
 
     from lakehouse.common.jobs import JobContext
 
-DEFAULT_TABLES = tuple(RULES_BY_TABLE)
-DLQ_TABLE_BY_BRONZE = {"raw_customers": "dlq_customers", "raw_clickstream": "dlq_clickstream"}
+DEFAULT_TABLES = ("raw_customers", "raw_clickstream")
 _log = get_logger(__name__)
 
 
 class ReconciliationError(RuntimeError):
     """A post-write check of the gate failed (counts do not add up or DLQ rows are missing)."""
-
-
-def _dlq_rows(checked: DataFrame, source_table: str, run_id: str) -> DataFrame:
-    """Project rejected rows (non-empty ``_rejection_codes``) onto the DLQ schema."""
-    from pyspark.sql import functions as F
-
-    dlq_id = F.sha2(
-        F.concat(
-            F.coalesce(F.col("brand_id"), F.lit("")),
-            F.lit("|"),
-            F.lit(source_table),
-            F.lit("|"),
-            F.col("_source_ref"),
-        ),
-        256,
-    )
-    return checked.where(F.size("_rejection_codes") > 0).select(
-        dlq_id.alias("_dlq_id"),
-        F.col("brand_id").cast("string").alias("brand_id"),
-        F.lit(source_table).alias("_source_table"),
-        F.col("_source_ref").alias("_bronze_ref"),
-        F.col("event_id").cast("string").alias("event_id"),
-        F.col("_error_category"),
-        F.col("_rejection_reason"),
-        F.col("_rejection_codes"),
-        F.col("_retryable"),
-        F.lit("PENDING").alias("_replay_status"),
-        F.lit(0).alias("_replay_count"),
-        F.current_timestamp().alias("_rejected_at"),
-        F.lit(run_id).alias("_pipeline_run_id"),
-    )
-
-
-def _merge_inserted(spark: SparkSession, path: str, rejected: DataFrame) -> int:
-    """Insert-only MERGE of ``rejected`` into the DLQ table at ``path``; rows actually inserted.
-
-    The count comes from the history row of version ``before + 1`` (not "the latest row"), so a
-    MERGE that committed nothing reports 0.
-    """
-    from delta.tables import DeltaTable
-    from pyspark.sql import functions as F
-
-    target = DeltaTable.forPath(spark, path)
-    version_before = int(target.history(1).collect()[0]["version"])
-    (
-        target.alias("t")
-        .merge(rejected.alias("s"), "t._dlq_id = s._dlq_id AND t.brand_id <=> s.brand_id")
-        .whenNotMatchedInsertAll()
-        .execute()
-    )
-    rows = (
-        target.history()
-        .where(F.col("version") == version_before + 1)
-        .select("operation", "operationMetrics")
-        .collect()
-    )
-    if not rows or rows[0]["operation"] != "MERGE":
-        return 0
-    return int((rows[0]["operationMetrics"] or {}).get("numTargetRowsInserted", 0))
 
 
 def _breakdowns(rejected: DataFrame) -> tuple[dict[str, int], dict[str, int]]:
@@ -184,7 +126,7 @@ def _write_and_check(
         # An empty table with the schema (D-053); a first run must not skip creation.
         rejected.limit(0).write.format("delta").mode("append").save(dlq_path)
     rows_before = spark.read.format("delta").load(dlq_path).count()
-    inserted = _merge_inserted(spark, dlq_path, rejected) if rejected_rows else 0
+    inserted = merge_dlq(spark, dlq_path, rejected) if rejected_rows else 0
     after = spark.read.format("delta").load(dlq_path)
     rows_after = after.count()
     missing = rejected.join(
@@ -237,7 +179,7 @@ def _gate_table(
         )
     rows_read = int(totals["rows_read"])
     rejected = (
-        _dlq_rows(checked, source_table, run_id)
+        dlq_rows(checked, source_table, run_id)
         .dropDuplicates(["_dlq_id"])
         .persist(StorageLevel.MEMORY_AND_DISK)
     )

@@ -1,7 +1,7 @@
 # Session Log
 
 > **Document Version**: 1.0
-> **Last Updated**: 2026-11-06
+> **Last Updated**: 2026-11-13
 > **Purpose**: append-only, per-session trace of what changed and where — the backward-looking
 > complement to [PROGRESS.md](PROGRESS.md) `Current State` (which is overwritten each session).
 
@@ -22,6 +22,16 @@ ADR (architecture-level)          PORTFOLIO_NOTES (verified capability → evide
 to add a missing link. File lines are clickable repo-relative links.
 
 ---
+
+## 2026-11-12/13 · W3.D14–D18 Silver correctness (Week 3 close)
+
+- **Tasks**: W3.D14.1–D18.4 ✅ ([PROGRESS Week 3](PROGRESS.md))
+- **Commits / PR**: `505143c`, `bbba657`, `51ca27b`, `8f495d5`, `d81e740`, `04d5f20`, `c6ab4b9` · docs close commit · PR to `main` under D-032
+- **Decisions**: D-073 … D-087 ([DECISION_LOG](DECISION_LOG.md))
+- **Files (close session)**: [isolation_check.py](../src/lakehouse/quality/jobs/isolation_check.py) (self-join fix), [reconcile.py](../src/lakehouse/quality/jobs/reconcile.py), [pii.py](../src/lakehouse/common/pii.py) (docstring), tests [test_isolation.py (Spark)](../tests/spark/test_isolation.py), [spark_jobs.py](../tests/integration/spark_jobs.py), [pipeline_flow.py](../tests/integration/pipeline_flow.py), [test_tenant_isolation.py](../tests/integration/test_tenant_isolation.py), [test_idempotent_rerun.py](../tests/integration/test_idempotent_rerun.py); docs [PROGRESS.md](PROGRESS.md), [DATA_FLOW.md](DATA_FLOW.md), [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md), [TASKS.md](TASKS.md), [PORTFOLIO_NOTES.md](PORTFOLIO_NOTES.md), [DECISION_LOG.md](DECISION_LOG.md), [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
+- **Agents**: reviewer code (week gate) → coordinator fixes → evidence-auditor (Haiku)
+- **Finding**: unit tests with two separate DataFrames hid an ambiguous self-join; the default collision rate was too low for a non-vacuous leak test; the Docker engine needed a forced restart
+- **Learning**: W3 concepts queued for the tutor
 
 ## 2026-11-11 · W3.D13 Batch landing and Bronze batch ingest
 

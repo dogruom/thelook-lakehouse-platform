@@ -42,7 +42,7 @@ def _command(args: Sequence[str], timeout_s: int) -> list[str]:
 
 
 def submit(args: Sequence[str], timeout_s: int = DEFAULT_TIMEOUT_S) -> tuple[int, str]:
-    """Run ``submit_job.py <args>`` to completion; returns (exit code, stdout + stderr).
+    """Run ``submit_job.py <args>`` to completion; returns (exit code, stderr + stdout).
 
     Exit 3 (no worker capacity, e.g. executors of a just-killed driver still being released)
     means the job never started and is retried for a short while.
@@ -60,7 +60,9 @@ def submit(args: Sequence[str], timeout_s: int = DEFAULT_TIMEOUT_S) -> tuple[int
             timeout=timeout_s + HOST_SLACK_S,
             check=False,
         )
-        code, output = result.returncode, result.stdout + "\n" + result.stderr
+        # stderr (Spark log4j noise) first: the tail then ends with the job's JSON log lines,
+        # including ``job.failed`` and its exception, instead of the last Spark INFO lines.
+        code, output = result.returncode, result.stderr + "\n" + result.stdout
         if code != EXIT_NO_CAPACITY:
             break
         if attempt < CAPACITY_RETRIES - 1:
