@@ -4,8 +4,10 @@ Two namespaces read the same topic and the same landed files. The reference runs
 The crash namespace kills ``silver_customers`` and ``silver_orders`` (external SIGKILL of the driver
 at the start of batch 1, ``maxFilesPerTrigger=1``) and re-submits them with the same checkpoint.
 The final Silver content must equal the reference. Comparison is twofold: content hashes from the
-``content_hash`` job (customers: identical lineage; orders/items: the landed ``_bronze_ref``
-embeds the namespace, so the host-side comparison normalises it) and a host-side row multiset.
+``content_hash`` job (customers; orders/items: the landed ``_bronze_ref`` embeds the namespace, so
+only the host-side comparison, which normalises it, covers them) and a host-side row multiset.
+``_bronze_batch_id`` is left out of both: each namespace loads Bronze with its own stream query, so
+the Bronze batch id (``<app id>:<batch>``) legitimately differs between the two namespaces.
 
 No sleeps for ordering: events are awaited with timeouts. Whether the kill really landed
 mid-batch is proven from the checkpoint (planned batches > committed batches); otherwise the test
@@ -40,7 +42,8 @@ pytestmark = pytest.mark.integration
 TABLES = ("orders", "order_items", "customers")
 KILL_AT_BATCH = 1
 BATCH_WAIT_S = 240.0
-VOLATILE = {"_updated_at"}
+#: Not content: the wall clock, and the Bronze load's batch id (differs per namespace, see above).
+VOLATILE = {"_updated_at", "_bronze_batch_id"}
 
 
 @dataclass
@@ -71,6 +74,8 @@ def _content_hashes(namespace: str) -> dict[str, str]:
     args = ["content_hash", "--namespace", namespace]
     for table in TABLES:
         args += ["--table", table]
+    for column in sorted(VOLATILE):  # --exclude replaces the job's default (_updated_at)
+        args += ["--exclude", column]
     return _hashes(run(args))
 
 
