@@ -4,7 +4,7 @@
 # Profiles (start only what the task needs):
 #   core           postgres, seaweedfs (+init), kafka (+init), spark-master, spark-worker
 #   sql            spark-thrift  (Spark Thrift Server for dbt-spark; ADR-0007, ADR-0004 spike W2.D11)
-#   orchestration  airflow-*     (placeholder until the Airflow 3 image lands in Milestone 2)
+#   orchestration  airflow-*     (Airflow 3: init, api-server, dag-processor, scheduler; W4.D22, image unverified)
 #   tools          spark-test    (pytest inside the Spark image; tests/spark from W2.D7)
 #
 # Rules (.claude/rules/infra.md):
@@ -59,22 +59,37 @@ x-hive-client-env: &hive-client-env
 x-hive-entrypoint: &hive-entrypoint ["python3", "/opt/lakehouse-docker/render_hive_site.py"]
 x-hive-render-mount: &hive-render-mount ./docker/spark/render_hive_site.py:/opt/lakehouse-docker/render_hive_site.py:ro
 
+# Airflow 3 (W4.D22, ADR-0010, D-098). The image is UNVERIFIED until the owner's first build
+# (`docker compose --profile orchestration build airflow-init`; needs crm/spark:3.5.9 built first).
+# Memory: mem_limit per service is an initial estimate, not a measurement (see D-098). Docker has
+# 7.6 GB: run `core` + `orchestration` and keep the `sql` profile stopped except for the dbt step.
 x-airflow-common: &airflow-common
-  # Placeholder: Airflow 3 image and DAG layout are built in Milestone 2.
-  image: crm/airflow:2.9.3
+  image: crm/airflow:3.0.6
   build:
     context: ./docker/airflow
     dockerfile: Dockerfile
+    additional_contexts:
+      requirements: ./requirements   # dbt.txt for the dbt virtualenv inside the image
     args:
-      AIRFLOW_VERSION: "2.9.3"
+      AIRFLOW_VERSION: "3.0.6"
+      SPARK_IMAGE: crm/spark:3.5.9
+      SPARK_VERSION: "3.5.9"
   profiles: ["orchestration"]
   environment: &airflow-common-env
     <<: *s3-credentials
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+    # Task SDK: workers call the api-server's execution API (Airflow 3).
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:?AIRFLOW__CORE__FERNET_KEY missing - see .env.example}
     AIRFLOW__API__SECRET_KEY: ${AIRFLOW__API__SECRET_KEY:?AIRFLOW__API__SECRET_KEY missing - run scripts/bootstrap_env.py}
+    # One secret for the api-server and the scheduler: the JWT that authorises task runs.
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API__SECRET_KEY:?AIRFLOW__API__SECRET_KEY missing - run scripts/bootstrap_env.py}
+    AWS_DEFAULT_REGION: us-east-1
+    LAKEHOUSE_BUCKET: ${LAKEHOUSE_BUCKET:-lakehouse}
     AIRFLOW_DB_NAME: ${AIRFLOW_DB_NAME:-airflow_metadata}
     AIRFLOW_DB_USER: ${AIRFLOW_DB_USER:-airflow}
     AIRFLOW_DB_PASSWORD: ${AIRFLOW_DB_PASSWORD:?AIRFLOW_DB_PASSWORD missing - run scripts/bootstrap_env.py}
@@ -386,42 +401,49 @@ services:
     restart: "no"
 
   # ===========================================================================
-  # AIRFLOW — placeholder until Milestone 2 (Airflow 3, own image). Not part of `core`.
+  # AIRFLOW 3 — profile `orchestration` (W4.D22, ADR-0010). Not part of `core`.
+  # LocalExecutor: tasks run inside the scheduler container, which therefore also hosts the Spark
+  # client-mode drivers (spark-submit to spark://spark-master:7077) and the dbt subprocess.
+  # UNVERIFIED until the owner's first image build and run.
   # ===========================================================================
   airflow-init:
     <<: *airflow-common
     container_name: crm_airflow_init
+    mem_limit: 768m
     environment:
       <<: *airflow-common-env
-      AIRFLOW_ADMIN_USER: ${AIRFLOW_ADMIN_USER:-admin}
-      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:?AIRFLOW_ADMIN_PASSWORD missing - run scripts/bootstrap_env.py}
-    command:
-      - bash
-      - -c
-      - |
-        airflow db migrate &&
-        airflow users create \
-          --username "$$AIRFLOW_ADMIN_USER" \
-          --password "$$AIRFLOW_ADMIN_PASSWORD" \
-          --firstname Admin \
-          --lastname User \
-          --role Admin \
-          --email admin@crm-lakehouse.local &&
-        echo 'Airflow initialized successfully'
-    restart: on-failure
+      # The official entrypoint migrates the metadata DB and creates the admin user from these.
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:?AIRFLOW_ADMIN_PASSWORD missing - run scripts/bootstrap_env.py}
+    command: ["version"]
+    restart: "no"
 
-  airflow-webserver:
+  airflow-api-server:
     <<: *airflow-common
-    container_name: crm_airflow_webserver
-    command: airflow webserver
+    container_name: crm_airflow_api_server
+    command: ["api-server"]
+    mem_limit: 1g
     ports:
       - "127.0.0.1:8080:8080"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 90s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    container_name: crm_airflow_dag_processor
+    command: ["dag-processor"]
+    mem_limit: 768m
     depends_on:
       postgres:
         condition: service_healthy
@@ -431,18 +453,44 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     container_name: crm_airflow_scheduler
-    command: airflow scheduler
+    # The hive-site.xml renderer runs first (as in spark-master), then the Airflow entrypoint.
+    entrypoint: *hive-entrypoint
+    command: ["/usr/bin/dumb-init", "--", "/entrypoint", "scheduler"]
+    # Scheduler + task supervisors + one Spark driver JVM (768m heap) + a dbt subprocess.
+    mem_limit: 2g
+    environment:
+      <<: [*airflow-common-env, *hive-client-env]
+      LAKEHOUSE_CATALOG: hive
+      ENVIRONMENT: local
+      # Executors on the worker connect back to the driver in this container by service name.
+      SPARK_DRIVER_HOST: airflow-scheduler
+      DBT_SPARK_HOST: spark-thrift
+      DBT_SPARK_PORT: "10000"
+      # Driver only (silver_customers): pseudonymisation key, pass-through like spark-master.
+      PII_HMAC_KEY:
+      # Optional alert sink; empty = log the payload only. Pass-through, never a default.
+      ALERT_WEBHOOK_URL:
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src:ro
+      - ./dbt_project:/opt/airflow/dbt_project
+      - airflow_logs:/opt/airflow/logs
+      - airflow_plugins:/opt/airflow/plugins
+      - *spark-conf
+      - *hive-render-mount
     healthcheck:
-      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname $$(hostname)"]
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --local"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 90s
     depends_on:
       postgres:
         condition: service_healthy
       airflow-init:
         condition: service_completed_successfully
+      airflow-api-server:
+        condition: service_healthy
 
 
 # =============================================================================
