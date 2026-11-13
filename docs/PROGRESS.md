@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-13 (W4.D20 closed; v9.0 2026-11-05: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W4.D21** closed (D21.0–D21.3 ✅) → next **W4.D22** (Airflow 3 image, DAG, ADR-0010) · M1: 37/37 ✅ (`v0.1.0` tagged)
+> **Active**: **W4.D21** merged; **W4.D22–D24** in progress (code done; Airflow run, full e2e and M2 review need the owner) · M1: 37/37 ✅ (`v0.1.0` tagged)
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,17 +13,17 @@
 
 ## Current State
 
-- **Updated**: 2026-11-13 (W4.D21 closed) · **Branch**: `feat/w4-d21-customer360-rfm` (merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md))
-- **Last delivered**: W4.D21 — generator links identified sessions to same-brand CDC customers; shared clickstream rebuilt via audited `reset_clickstream` (owner yes); Gold `obt_customer_360`, `agg_rfm_segments` (NTILE per brand, `as_of_date` var), dbt unit tests, `gold_tenant` views, docs complete (D-097, contracts v8.1).
-- **Unfinished**: W4.D22–D24 (Airflow 3 image build needs the owner's approval); V-28 orders reconcile mismatch (→ W4.D23.2); tutor gates M1 (V-11), W3, W4.D19–D21; V-19 `/security-review`. V-23 known limit.
-- **Tests & results**: W4.D21 close: `dbt build --select staging marts` PASS=146 WARN=0 ERROR=0; analytics after the review fixes PASS=30 (4 unit tests); unit 1661 passed, 1 skipped, coverage ≈ 80.32 %; ruff/format/mypy clean.
+- **Updated**: 2026-11-14 (W4.D21 merged; W4.D22–D24 in progress) · **Branches**: `feat/w4-d24-e2e-contracts` (this file), `feat/w4-d22-airflow` (Airflow code, pushed, based on `add3b1e` — needs a merge of `main` before its PR; DATA_FLOW/DECISION_LOG will conflict)
+- **Last delivered**: W4.D21 merged (`dbb1b8e`, PR #18). W4.D24.4 contracts on `obt_customer_360` / `agg_rfm_segments` (`790b2cc`); `scripts/run_e2e.py` (`80d62da`); V-28 closed (D-100). W4.D22/D23 code complete on its branch, reviewed (fixes `36c6a3a`), never run.
+- **Unfinished**: W4.D22.1–.3 and W4.D23.1–.4 (need the owner's Airflow image build, then `dags test` + integration tests); W4.D24.1 full run incl. `land` (owner's S3 credentials); W4.D24.2 Spark suite inconclusive (Docker engine stopped responding, API 500, 2026-11-14 00:35) + integration suites; W4.D24.3 M2 review + `v0.2.0` (owner); tutor gates M1 (V-11), W3, W4.D19–D21; V-19 `/security-review`.
+- **Tests & results**: unit 1661 passed / 1 skipped on `main` + D24 tests (`test_run_e2e.py` 9 passed); D22 branch 1758 passed / 1 skipped; `run_e2e.py --skip-generate` 10 steps ok (1519 s); dbt analytics with contracts PASS=30.
 - **Test cadence (D-059)**: only the relevant tests while developing, full suite once per day close; integration tests run sequentially (2 worker cores); broker chaos opt-in (`RUN_BROKER_CHAOS=1`).
-- **Owner action** — [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) *Owner action*: V-11 learning gates · V-19 one `/security-review` run · V-13 (deferred) · approve/run the Airflow 3 image build (W4.D22.1) · `v0.2.0` tag at the M2 review.
-- **Stack**: `core` + `sql` running at the W4.D21 close. Shared catalog: Bronze, DLQ, six Silver tables, `gold_staging` views, `gold_marts` (7 marts + `obt_customer_360`, `agg_rfm_segments`), `gold_tenant` views. Clickstream lineage rebuilt 2026-11-13 (5000 base events, project seed).
+- **Owner action** — restart Docker Desktop (engine API 500); build the Airflow 3 image (W4.D22.1); run `run_e2e.py` with `land`; V-11 learning gates · V-19 `/security-review` · V-13 (deferred) · `v0.2.0` at the M2 review.
+- **Stack**: Docker engine unresponsive at 2026-11-14 00:35 (state of `core` + `sql` unknown; restart Docker Desktop, then `docker compose --profile core --profile sql up -d --wait`). Shared catalog: Bronze, DLQ, six Silver tables, `gold_staging` views, `gold_marts` (7 marts + `obt_customer_360`, `agg_rfm_segments`), `gold_tenant` views. Clickstream lineage rebuilt 2026-11-13 (5000 base events, project seed).
 - **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): earlier list plus D-073 … D-087 (Week 3), D-088 staging conventions, D-089 tenant-safe dbt tests, D-090, D-091 Spark-owned `silver.products`, D-092 `v0.1.0`, D-093 Gold also on Athena, D-094, D-095 Gold marts conventions, D-096 clickstream customer-id defect, D-097 clickstream rebuild + Customer 360/RFM conventions.
 - **Risks / blockers**: 7.6 GB Docker memory, 2 worker cores; coverage headroom ≈ 0.32 pt (V-24); full Gold build ≈ 10 min; Airflow image not built yet; Delta commit safety on S3 → W5.
 - **Way of working**: Claude implements everything; every pipeline step is mapped in [DATA_FLOW.md](DATA_FLOW.md) (D-046); per-session trace in [SESSION_LOG.md](SESSION_LOG.md).
-- **Next task ("Start today's task")**: **W4.D22** — Airflow 3 image (owner approves the build), `lakehouse_pipeline` DAG, ADR-0010.
+- **Next task ("Start today's task")**: **W4.D22 verification** — after the owner's image build: merge `main` into `feat/w4-d22-airflow`, `airflow dags list-import-errors`, `dags test` (with `fail_brand`), `test_dag_failure_isolation.py`, `test_backfill_idempotent.py`; then W4.D24.2/.3.
 - **Autonomous run**: not started (setup on `chore/autonomous-run`, D-041/D-042)
 
 ---
@@ -52,7 +52,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 
 ```
 M1 (D1–D12)   [████████████████████] 37 / 37
-M2 (D13–D24)  [██████████████░░░░░░] 26 / 37
+M2 (D13–D24)  [██████████████░░░░░░] 27 / 37
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 36
 ```
 
@@ -295,17 +295,17 @@ Evidence:
 | W4.D21.1 | `obt_customer_360` | grain `(brand_id, customer_id)`; `as_of_date` var | `dbt build --select obt_customer_360` | ✅ `f3dd0b2` |
 | W4.D21.2 | `agg_rfm_segments` | NTILE per brand; dbt unit tests; no 0%/100% segment | distribution query | ✅ `f3dd0b2` |
 | W4.D21.3 | Docs + scoped Gold views | `dbt docs generate` complete descriptions | command output | ✅ `f3dd0b2` |
-| W4.D22.1 | Airflow 3 image | Python 3.11; providers pinned; `orchestration` profile | `airflow version` | ⏳ |
-| W4.D22.2 | `lakehouse_pipeline` DAG | mapped per brand; retries/timeouts; re-run same interval is a no-op | `airflow dags test lakehouse_pipeline <date>` | ⏳ |
-| W4.D22.3 | ADR-0010 | orchestration ↔ compute interface | file review | ⏳ |
-| W4.D23.1 | Tenant failure isolation | one brand fails, others complete | `pytest tests/integration/test_dag_failure_isolation.py -q` | ⏳ |
-| W4.D23.2 | Quality gates | DLQ-rate threshold halts downstream | gate test | ⏳ |
-| W4.D23.3 | Alert payload | JSON webhook payload on failure/threshold | payload in logs | ⏳ |
-| W4.D23.4 | Idempotent backfill | past interval re-run → identical hashes | test output | ⏳ |
-| W4.D24.1 | One-command e2e | `python scripts/run_e2e.py` green | output | ⏳ |
-| W4.D24.2 | Full regression | all suites green | outputs + CI | ⏳ |
-| W4.D24.3 | M2 review + tag | runbook, reviewer APPROVE, auditor PASS, `v0.2.0` (owner) | `checkpoint milestone M2` | ⏳ |
-| W4.D24.4 | dbt contracts | enforced where the adapter supports it, else documented alternative | `dbt build` | ⏳ |
+| W4.D22.1 | Airflow 3 image | Python 3.11; providers pinned; `orchestration` profile | `airflow version` | 🔄 code `de60bfb` `36c6a3a` (branch `feat/w4-d22-airflow`); image build = owner |
+| W4.D22.2 | `lakehouse_pipeline` DAG | mapped per brand; retries/timeouts; re-run same interval is a no-op | `airflow dags test lakehouse_pipeline <date>` | 🔄 code `3764f08` `36c6a3a`; `dags test` pending image |
+| W4.D22.3 | ADR-0010 | orchestration ↔ compute interface | file review | 🔄 `53e42af` (ADR-0010 Proposed) |
+| W4.D23.1 | Tenant failure isolation | one brand fails, others complete | `pytest tests/integration/test_dag_failure_isolation.py -q` | 🔄 test written `3764f08`; needs Airflow |
+| W4.D23.2 | Quality gates | DLQ-rate threshold halts downstream | gate test | 🔄 `60ab192` (unit-tested; cluster run pending) |
+| W4.D23.3 | Alert payload | JSON webhook payload on failure/threshold | payload in logs | 🔄 `3764f08` `36c6a3a` (unit-tested; live payload pending) |
+| W4.D23.4 | Idempotent backfill | past interval re-run → identical hashes | test output | 🔄 test written `36c6a3a`; needs Airflow |
+| W4.D24.1 | One-command e2e | `python scripts/run_e2e.py` green | output | 🔄 `80d62da` (processing chain green; full run incl. `land` = owner) |
+| W4.D24.2 | Full regression | all suites green | outputs + CI | 🔄 unit + Spark + dbt green; integration + DAG pending |
+| W4.D24.3 | M2 review + tag | runbook, reviewer APPROVE, auditor PASS, `v0.2.0` (owner) | `checkpoint milestone M2` | ⏳ owner (needs D22/D23 evidence) |
+| W4.D24.4 | dbt contracts | enforced where the adapter supports it, else documented alternative | `dbt build` | ✅ `790b2cc` |
 
 **Evidence**:
 - W4.D19.1 ✅: `7397428` — sources on the five Silver tables, `stg_*` views in `gold_staging`, profiles from env (unchanged, D-088). After the owner landed orders (V-25): `bronze_batch` 249 lines → `silver_orders` 225 accepted + 9 DLQ + 9 duplicates + 6 FK orphans = 249, 488 items. `dbt build --select staging --profiles-dir profiles` → **PASS=42 WARN=0 ERROR=0** (2026-11-13; 897 customers, 2604 history rows, 225 orders, 488 items, 12805 clickstream rows, 3 brands). The orders leg is not vacuous: 1 order references a customer id that exists in two brands.
@@ -315,6 +315,10 @@ Evidence:
 - W4.D21.0 ✅: `3e49b32` (generator pools, D-097) + `6828076` (`reset_clickstream`). Owner yes 2026-11-13 → `reset_clickstream` dry run then `--apply --confirm clickstream`: 3 tables (31/19/7 files), 2 checkpoints, 1 metrics row removed; topic `clickstream_events` recreated; `produce --only clickstream --events 5000 --cdc-events 1000` → delivered 5200 (alpha 3124 / beta 1557 / gamma 519); `bronze_stream` → `silver_clickstream`: rows_read 5200 = accepted 4925 + DLQ 50 + duplicates 200 + parse 25. 26 sessions hit customers missing from Silver (shared CDC from an older generator version) → `produce --only cdc` additively: 905 duplicates, 34 stale no-op, 11 accepted; customers 897 → 903; then **0 orphans** of 1706/913/279 identified sessions. `relationships_by_brand_fct_sessions_customer_id` at severity error → PASS.
 - W4.D21.1 ✅ / W4.D21.2 ✅ / W4.D21.3 ✅: `f3dd0b2` — `dbt build --select staging marts` → **PASS=146 WARN=0 ERROR=0** (before the contract column rename); after the rename `dbt build --select obt_customer_360+` → **PASS=29 ERROR=0** incl. 3 dbt unit tests (per-brand NTILE, tie-break + exclusions, every segment rule) and `assert_rfm_segments_non_degenerate`. obt_customer_360 903 rows (alpha 542 / beta 269 / gamma 92; customers with any order 45/35/17 (RFM scores the 43/32/17 with ≥ 1 valid order); with sessions 183/90/27). RFM 92 customers; segments per brand (at_risk/champions/hibernating/loyal/promising): alpha 10/6/11/8/8, beta 4/4/12/7/5, gamma 3/3/7/3/1 (min 5.9 %, max 41.2 %). Reproducibility: checksum `sum(hash(...))` of `agg_rfm_segments` = 21783813268 on two builds with `as_of_date` 2026-01-02 (and after the rename), c360 −16521825472 both times; `as_of_date` 2026-01-01 → c360 −9070750642. After the review fix (truncated hours, `whole_hours_between`): `dbt build --select obt_customer_360+` → **PASS=30** (4 unit tests incl. `obt_customer_360_cut_tenancy_and_revenue_rules`; negative check: with `dbt.datediff` the OBT unit test fails, `recency_hours` 0 → 1); segment counts unchanged; checksum rfm 5059524923 / c360 −14436000144 identical on two builds. `dbt docs generate` + `python scripts/check_dbt_docs.py` → 15 models, 0 missing descriptions. Views `gold_tenant.{obt_customer_360,agg_rfm_segments}__brand_{alpha,beta,gamma}` (6), `__brand_beta` returns only `brand_beta`.
 - W4.D21 gates: ruff/format/mypy clean, lint-imports 2 kept; unit **1660 passed, 1 skipped, coverage ≈ 80.25 %** (887 of 4491 missed); after the review fixes (HEAD `1256eef`, `pytest tests/unit`) **1661 passed, 1 skipped**, 884 missed ≈ 80.32 %; mypy clean, lint-imports 2 kept. Found: `reconcile` `batch_sum_vs_data` mismatch on `raw_orders` (V-28, orders untouched today).
+- W4.D22/W4.D23 🔄: code on branch `feat/w4-d22-airflow` (pushed, not merged): `60ab192` DLQ-rate gate, `3764f08` DAG + `lakehouse.orchestration`, `de60bfb` Airflow 3.0.6 image + services, `53e42af` ADR-0010 / D-098 / D-099, `36c6a3a` review fixes (code review CHANGES REQUIRED → 2 must-fix + 7 should-fix applied). Host: ruff/format/mypy/lint-imports clean, `pytest tests/unit` **1758 passed, 1 skipped**. NOT verified: image build, DAG import under Airflow 3.0.6, `airflow dags test`, failure isolation, backfill, live alert payload, memory fit.
+- W4.D24.1 🔄: `80d62da` — `python scripts/run_e2e.py`: `produce` ok (3 s); `land` failed on the coordinator's shell (no S3 credentials on the host, same as V-25) → `run_e2e.py --skip-generate` → **10 steps ok in 1519 s** (bronze_stream 100 s … reconcile 119 s, dbt_build 428 s). V-28 closed before the run (`dlq_gate --table raw_orders --table raw_products` → inserted 9 / 0; `reconcile` → `job.succeeded`, D-100). ✅ once the owner's full run (with `land`) is green.
+- W4.D24.2 🔄: `docker compose --profile tools run --rm spark-test pytest tests/spark -q` ran ~50 min and ended with `error waiting for container: unexpected EOF`; afterwards the Docker API returned 500 → no pytest summary, result **inconclusive** (not a pass).
+- W4.D24.4 ✅: `790b2cc` — contracts enforced on `obt_customer_360` (26 columns) and `agg_rfm_segments` (12); `dbt build --select obt_customer_360+` → PASS=30; negative check: `rfm_score` declared `bigint` → "This model has an enforced contract that failed", restored → PASS. Other marts stay on D-095.
 - W4.D20 gates: ruff/format/mypy clean; unit **1646 passed, 1 skipped, coverage 80.41 %**; review APPROVE WITH NITS, all should-fix applied.
 - Gates (W4.D19): ruff/format/mypy clean; unit **1634 passed, 1 skipped, coverage 80.91 %** (no `src/` change). V-15 closed (Spark job + dbt overlap, D-090). Review: code review **APPROVE WITH NITS**, should-fix 1–3 applied before the commit.
 

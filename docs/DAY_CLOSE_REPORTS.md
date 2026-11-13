@@ -33,7 +33,7 @@
 - **Risks**: coverage headroom ≈ 0.32 pt (V-24).
 - **Learning queued**: OBT vs star schema, reproducible metrics (`as_of_date`), NTILE and ties, dbt unit tests vs data tests.
 - **Next day**: W4.D22 — Airflow 3 image (owner approves the build), `lakehouse_pipeline` DAG, ADR-0010.
-- **Merge status**: pending (PR, CI, merge recorded after the merge).
+- **Merge status**: merged 2026-11-13 as `dbb1b8e` (PR #18; CI 6/6 green, review APPROVE WITH NITS with fixes, audit PASS after 2 fixes, D-032).
 
 ---
 
