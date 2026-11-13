@@ -8,6 +8,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 from lakehouse.common.logging import configure_logging
 from lakehouse.common.spark import SparkSettings
@@ -16,6 +17,8 @@ from lakehouse.generator.clickstream import generate_clickstream
 from lakehouse.generator.config import GeneratorConfig
 from lakehouse.generator.io import write_clickstream_run, write_run
 from lakehouse.generator.landing import (
+    aws_bucket_from_env,
+    create_aws_s3_client,
     s3_client_from_env,
     write_batch,
     write_batch_local,
@@ -80,6 +83,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     land.add_argument("--seed", type=int, default=None, help="overrides GEN_SEED")
     land.add_argument("--dry-run", action="store_true", help="write to --out-dir, not to S3")
+    land.add_argument(
+        "--target",
+        choices=("local", "aws"),
+        default="local",
+        help="local: S3_ENDPOINT/LAKEHOUSE_BUCKET (SeaweedFS); aws: real AWS S3, "
+        "LAKEHOUSE_AWS_BUCKET, default credential chain",
+    )
     land.add_argument("--out-dir", type=Path, default=DEFAULT_LANDING_OUT_DIR)
     return parser
 
@@ -145,6 +155,37 @@ def _produce(args: argparse.Namespace, config: GeneratorConfig) -> int:
     return 0 if stats.ok else 1
 
 
+def _land_s3(
+    target_kind: str,
+    aws_bucket: str,
+    pools: Any,
+    products: Any,
+    run: Any,
+    date_str: str,
+) -> str:
+    """Write products and orders to S3 (local SeaweedFS or real AWS); returns the landing URI."""
+    if target_kind == "aws":
+        # Never touches S3_ENDPOINT / S3_ACCESS_KEY / LAKEHOUSE_BUCKET (local SeaweedFS).
+        client, bucket = create_aws_s3_client(), aws_bucket
+    else:
+        settings = SparkSettings()
+        client, bucket = s3_client_from_env(settings.s3_endpoint), settings.bucket
+    for brand_id in pools:
+        file = products.files[brand_id]
+        write_products(client, bucket, brand_id, date_str, file.data, file.manifest)
+    for batch in run.batches:
+        write_batch(
+            client,
+            bucket,
+            batch.brand_id,
+            batch.batch_date.isoformat(),
+            batch.batch_no,
+            batch.data,
+            batch.manifest,
+        )
+    return f"s3://{bucket}/landing"
+
+
 def _land(
     args: argparse.Namespace, config: GeneratorConfig, parser: argparse.ArgumentParser
 ) -> int:
@@ -155,6 +196,15 @@ def _land(
     ):
         if name < 1:
             parser.error(f"{flag} must be >= 1")
+    if args.target == "aws" and args.dry_run:
+        parser.error("--target aws cannot be combined with --dry-run")
+    aws_bucket = ""
+    if args.target == "aws":
+        try:
+            aws_bucket = aws_bucket_from_env()
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
     try:
         pools = customer_pools_from_cdc(
             generate_cdc(config, brands=args.brands, events=args.cdc_events)
@@ -191,22 +241,7 @@ def _land(
             )
         target = str(root)
     else:
-        settings = SparkSettings()
-        client = s3_client_from_env(settings.s3_endpoint)
-        for brand_id in pools:
-            file = products.files[brand_id]
-            write_products(client, settings.bucket, brand_id, date_str, file.data, file.manifest)
-        for batch in run.batches:
-            write_batch(
-                client,
-                settings.bucket,
-                batch.brand_id,
-                batch.batch_date.isoformat(),
-                batch.batch_no,
-                batch.data,
-                batch.manifest,
-            )
-        target = f"s3://{settings.bucket}/landing"
+        target = _land_s3(args.target, aws_bucket, pools, products, run, date_str)
     print(f"landed {len(run.batches)} order batches and {len(pools)} product files to {target}")
     _print_counts(run.summary["totals"], "orders.")
     return 0
