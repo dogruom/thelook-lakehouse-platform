@@ -14,7 +14,7 @@
 ## Current State
 
 - **Updated**: 2026-11-13 (W4.D20 closed) · **Branch**: `feat/w4-d20-gold-marts`; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
-- **Last delivered**: W4.D20 — Spark `silver.products` (D-094), `stg_products`, Gold `dim_customers`, `dim_customers_history`, `dim_products`, `dim_date`, `fct_orders`, `fct_order_items`, `fct_sessions` in `gold_marts` with brand-aware surrogate keys and tenant FK tests (D-095); Gold SQL portable for Athena (D-093).
+- **Last delivered**: W4.D20 — Spark `silver.products` (D-094), `stg_products`, Gold `dim_customers`, `dim_customers_history`, `dim_products`, `dim_date`, `fct_orders`, `fct_order_items`, `fct_sessions` in `gold_marts` with brand-aware surrogate keys and tenant FK tests (D-095); Gold SQL designed for Athena (D-093; Athena branch untested until W5.D28.4).
 - **Unfinished**: V-26 clickstream ↔ customer link (W4.D21.0, owner approves the clickstream data rebuild); tutor gates M1 (V-11), W3, W4.D19–D20; V-19 `/security-review`. V-23 known limit.
 - **Tests & results**: W4.D20 close: `dbt build --select staging marts` PASS=117 WARN=1 (V-26) ERROR=0; Spark `test_silver_products.py` 53 passed; unit 1646 passed, 1 skipped, coverage 80.41 %; ruff/format/mypy clean.
 - **Test cadence (D-059)**: only the relevant tests while developing, full suite once per day close; integration tests run sequentially (2 worker cores); broker chaos opt-in (`RUN_BROKER_CHAOS=1`).
