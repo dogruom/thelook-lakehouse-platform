@@ -1,0 +1,112 @@
+name: deploy-and-run
+
+# W5.D29: build the artifacts, upload them to the data bucket and run the Glue job(s). Manual only;
+# the `aws-dev` environment (required reviewer, set by the owner in repo settings) gates the OIDC
+# role: its trust policy accepts only `repo:dogruom/thelook-lakehouse-platform:environment:aws-dev`
+# (D-105). Configuration lives in repository variables; there are no secrets and no access keys.
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Glue job to run, or the whole cloud sequence"
+        type: choice
+        required: true
+        default: sequence-cloud
+        options:
+          - sequence-cloud
+          - bronze_batch
+          - dlq_gate
+          - silver_customers
+          - silver_customers_history
+          - silver_orders
+          - silver_products
+          - silver_clickstream
+          - reconcile
+          - register_tables
+          - metrics_report
+
+permissions:
+  contents: read
+
+# Never cancel a running cloud job: a half-finished Delta write is worse than a queued run.
+concurrency:
+  group: deploy-and-run
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  deploy-and-run:
+    name: build artifacts, run Glue job(s)
+    # Only the reviewed main branch may assume the deploy role (D-105).
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: aws-dev
+    permissions:
+      id-token: write # GitHub OIDC token for the AWS role
+      contents: read
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      LAKEHOUSE_AWS_BUCKET: ${{ vars.LAKEHOUSE_AWS_BUCKET }}
+      JOB: ${{ inputs.job }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+
+      # Dependencies are installed before the AWS role is assumed, so no package install runs
+      # with cloud credentials in the environment. boto3 is pinned like requirements/base.txt.
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . boto3==1.34.127
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-deploy-${{ github.run_id }}
+
+      - name: Build and upload artifacts
+        run: |
+          python scripts/cloud/build_artifacts.py
+          # Artifact folder name = first 12 characters of the commit (contract, D-103).
+          echo "ARTIFACT_SHA=$(git rev-parse HEAD | cut -c1-12)" >> "${GITHUB_ENV}"
+
+      - name: Run Glue job(s)
+        run: |
+          set -euo pipefail
+          if [ "${JOB}" = "sequence-cloud" ]; then
+            target=(--sequence cloud)
+          else
+            target=("${JOB}")
+          fi
+          python scripts/cloud/run_job.py "${target[@]}" --artifact-sha "${ARTIFACT_SHA}" \
+            2>&1 | tee run_job.log
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## deploy-and-run"
+            echo
+            echo "- target: \`${JOB}\`"
+            echo "- artifact sha: \`${ARTIFACT_SHA:-not built}\`"
+            echo "- region: \`${AWS_REGION}\`"
+            echo "- run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo
+            if [ -f run_job.log ]; then
+              echo '```text'
+              tail -n 60 run_job.log
+              echo '```'
+            else
+              echo "_run_job.py did not start._"
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
