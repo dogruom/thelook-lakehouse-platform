@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-13 (Week 3 closed; v9.0 2026-11-05: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W4.D19** closed partially (D19.2 ✅, D19.1 🔄 until orders are landed, V-25) → next **W4.D20** (dimensions and facts) · M1: 36/37 ✅ (`v0.1.0` tag owner-only)
+> **Active**: **W4.D19** closed partially (D19.2 ✅, D19.1 🔄 until orders are landed, V-25) → next **W4.D20** (dimensions and facts) · M1: 37/37 ✅ (`v0.1.0` tagged)
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -18,7 +18,7 @@
 - **Unfinished**: W4.D19.1 🔄 — `silver.orders`/`order_items` empty in the shared catalog (V-25 owner landing), so `stg_orders`/`stg_order_items` are not data-verified. Tutor gates M1 (V-11) and W3 + W4.D19 (Learning queue). V-23 known limit.
 - **Tests & results**: W4.D19 close: staging build on 3 data-backed tables PASS=25 ERROR=0; `test_dbt_tenant_tests.py` 5 passed (3 consecutive runs); unit 1634 passed, 1 skipped, coverage 80.91 %; ruff/format/mypy clean; CI run 43427736811 green (incl. `dbt parse`). Week 3 numbers in DAY_CLOSE_REPORTS.
 - **Test cadence (D-059)**: only the relevant tests while developing, full suite once per day close; integration tests run sequentially (2 worker cores); broker chaos opt-in (`RUN_BROKER_CHAOS=1`).
-- **Owner action** — rows in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) class *Owner action*: **V-25 land orders once** (unblocks W4.D19.1 and D20 facts) · V-17 guard-hook regex patch (working-tree change in `.claude/hooks/guard_commands.py` left uncommitted for the owner) · V-18 `v0.1.0` tag · V-11 learning gates · V-19 one `/security-review` run · V-10 legacy anonymous volume · V-09 `COMPOSE_PROJECT_NAME` in the local env file · V-13 (deferred) Hive schema.
+- **Owner action** — rows in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) class *Owner action*: **V-25 land orders once** (unblocks W4.D19.1 and D20 facts) · V-17 guard-hook regex patch (working-tree change in `.claude/hooks/guard_commands.py` left uncommitted for the owner) · V-11 learning gates · V-19 one `/security-review` run · V-10 legacy anonymous volume · V-09 `COMPOSE_PROJECT_NAME` in the local env file · V-13 (deferred) Hive schema.
 - **Stack**: stopped after the W4.D19 close. Shared catalog now holds Bronze, DLQ and Silver customers/history/clickstream (seed 1910 + earlier runs); orphan S3 locations under `warehouse/gold_fixtures.db/` from the first seed-based fixture runs are harmless.
 - **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): earlier list plus D-073 … D-087 (Week 3), D-088 staging conventions (`gold_staging`, no raw names), D-089 tenant-safe dbt tests + fixtures as views, D-090 V-15 closed / V-24 re-targeted / V-25 / `silver.products` gap.
 - **Risks / blockers**: 7.6 GB Docker memory, 2 worker cores; `silver.products` does not exist but `dim_products` is planned for W4.D20 (decide first: Silver products job vs Gold from Bronze — Gold must read Silver only, DATA_CONTRACTS §5); V-24 coverage headroom; Delta commit safety on S3 → W5.
@@ -51,7 +51,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 ## 📊 Macro Status (count of ✅ tasks / planned tasks)
 
 ```
-M1 (D1–D12)   [███████████████████░] 36 / 37
+M1 (D1–D12)   [████████████████████] 37 / 37
 M2 (D13–D24)  [██████████░░░░░░░░░░] 17 / 35
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
 ```
@@ -227,7 +227,7 @@ M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  
 |---|---|---|---|---|
 | W2.D12.1 | M1 demo runbook | `docs/runbooks/m1-streaming-demo.md` runs from a stopped stack | demo transcript | ✅ |
 | W2.D12.2 | Full regression | unit + spark + integration + smoke green; CI job 1 green on `main` | outputs + CI link | ✅ |
-| W2.D12.3 | Milestone review + tag | reviewer APPROVE, auditor PASS, README evidence links, claim note, `v0.1.0` (owner) | `checkpoint milestone M1` | 🔄 (tag: owner, V-18) |
+| W2.D12.3 | Milestone review + tag | reviewer APPROVE, auditor PASS, README evidence links, claim note, `v0.1.0` (owner) | `checkpoint milestone M1` | ✅ (tag `v0.1.0` on `ac239b3`, D-092) |
 
 Evidence:
 - W2.D12.1: runbook `2aaa8d0`, recorded 2026-11-10 from a stopped stack on `aa7f9e9` — steps 1–8 in 16 min 11 s; Bronze 4284 / 21840 rows = refs, one lineage, partitions contiguous; DLQ rerun inserted 0; table in [m1-streaming-demo.md](runbooks/m1-streaming-demo.md#recorded-run-2026-11-10-from-a-stopped-stack-commit-aa7f9e9).

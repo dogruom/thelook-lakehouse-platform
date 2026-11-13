@@ -268,7 +268,7 @@ Branching: one short-lived branch per day or task group (`feat/w1-contracts`, `f
 #### D20 · Dimensions and facts
 | | |
 |---|---|
-| Work | W4.D20.1 `dim_customers`, `dim_customers_history`, `dim_products`, `dim_date` · W4.D20.2 `fct_orders`, `fct_order_items`, `fct_sessions`; composite relationship tests; contracts where supported |
+| Work | W4.D20.0 Spark `silver_products` job + `stg_products` (D-091) · W4.D20.1 `dim_customers`, `dim_customers_history`, `dim_products`, `dim_date` · W4.D20.2 `fct_orders`, `fct_order_items`, `fct_sessions`; composite relationship tests; contracts where supported |
 | Verify | `dbt build --select marts` |
 | Done when | No orphan keys; all tests green |
 
