@@ -1,0 +1,241 @@
+version: 2
+
+# Staging = views over Silver: rename/cast only, no business logic, no raw PII.
+models:
+  - name: stg_customers
+    description: Current customers per (brand_id, customer_id); tombstones keep is_deleted = true with PII nulled. No raw name columns.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, customer_id]
+    columns:
+      - name: brand_id
+        description: Tenant id.
+        data_tests: [not_null]
+      - name: customer_id
+        description: Customer id, unique only within a brand.
+        data_tests: [not_null]
+      - name: email_token
+        description: HMAC-SHA256 pseudonym of the email.
+      - name: phone_masked
+        description: Masked phone number.
+      - name: city
+        description: City.
+      - name: country
+        description: Country.
+      - name: loyalty_tier
+        description: Loyalty tier.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [Bronze, Silver, Gold, Platinum]
+      - name: signup_date
+        description: Signup date.
+      - name: is_deleted
+        description: True for tombstones (erasure or CDC delete).
+        data_tests: [not_null]
+      - name: cdc_action
+        description: Last CDC action (I, U, D).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [I, U, D]
+      - name: cdc_sequence
+        description: Source CDC sequence; orders changes, never the wall clock.
+      - name: cdc_ts
+        description: Source CDC timestamp (informational).
+      - name: silver_updated_at
+        description: Time the Silver row was last written.
+
+  - name: stg_customers_history
+    description: SCD2 history of customers per (brand_id, customer_id, version). No raw name columns.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, customer_id, version]
+      # At most one current version per customer.
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, customer_id]
+          config:
+            where: "is_current"
+    columns:
+      - name: brand_id
+        description: Tenant id.
+        data_tests: [not_null]
+      - name: customer_id
+        description: Customer id, unique only within a brand.
+        data_tests:
+          - not_null
+          - relationships_by_brand:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+      - name: version
+        description: SCD2 version number, ascending per customer.
+        data_tests: [not_null]
+      - name: valid_from
+        description: Start of validity of this version.
+      - name: valid_to
+        description: End of validity; null for the current version.
+      - name: is_current
+        description: True for the latest version.
+        data_tests: [not_null]
+      - name: is_deleted
+        description: True when this version is a tombstone.
+      - name: email_token
+        description: HMAC-SHA256 pseudonym of the email.
+      - name: phone_masked
+        description: Masked phone number.
+      - name: city
+        description: City.
+      - name: country
+        description: Country.
+      - name: loyalty_tier
+        description: Loyalty tier.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [Bronze, Silver, Gold, Platinum]
+      - name: signup_date
+        description: Signup date.
+      - name: cdc_action
+        description: CDC action behind this version (I, U, D).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [I, U, D]
+      - name: cdc_sequence
+        description: Source CDC sequence of this version.
+      - name: cdc_ts
+        description: Source CDC timestamp (informational).
+      - name: silver_updated_at
+        description: Time the Silver row was last written.
+
+  - name: stg_orders
+    description: Orders per (brand_id, order_id).
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, order_id]
+    columns:
+      - name: brand_id
+        description: Tenant id.
+        data_tests: [not_null]
+      - name: order_id
+        description: Order id, unique only within a brand.
+        data_tests: [not_null]
+      - name: customer_id
+        description: Customer of the order (same brand; tombstoned customers count).
+        data_tests:
+          - not_null
+          - relationships_by_brand:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+      - name: order_timestamp
+        description: Order time.
+      - name: order_status
+        description: Order status.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [pending, completed, cancelled, returned]
+      - name: payment_method
+        description: Payment method.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [credit_card, paypal, sepa_debit, apple_pay]
+      - name: currency
+        description: Order currency.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [EUR, USD, TRY]
+      - name: gross_amount
+        description: Amount before discount.
+      - name: discount_amount
+        description: Discount amount.
+      - name: net_amount
+        description: Amount after discount, decimal(10,2).
+      - name: sales_channel
+        description: Sales channel.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [web, app, store]
+      - name: silver_updated_at
+        description: Time the Silver row was last written.
+
+  - name: stg_order_items
+    description: Order lines per (brand_id, order_id, item_id).
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, order_id, item_id]
+    columns:
+      - name: brand_id
+        description: Tenant id.
+        data_tests: [not_null]
+      - name: order_id
+        description: Parent order id within the brand.
+        data_tests:
+          - not_null
+          - relationships_by_brand:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
+      - name: item_id
+        description: Line id within the order.
+        data_tests: [not_null]
+      - name: product_id
+        description: Product id.
+      - name: quantity
+        description: Units ordered.
+      - name: unit_price
+        description: Price per unit.
+      - name: line_total
+        description: Line total.
+      - name: silver_updated_at
+        description: Time the Silver row was last written.
+
+  - name: stg_clickstream
+    description: Clickstream events per (brand_id, event_id). customer_id is nullable and not FK-checked in Silver; covered only by assert_no_cross_tenant_joins.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, event_id]
+    columns:
+      - name: brand_id
+        description: Tenant id.
+        data_tests: [not_null]
+      - name: event_id
+        description: Event id, unique only within a brand.
+        data_tests: [not_null]
+      - name: session_id
+        description: Session id.
+      - name: customer_id
+        description: Customer id; null for anonymous events.
+      - name: event_type
+        description: Event type.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [page_view, search, add_to_cart, checkout, purchase]
+      - name: page_url
+        description: Page URL.
+      - name: device_category
+        description: Device category.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [mobile, desktop, tablet]
+      - name: event_timestamp
+        description: Event time.
+      - name: event_date
+        description: Event date.
+      - name: produced_at
+        description: Producer timestamp.
+      - name: silver_updated_at
+        description: Time the Silver row was last written.

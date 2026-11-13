@@ -9,6 +9,41 @@
 
 ---
 
+## W4.D19 · dbt foundations — closed 2026-11-13
+
+**Executive summary.** dbt now reads Silver through one staging view per table and has tests that
+understand tenants. The key new test, `relationships_by_brand`, fails when an order points at a
+customer who exists only in another brand. dbt's built-in `relationships` test misses that case,
+and a small leaky fixture proves the difference (built-in: 1 failure, ours: 2). Customers, history
+and clickstream are verified on real Silver data. Orders and order items are not yet: their Silver
+tables are empty locally, and loading them needs one owner step (V-25).
+- **Update (same day, after the owner landed orders, V-25)**: `silver_orders` 249 read = 225 accepted + 9 DLQ + 9 duplicates + 6 FK orphans, 488 items; full `dbt build --select staging` → PASS=42 ERROR=0; 1 order references a customer id that exists in two brands, so the orders leg is exercised. W4.D19.1 → ✅. `v0.1.0` tagged on the M1 merge `ac239b3` (D-092); `silver.products` decided (D-091).
+- **Delivered**: W4.D19.1 ✅ (data-verified after V-25) · W4.D19.2 ✅ (tenant-safe tests, `dbt parse` in CI).
+- **Evidence**:
+  - Commit `7397428`; CI [run 43427736811](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/43427736811) green (`dbt parse` in both fixture states + gating check, unit, gitleaks).
+  - Staging build on the shared catalog (897 customers, 2604 history rows, 12805 clickstream rows, 3 brands): PASS=25 ERROR=0, orders-dependent tests excluded.
+  - `tests/integration/test_dbt_tenant_tests.py` 5 passed, 3 consecutive runs.
+  - Unit 1634 passed / 1 skipped, coverage 80.91 %; ruff/format/mypy clean.
+- **Reviews / audit**: code review APPROVE WITH NITS, no must-fix. All three should-fix items were applied before the commit: contract tests (exactly one current history version with `valid_to IS NULL ⇔ is_current`, tombstones without PII), the singular test's limits stated, and fixture parsing in CI. The nits were applied too: the macro `label` is now required and the `dbt ls` test is stronger. `evidence-auditor` was not routed (2 tasks, no 🔺).
+- **Decisions**: D-088 staging conventions · D-089 tenant-safe test primitives, fixtures as views · D-090 V-15 closed, V-24 re-targeted, V-25, `silver.products` gap.
+- **Found during the day (not in the plan)**:
+  - dbt ignores SQL tests in `tests/fixtures/` without any warning, because that folder is reserved for unit-test fixtures. The fixture test now lives in `tests/tenant_fixtures/`.
+  - dbt-spark seeds are Delta managed tables. Dropping one leaves its S3 location behind, so the next run fails with `LOCATION_ALREADY_EXISTS`. The fixtures are now `VALUES` views, and a retry loop that hid this was removed.
+  - The pre-commit hook caught invalid YAML in the new CI step (`: ` inside a plain scalar) and a gitleaks false positive on a macro signature. The fixes were a block scalar and renamed parameters; no ignore entry was added.
+  - The shared catalog had no Silver schema. The pipeline was re-run without a namespace. The orders landing upload failed: the host has no S3 credentials, and the guard hook blocks the bind-mount upload for agents.
+  - The lineage diagram shows `silver.products`, but the table does not exist.
+- **Not verified / limitations**:
+  - `stg_orders` and `stg_order_items`, plus the orders legs of the tenant tests, have no data-backed run yet (V-25).
+  - The clickstream leg of `assert_no_cross_tenant_joins` is vacuous on today's data. Three customer ids are shared across brands, but no clickstream row references them.
+  - V-15 was closed on one observation, not a load test.
+- **Carry-overs**: none (the W4.D19.1 data verification was done the same day after V-25).
+- **Risks**: `silver.products` must be built before `dim_products` (D-091); V-24 coverage headroom.
+- **Learning queued**: dbt sources/staging, generic vs singular tests, tenant-safe referential tests, var-gated negative fixtures (TASKS Learning queue).
+- **Next**: W4.D20: `silver_products` (D-091), then dimensions and facts.
+- **Merge status**: under D-032 after the `evidence-auditor` re-check. The first pass found 2 stale lines in this report (merge status, carry-over); they are fixed in this commit. PR and merge commit: see PROGRESS Current State.
+
+---
+
 ## W3.D14–D18 · Silver correctness — Week 3 closed 2026-11-13
 
 **Executive summary.** Silver now holds data that can be trusted:
@@ -36,7 +71,7 @@ Two proofs ran on the real stack. First, a job killed in the middle of a batch a
 - **Carry-overs**: none (V-15 metastore concurrency → W4.D19 by plan).
 - **Learning queued**: CDC ordering, SCD2 rebuild, retryable DLQ/replay, reconciliation equation, crash-safety proof, tenant isolation (TASKS Learning queue).
 - **Next**: W4.D19 dbt foundations.
-- **Merge status**: MERGE_STATUS_PLACEHOLDER
+- **Merge status**: PR [#15](https://github.com/dogruom/thelook-lakehouse-platform/pull/15) merged as `23cdb97` (merge commit) on 2026-11-13 under D-032: PR CI green after the coverage fix (`769ab4f`), `main` CI [run 43326199577](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/43326199577) success.
 
 ---
 
