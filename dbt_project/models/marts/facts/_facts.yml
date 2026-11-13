@@ -165,15 +165,13 @@ models:
       - name: customer_id
         description: Customer of the session; null for anonymous sessions (skipped by the relationship test by design).
         data_tests:
-          # severity warn until the generator draws identified sessions from the CDC customer
-          # pool (D-096, V-26, W4.D21.0); today every identified session id is unknown in Silver.
-          # Cross-tenant matches stay an ERROR: assert_fct_sessions_no_cross_tenant_customer.
+          # severity error since W4.D21.0: identified sessions draw from the same-brand CDC
+          # customer pool (D-096, V-26 closed). Cross-tenant matches are additionally asserted by
+          # assert_fct_sessions_no_cross_tenant_customer.
           - relationships_by_brand:
               arguments:
                 to: ref('dim_customers')
                 field: customer_id
-              config:
-                severity: warn
       - name: session_date_key
         description: Integer yyyymmdd of the session start; joins to dim_date.date_key.
         data_tests:

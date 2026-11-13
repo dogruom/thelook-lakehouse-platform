@@ -9,6 +9,34 @@
 
 ---
 
+## W4.D21 · Customer 360 and RFM — closed 2026-11-13
+
+**Executive summary.** Clickstream sessions now belong to real customers: the generator draws identified sessions from the same-brand CDC customer pool, and the shared clickstream data was rebuilt with the owner's approval through an audited reset job. On top of that, Gold has a Customer 360 table and per-brand RFM segments that are reproducible for a fixed `as_of_date`, plus one view per tenant.
+
+- **Delivered**: W4.D21.0 ✅ (clickstream ↔ customers, rebuild) · W4.D21.1 ✅ (`obt_customer_360`) · W4.D21.2 ✅ (`agg_rfm_segments`, dbt unit tests) · W4.D21.3 ✅ (docs complete, `gold_tenant` views)
+- **Evidence**:
+  - Commits `3e49b32`, `6828076`, `f3dd0b2`, `de4dc63`. `dbt build --select staging marts` → PASS=146 WARN=0 ERROR=0; after the contract rename `dbt build --select obt_customer_360+` → PASS=29; after the review fixes PASS=30 (4 unit tests, non-degenerate test).
+  - Rebuild: Bronze 5200 = Silver 4925 + DLQ 50 + duplicates 200 + parse 25; 0 orphan identified sessions (1706/913/279).
+  - RFM: 5 segments in every brand, 5.9–41.2 %; identical checksum on two builds with the same `as_of_date` (also after the review fix), different with another date.
+  - `check_dbt_docs.py` → 15 models, 0 gaps; unit 1661 passed / 1 skipped, coverage ≈ 80.32 % (after the review fixes); mypy clean, lint-imports 2 kept.
+- **Reviews / audit**: code review APPROVE WITH NITS, no must-fix; both should-fix applied (truncated `recency_hours` via portable `whole_hours_between` — dbt-spark `datediff` rounds up; OBT unit test for the day cut, cross-brand id, cancelled revenue, no-order customer, with a negative check) and nits 1, 3, 4, 5 (brand regex `{1,40}\Z`, tie-break wording, negative `tenure_days` documented, reset metrics-delete test); nit 2 documented (views of removed brands are not dropped).
+- **Decisions**: D-097 (generator pools, audited rebuild, `as_of_date`, valid orders, hours recency, RFM rules, unit-test override, tenant views, contracts v8.1).
+- **Found during the day**:
+  - The shared CDC was produced by an older generator version: 6 accepted inserts of the current seed run were absent from Silver; fixed additively with `produce --only cdc` (no deletion).
+  - dbt-core 1.12.6 unit tests fail on the Thrift Server (`run_query` on a DDL returns no result) → spark override of the `unit` materialization (V-14).
+  - dbt-spark post-hooks cannot use `run_query` for DDL either → `adapter.execute(fetch=False)`.
+  - DATA_CONTRACTS §5.2 listed RFM columns inside the OBT although RFM is built from the OBT (cycle) → contract v8.1.
+  - `reconcile` reports a `raw_orders` batch-sum mismatch (231 vs 240, 18 vs 9; totals equal) — orders untouched today (V-28 → W4.D23.2).
+- **Infra / config touched**: Kafka topic `clickstream_events` recreated (same settings); `dbt_project.yml` vars `as_of_date`, `tenant_brands`, post-hook on `marts/analytics`.
+- **Not verified / limitations**: customer attributes in the OBT are the current Silver state, not the state at `as_of_date`; RFM on 2 days of synthetic history (recency in hours); portable SQL of the new models untested on Athena (W5.D28.4); tenant views are not access control.
+- **Carry-overs**: V-28 orders reconcile mismatch → W4.D23.2.
+- **Risks**: coverage headroom ≈ 0.32 pt (V-24).
+- **Learning queued**: OBT vs star schema, reproducible metrics (`as_of_date`), NTILE and ties, dbt unit tests vs data tests.
+- **Next day**: W4.D22 — Airflow 3 image (owner approves the build), `lakehouse_pipeline` DAG, ADR-0010.
+- **Merge status**: pending (PR, CI, merge recorded after the merge).
+
+---
+
 ## W4.D20 · Dimensions and facts — closed 2026-11-13
 
 **Executive summary.** The Gold layer exists: four dimensions and three facts in `gold_marts`, built by dbt from staging, with brand-aware surrogate keys and tenant-aware foreign-key tests on the order, item, product and customer-history links (the session link is at warn, V-26). A singular test proves per brand that no order, item or session is lost between staging and Gold. `silver.products` now exists as a Spark job, so `dim_products` reads Silver like everything else. The SQL is designed to run on Athena too (owner decision D-093); that branch is untested until W5.D28.4. One real data defect surfaced: the generator gives clickstream sessions random customer ids, so sessions do not link to customers yet; that test is a visible warning and is fixed first in W4.D21.

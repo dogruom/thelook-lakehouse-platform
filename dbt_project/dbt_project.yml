@@ -21,6 +21,11 @@ vars:
   # dim_date range (inclusive); the calendar must cover every business date in Silver.
   dim_date_start: "2025-01-01"
   dim_date_end: "2027-12-31"
+  # Customer 360 / RFM reference day (inclusive, UTC). Fixed default = last day of the synthetic
+  # order history, so a build is reproducible; override with --vars '{as_of_date: YYYY-MM-DD}'.
+  as_of_date: "2026-01-02"
+  # Tenants that get gold_tenant.<model>__<brand> views (macro tenant_scoped_views, W4.D21.3).
+  tenant_brands: [brand_alpha, brand_beta, brand_gamma]
 
 models:
   crm_lakehouse:
@@ -42,6 +47,9 @@ models:
         +tags: [dims]
       facts:
         +tags: [facts]
+      analytics:
+        +tags: [analytics]
+        +post-hook: ["{{ tenant_scoped_views() }}"]
     tenant_fixtures:
       +materialized: view
       +schema: fixtures
