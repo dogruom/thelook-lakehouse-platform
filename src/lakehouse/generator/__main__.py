@@ -22,7 +22,7 @@ from lakehouse.generator.landing import (
     write_products,
     write_products_local,
 )
-from lakehouse.generator.messages import cdc_messages
+from lakehouse.generator.messages import OutboundMessage, cdc_messages
 from lakehouse.generator.orders import customer_pools_from_cdc, generate_orders
 from lakehouse.generator.producer import DeliveryStats, create_producer, produce_messages
 from lakehouse.generator.products import generate_products
@@ -48,12 +48,24 @@ def _parser() -> argparse.ArgumentParser:
     click.add_argument("--seed", type=int, default=None, help="overrides GEN_SEED")
     click.add_argument("--dry-run", action="store_true", help="write files only; do not produce")
     click.add_argument("--out-dir", type=Path, default=DEFAULT_CLICKSTREAM_OUT_DIR)
+    click.add_argument(
+        "--cdc-events",
+        type=int,
+        default=1000,
+        help="CDC base events whose customers identified sessions reference (D-096), as produce",
+    )
     produce = sub.add_parser("produce", help="generate CDC + clickstream and send them to Kafka")
     produce.add_argument("--brands", type=int, default=3, help="first N tenants of GEN_TENANTS")
     produce.add_argument("--events", type=int, default=5000, help="clickstream base events")
     produce.add_argument("--cdc-events", type=int, default=1000, help="CDC base events")
     produce.add_argument("--seed", type=int, default=None, help="overrides GEN_SEED")
     produce.add_argument("--rate", type=float, default=None, help="max messages per second")
+    produce.add_argument(
+        "--only",
+        choices=("cdc", "clickstream"),
+        default=None,
+        help="send one stream only (default: both); the clickstream still uses the CDC pools",
+    )
     produce.add_argument(
         "--bootstrap-servers", default=None, help="default: GEN_KAFKA_BOOTSTRAP_SERVERS"
     )
@@ -99,17 +111,28 @@ def _print_stats(stats: DeliveryStats) -> None:
 def _produce(args: argparse.Namespace, config: GeneratorConfig) -> int:
     try:
         cdc_run = generate_cdc(config, brands=args.brands, events=args.cdc_events)
-        click_run = generate_clickstream(config, brands=args.brands, events=args.events)
+        click_run = generate_clickstream(
+            config,
+            brands=args.brands,
+            events=args.events,
+            customer_pools=customer_pools_from_cdc(cdc_run),
+        )
     except InfeasibleDefectPlan as exc:
         print(f"error: infeasible defect plan: {exc}", file=sys.stderr)
         return 1
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    messages = cdc_messages(cdc_run, config.topic_customer_cdc) + click_run.messages
+    messages: list[OutboundMessage] = []
+    if args.only in (None, "cdc"):
+        messages += cdc_messages(cdc_run, config.topic_customer_cdc)
+    if args.only in (None, "clickstream"):
+        messages += click_run.messages
     print(f"generated {len(messages)} messages")
-    _print_counts(cdc_run.manifest.counts, "cdc.")
-    _print_counts(click_run.manifest.counts, "clickstream.")
+    if args.only in (None, "cdc"):
+        _print_counts(cdc_run.manifest.counts, "cdc.")
+    if args.only in (None, "clickstream"):
+        _print_counts(click_run.manifest.counts, "clickstream.")
     servers = args.bootstrap_servers or config.kafka_bootstrap_servers
     try:
         stats = produce_messages(
@@ -194,7 +217,14 @@ def _dry_run(
 ) -> int:
     try:
         if args.command == "clickstream":
-            click_run = generate_clickstream(config, brands=args.brands, events=args.events)
+            if args.cdc_events < 1:
+                parser.error("--cdc-events must be >= 1")
+            pools = customer_pools_from_cdc(
+                generate_cdc(config, brands=args.brands, events=args.cdc_events)
+            )
+            click_run = generate_clickstream(
+                config, brands=args.brands, events=args.events, customer_pools=pools
+            )
         else:
             cdc_run = generate_cdc(config, brands=args.brands, events=args.events)
     except InfeasibleDefectPlan as exc:

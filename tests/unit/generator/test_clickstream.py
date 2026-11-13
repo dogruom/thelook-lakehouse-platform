@@ -376,3 +376,54 @@ def test_write_clickstream_run_is_byte_stable(tmp_path: Path) -> None:
     eb, mb = write_clickstream_run(run_b, tmp_path / "b")
     assert ea.read_bytes() == eb.read_bytes()
     assert ma.read_bytes() == mb.read_bytes()
+
+
+# --- D-096: identified sessions reference same-brand CDC customers ---------------------------
+
+
+def _pools_run(events: int = 2000, seed: int = 42) -> tuple[ClickstreamRun, dict[str, list[str]]]:
+    from lakehouse.generator.cdc import generate_cdc
+    from lakehouse.generator.orders import customer_pools_from_cdc
+
+    config = make(seed=seed)
+    pools = customer_pools_from_cdc(generate_cdc(config, brands=3, events=1000))
+    return generate_clickstream(config, brands=3, events=events, customer_pools=pools), pools
+
+
+def test_identified_sessions_draw_from_the_same_brand_pool() -> None:
+    run, pools = _pools_run()
+    identified = 0
+    for message in run.messages:
+        if not parses(message):
+            continue
+        event = parse(message)
+        if event.get("customer_id") is None:
+            continue
+        identified += 1
+        assert event["customer_id"] in pools[event["brand_id"]]
+    assert identified > 0
+
+
+def test_pools_keep_anonymous_share_and_counts() -> None:
+    run, _ = _pools_run()
+    plain = generate_clickstream(make(seed=42), brands=3, events=2000)
+    assert run.manifest.counts == plain.manifest.counts
+    anon = sum(1 for m in run.messages if parses(m) and parse(m).get("customer_id") is None)
+    anon_plain = sum(1 for m in plain.messages if parses(m) and parse(m).get("customer_id") is None)
+    assert anon == anon_plain
+
+
+def test_pools_run_is_byte_identical_and_fingerprint_includes_pools() -> None:
+    first, _ = _pools_run()
+    second, _ = _pools_run()
+    assert [m.value for m in first.messages] == [m.value for m in second.messages]
+    plain = generate_clickstream(make(seed=42), brands=3, events=2000)
+    assert first.manifest.config_fingerprint != plain.manifest.config_fingerprint
+
+
+@pytest.mark.parametrize(
+    "pools", [{}, {"brand_alpha": [], "brand_beta": ["x"], "brand_gamma": ["y"]}]
+)
+def test_missing_or_empty_pool_raises(pools: dict[str, list[str]]) -> None:
+    with pytest.raises(ValueError, match="customer pool"):
+        generate_clickstream(make(seed=42), brands=3, events=100, customer_pools=pools)
