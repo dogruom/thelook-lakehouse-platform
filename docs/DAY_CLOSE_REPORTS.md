@@ -11,7 +11,7 @@
 
 ## W4.D20 · Dimensions and facts — closed 2026-11-13
 
-**Executive summary.** The Gold layer exists: four dimensions and three facts in `gold_marts`, built by dbt from staging, with brand-aware surrogate keys and a tenant-aware foreign-key test on every link. A singular test proves per brand that no order, item or session is lost between staging and Gold. `silver.products` now exists as a Spark job, so `dim_products` reads Silver like everything else. The SQL is written to run on Athena too (owner decision D-093). One real data defect surfaced: the generator gives clickstream sessions random customer ids, so sessions do not link to customers yet; that test is a visible warning and is fixed first in W4.D21.
+**Executive summary.** The Gold layer exists: four dimensions and three facts in `gold_marts`, built by dbt from staging, with brand-aware surrogate keys and tenant-aware foreign-key tests on the order, item, product and customer-history links (the session link is at warn, V-26). A singular test proves per brand that no order, item or session is lost between staging and Gold. `silver.products` now exists as a Spark job, so `dim_products` reads Silver like everything else. The SQL is designed to run on Athena too (owner decision D-093); that branch is untested until W5.D28.4. One real data defect surfaced: the generator gives clickstream sessions random customer ids, so sessions do not link to customers yet; that test is a visible warning and is fixed first in W4.D21.
 
 - **Delivered**: W4.D20.0 ✅ (`silver.products` + `stg_products`) · W4.D20.1 ✅ (dimensions) · W4.D20.2 ✅ (facts)
 - **Evidence**:
