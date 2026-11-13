@@ -1,0 +1,47 @@
+version: 2
+
+# Silver is Spark-owned (ADR-0007); dbt only reads it. Business keys always include brand_id.
+sources:
+  - name: silver
+    description: Spark-owned Silver Delta tables (Hive metastore database `silver`).
+    schema: silver
+    tables:
+      - name: customers
+        description: Current customer state per (brand_id, customer_id). Deleted rows are tombstones with PII nulled.
+        columns:
+          - name: brand_id
+            description: Tenant id.
+          - name: customer_id
+            description: Customer id, unique only within a brand.
+      - name: customers_history
+        description: SCD2 history of customers, one row per (brand_id, customer_id, version).
+        columns:
+          - name: brand_id
+            description: Tenant id.
+          - name: customer_id
+            description: Customer id, unique only within a brand.
+          - name: version
+            description: SCD2 version number, ascending per customer.
+      - name: orders
+        description: Orders per (brand_id, order_id). Silver guarantees the customer exists in silver.customers.
+        columns:
+          - name: brand_id
+            description: Tenant id.
+          - name: order_id
+            description: Order id, unique only within a brand.
+      - name: order_items
+        description: Order lines per (brand_id, order_id, item_id).
+        columns:
+          - name: brand_id
+            description: Tenant id.
+          - name: order_id
+            description: Parent order id within the brand.
+          - name: item_id
+            description: Line id within the order.
+      - name: clickstream
+        description: Clickstream events per (brand_id, event_id). customer_id is nullable and not FK-checked in Silver.
+        columns:
+          - name: brand_id
+            description: Tenant id.
+          - name: event_id
+            description: Event id, unique only within a brand.

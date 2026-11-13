@@ -1,0 +1,26 @@
+version: 2
+
+# W4.D19.2 negative fixtures: prove the tenant-safe primitives detect a cross-tenant key match
+# that dbt's plain `relationships` test cannot. Enabled only with --vars "{tenant_fixtures: true}".
+models:
+  - name: fx_tenant_parent
+  - name: fx_tenant_child
+    columns:
+      - name: customer_id
+        data_tests:
+          - relationships_by_brand:
+              name: fx_relationships_by_brand
+              arguments:
+                to: ref('fx_tenant_parent')
+                field: customer_id
+              config:
+                tags: [tenant_fixture]
+                severity: error
+          - relationships:
+              name: fx_plain_relationships
+              arguments:
+                to: ref('fx_tenant_parent')
+                field: customer_id
+              config:
+                tags: [tenant_fixture]
+                severity: error

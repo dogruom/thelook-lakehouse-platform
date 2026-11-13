@@ -1,5 +1,5 @@
 # dbt project for the Gold layer (ADR-0007). dbt owns Gold only; Silver/SCD2 are Spark-owned.
-# W2.D11: only the capability spike (models/spike) exists; Gold models start in W3.
+# W2.D11: capability spike (models/spike). W4: staging = views over Silver; Gold marts follow.
 name: crm_lakehouse
 version: "0.1.0"
 config-version: 2
@@ -16,6 +16,8 @@ clean-targets: [target, dbt_packages]
 vars:
   # Spike round: 1 = first (full) build, 2 = incremental re-run. Drives the expected state.
   spike_round: 1
+  # Tenant-isolation test fixtures (models/tenant_fixtures); enable with --vars '{tenant_fixtures: true}'.
+  tenant_fixtures: false
 
 models:
   crm_lakehouse:
@@ -25,3 +27,11 @@ models:
       +persist_docs:
         relation: true
         columns: true
+    staging:
+      +schema: staging
+      +materialized: view
+    tenant_fixtures:
+      +materialized: view
+      +schema: fixtures
+      +enabled: "{{ var('tenant_fixtures', false) }}"
+      +tags: [tenant_fixture]
