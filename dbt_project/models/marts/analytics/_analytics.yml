@@ -1,0 +1,214 @@
+version: 2
+
+# Gold analytics products (dbt-owned, Delta tables in gold_marts; tenant views in gold_tenant).
+# Both are reproducible for a given var('as_of_date') (D-097).
+models:
+  - name: obt_customer_360
+    description: >
+      Customer 360 One Big Table, one row per (brand_id, customer_id) of dim_customers: current
+      customer attributes (privacy columns only) plus order and session metrics up to the end of
+      var('as_of_date'). Valid orders = completed + pending; cancelled and returned orders are
+      counted but excluded from revenue. Same as_of_date and inputs give identical output.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, customer_id]
+    columns:
+      - name: customer_sk
+        description: Surrogate key = hash(brand_id, customer_id); equals dim_customers.customer_sk.
+        data_tests: [unique, not_null]
+      - name: brand_id
+        description: Tenant id.
+        data_tests: [not_null]
+      - name: customer_id
+        description: Customer id, unique only within a brand.
+        data_tests:
+          - not_null
+          - relationships_by_brand:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_id
+      - name: email_token
+        description: HMAC-SHA256 pseudonym of the email (no raw email in Gold).
+      - name: city
+        description: City (current state).
+      - name: country
+        description: Country (current state).
+      - name: loyalty_tier
+        description: Loyalty tier (current state).
+      - name: signup_date
+        description: Signup date.
+      - name: is_deleted
+        description: True for tombstoned customers (PII already nulled in Silver).
+      - name: tenure_days
+        description: Days from signup_date to as_of_date.
+      - name: order_count
+        description: All orders up to as_of_date, any status.
+        data_tests: [not_null]
+      - name: frequency_orders
+        description: Valid orders (completed + pending) up to as_of_date.
+        data_tests: [not_null]
+      - name: cancelled_order_count
+        description: Cancelled orders up to as_of_date.
+      - name: returned_order_count
+        description: Returned orders up to as_of_date.
+      - name: monetary_total_spend
+        description: Sum of net_amount over valid orders, decimal(12,2).
+        data_tests: [not_null]
+      - name: avg_order_value
+        description: monetary_total_spend / frequency_orders, decimal(10,2); null without valid orders.
+      - name: first_order_ts
+        description: First order of any status (UTC).
+      - name: last_order_ts
+        description: Last valid order (UTC), the recency anchor; null without valid orders.
+      - name: recency_days
+        description: Days from the date of last_order_ts to as_of_date; null without valid orders.
+      - name: recency_hours
+        description: Whole hours from last_order_ts to the end of as_of_date; the RFM recency input.
+      - name: session_count
+        description: Identified sessions of the customer up to as_of_date.
+      - name: converted_session_count
+        description: Identified sessions with at least one purchase event.
+      - name: total_page_views
+        description: Page views over identified sessions.
+      - name: total_cart_additions
+        description: add_to_cart events over identified sessions (high-intent interactions).
+      - name: last_session_at
+        description: Start of the latest identified session (UTC).
+      - name: as_of_date
+        description: The var('as_of_date') the row was computed for.
+        data_tests: [not_null]
+
+  - name: agg_rfm_segments
+    description: >
+      RFM segmentation, one row per (brand_id, customer_id) for non-deleted customers with at
+      least one valid order. Recency (hours), frequency (valid orders) and monetary (net revenue)
+      are scored 1..5 with NTILE(5) PER BRAND, ties broken by customer_id; the segment comes from
+      the rfm_segment macro. Reproducible for a given as_of_date.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, customer_id]
+    columns:
+      - name: customer_sk
+        description: Surrogate key = hash(brand_id, customer_id).
+        data_tests: [unique, not_null]
+      - name: brand_id
+        description: Tenant id; the NTILE partition.
+        data_tests: [not_null]
+      - name: customer_id
+        description: Customer id.
+        data_tests:
+          - not_null
+          - relationships_by_brand:
+              arguments:
+                to: ref('obt_customer_360')
+                field: customer_id
+      - name: recency_hours
+        description: Hours since the last valid order (lower = more recent).
+        data_tests: [not_null]
+      - name: frequency
+        description: Valid orders.
+      - name: monetary
+        description: Net revenue of valid orders.
+      - name: r_score
+        description: Recency quintile per brand (5 = most recent).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5]
+                quote: false
+      - name: f_score
+        description: Frequency quintile per brand (5 = most orders).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5]
+                quote: false
+      - name: m_score
+        description: Monetary quintile per brand (5 = highest revenue).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5]
+                quote: false
+      - name: rfm_score
+        description: Composite 'r-f-m', e.g. '5-5-4'.
+        data_tests: [not_null]
+      - name: rfm_segment
+        description: champions, loyal, promising, at_risk or hibernating (rfm_segment macro).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [champions, loyal, promising, at_risk, hibernating]
+      - name: as_of_date
+        description: The var('as_of_date') the row was computed for.
+
+unit_tests:
+  - name: rfm_scores_are_computed_per_brand
+    description: >
+      Two brands with identical shapes but 10x different revenue get identical scores: NTILE is
+      partitioned by brand_id, so one tenant never shifts another tenant's quintiles.
+    model: agg_rfm_segments
+    given:
+      - input: ref('obt_customer_360')
+        rows:
+          - {customer_sk: a1, brand_id: brand_a, customer_id: c1, recency_hours: 50, frequency_orders: 1, monetary_total_spend: 10, is_deleted: false, as_of_date: "2026-01-02"}
+          - {customer_sk: a2, brand_id: brand_a, customer_id: c2, recency_hours: 40, frequency_orders: 2, monetary_total_spend: 20, is_deleted: false, as_of_date: "2026-01-02"}
+          - {customer_sk: a3, brand_id: brand_a, customer_id: c3, recency_hours: 30, frequency_orders: 3, monetary_total_spend: 30, is_deleted: false, as_of_date: "2026-01-02"}
+          - {customer_sk: a4, brand_id: brand_a, customer_id: c4, recency_hours: 20, frequency_orders: 4, monetary_total_spend: 40, is_deleted: false, as_of_date: "2026-01-02"}
+          - {customer_sk: a5, brand_id: brand_a, customer_id: c5, recency_hours: 10, frequency_orders: 5, monetary_total_spend: 50, is_deleted: false, as_of_date: "2026-01-02"}
+          - {customer_sk: b1, brand_id: brand_b, customer_id: c1, recency_hours: 50, frequency_orders: 1, monetary_total_spend: 100, is_deleted: false, as_of_date: "2026-01-02"}
+          - {customer_sk: b2, brand_id: brand_b, customer_id: c2, recency_hours: 40, frequency_orders: 2, monetary_total_spend: 200, is_deleted: false, as_of_date: "2026-01-02"}
+          - {customer_sk: b3, brand_id: brand_b, customer_id: c3, recency_hours: 30, frequency_orders: 3, monetary_total_spend: 300, is_deleted: false, as_of_date: "2026-01-02"}
+          - {customer_sk: b4, brand_id: brand_b, customer_id: c4, recency_hours: 20, frequency_orders: 4, monetary_total_spend: 400, is_deleted: false, as_of_date: "2026-01-02"}
+          - {customer_sk: b5, brand_id: brand_b, customer_id: c5, recency_hours: 10, frequency_orders: 5, monetary_total_spend: 500, is_deleted: false, as_of_date: "2026-01-02"}
+    expect:
+      rows:
+        - {brand_id: brand_a, customer_id: c1, r_score: 1, f_score: 1, m_score: 1, rfm_segment: hibernating}
+        - {brand_id: brand_a, customer_id: c2, r_score: 2, f_score: 2, m_score: 2, rfm_segment: hibernating}
+        - {brand_id: brand_a, customer_id: c3, r_score: 3, f_score: 3, m_score: 3, rfm_segment: loyal}
+        - {brand_id: brand_a, customer_id: c4, r_score: 4, f_score: 4, m_score: 4, rfm_segment: champions}
+        - {brand_id: brand_a, customer_id: c5, r_score: 5, f_score: 5, m_score: 5, rfm_segment: champions}
+        - {brand_id: brand_b, customer_id: c1, r_score: 1, f_score: 1, m_score: 1, rfm_segment: hibernating}
+        - {brand_id: brand_b, customer_id: c2, r_score: 2, f_score: 2, m_score: 2, rfm_segment: hibernating}
+        - {brand_id: brand_b, customer_id: c3, r_score: 3, f_score: 3, m_score: 3, rfm_segment: loyal}
+        - {brand_id: brand_b, customer_id: c4, r_score: 4, f_score: 4, m_score: 4, rfm_segment: champions}
+        - {brand_id: brand_b, customer_id: c5, r_score: 5, f_score: 5, m_score: 5, rfm_segment: champions}
+
+  - name: rfm_excludes_deleted_and_non_buyers_and_breaks_ties_by_customer_id
+    description: >
+      Tombstoned customers and customers without a valid order are not scored; c1 and c2 have the
+      same recency and are ordered by customer_id, so reruns give the same quintiles.
+    model: agg_rfm_segments
+    given:
+      - input: ref('obt_customer_360')
+        rows:
+          - {customer_sk: x1, brand_id: brand_a, customer_id: c1, recency_hours: 50, frequency_orders: 1, monetary_total_spend: 5, is_deleted: false, as_of_date: "2026-01-02"}
+          - {customer_sk: x2, brand_id: brand_a, customer_id: c2, recency_hours: 50, frequency_orders: 9, monetary_total_spend: 900, is_deleted: false, as_of_date: "2026-01-02"}
+          - {customer_sk: x3, brand_id: brand_a, customer_id: c3, recency_hours: 1, frequency_orders: 9, monetary_total_spend: 999, is_deleted: true, as_of_date: "2026-01-02"}
+          - {customer_sk: x4, brand_id: brand_a, customer_id: c4, recency_hours: null, frequency_orders: 0, monetary_total_spend: 0, is_deleted: false, as_of_date: "2026-01-02"}
+    expect:
+      rows:
+        - {customer_id: c1, r_score: 1, f_score: 1, m_score: 1, rfm_segment: hibernating}
+        - {customer_id: c2, r_score: 2, f_score: 2, m_score: 2, rfm_segment: hibernating}
+
+  - name: rfm_segment_rules_reach_every_segment
+    description: Five customers shaped to hit each rule of the rfm_segment macro once.
+    model: agg_rfm_segments
+    given:
+      - input: ref('obt_customer_360')
+        rows:
+          - {customer_sk: s1, brand_id: brand_a, customer_id: c1, recency_hours: 100, frequency_orders: 5, monetary_total_spend: 500, is_deleted: false, as_of_date: "2026-01-02"}
+          - {customer_sk: s2, brand_id: brand_a, customer_id: c2, recency_hours: 90, frequency_orders: 1, monetary_total_spend: 10, is_deleted: false, as_of_date: "2026-01-02"}
+          - {customer_sk: s3, brand_id: brand_a, customer_id: c3, recency_hours: 50, frequency_orders: 3, monetary_total_spend: 300, is_deleted: false, as_of_date: "2026-01-02"}
+          - {customer_sk: s4, brand_id: brand_a, customer_id: c4, recency_hours: 10, frequency_orders: 4, monetary_total_spend: 400, is_deleted: false, as_of_date: "2026-01-02"}
+          - {customer_sk: s5, brand_id: brand_a, customer_id: c5, recency_hours: 5, frequency_orders: 2, monetary_total_spend: 20, is_deleted: false, as_of_date: "2026-01-02"}
+    expect:
+      rows:
+        - {customer_id: c1, r_score: 1, f_score: 5, m_score: 5, rfm_segment: at_risk}
+        - {customer_id: c2, r_score: 2, f_score: 1, m_score: 1, rfm_segment: hibernating}
+        - {customer_id: c3, r_score: 3, f_score: 3, m_score: 3, rfm_segment: loyal}
+        - {customer_id: c4, r_score: 4, f_score: 4, m_score: 4, rfm_segment: champions}
+        - {customer_id: c5, r_score: 5, f_score: 2, m_score: 2, rfm_segment: promising}
