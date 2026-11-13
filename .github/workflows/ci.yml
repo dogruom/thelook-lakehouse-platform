@@ -192,7 +192,7 @@ jobs:
           tflint --recursive "${args[@]}"
 
       - name: trivy config (HIGH, CRITICAL; reviewed exceptions in .trivyignore)
-        run: trivy config infra/terraform --severity HIGH,CRITICAL --exit-code 1 --no-progress
+        run: trivy config infra/terraform --severity HIGH,CRITICAL --exit-code 1
 
   secrets:
     name: secret scan (gitleaks, full history)
