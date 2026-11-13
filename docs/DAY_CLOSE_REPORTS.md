@@ -36,11 +36,11 @@ tables are empty locally, and loading them needs one owner step (V-25).
   - `stg_orders` and `stg_order_items`, plus the orders legs of the tenant tests, have no data-backed run yet (V-25).
   - The clickstream leg of `assert_no_cross_tenant_joins` is vacuous on today's data. Three customer ids are shared across brands, but no clickstream row references them.
   - V-15 was closed on one observation, not a load test.
-- **Carry-overs**: W4.D19.1 data verification → after V-25, before W4.D20 facts.
-- **Risks**: `dim_products` (W4.D20) has no Silver source yet; V-24 coverage headroom.
+- **Carry-overs**: none (the W4.D19.1 data verification was done the same day after V-25).
+- **Risks**: `silver.products` must be built before `dim_products` (D-091); V-24 coverage headroom.
 - **Learning queued**: dbt sources/staging, generic vs singular tests, tenant-safe referential tests, var-gated negative fixtures (TASKS Learning queue).
-- **Next**: W4.D20 dimensions and facts. Decide on `silver.products` first.
-- **Merge status**: branch pushed and CI green. **Not merged**: W4.D19.1 is open, and the week branch continues (D-032 conditions are met for the code, but the day is not complete).
+- **Next**: W4.D20: `silver_products` (D-091), then dimensions and facts.
+- **Merge status**: under D-032 after the `evidence-auditor` re-check. The first pass found 2 stale lines in this report (merge status, carry-over); they are fixed in this commit. PR and merge commit: see PROGRESS Current State.
 
 ---
 

@@ -1,7 +1,7 @@
 # Progress Tracker — Tasks, Statuses and Evidence
 
 > **Document Version**: 9.0
-> **Last Updated**: 2026-11-13 (Week 3 closed; v9.0 2026-11-05: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
+> **Last Updated**: 2026-11-13 (W4.D19 closed; v9.0 2026-11-05: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
 > **Active**: **W4.D19** closed (D19.1–D19.2 ✅) → next **W4.D20** (dimensions and facts) · M1: 37/37 ✅ (`v0.1.0` tagged)
