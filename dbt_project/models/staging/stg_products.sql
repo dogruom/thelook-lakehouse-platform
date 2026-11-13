@@ -7,5 +7,5 @@ select
     retail_price,
     cost_price,
     cast(is_active as boolean) as is_active,
-    _updated_at as silver_updated_at
+    {{ adapter.quote('_updated_at') }} as silver_updated_at
 from {{ source('silver', 'products') }}

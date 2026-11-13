@@ -10,7 +10,7 @@
 select
     '{{ label }}' as relationship,
     c.{{ brand_column }} as brand_id,
-    cast(c.{{ child_column }} as string) as key_value
+    cast(c.{{ child_column }} as {{ dbt.type_string() }}) as key_value
 from {{ child }} as c
 where c.{{ child_column }} is not null
   and not exists (

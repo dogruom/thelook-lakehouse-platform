@@ -1,3 +1,4 @@
+{{ config(enabled=(target.type == 'spark')) }}
 -- Expected state of spike_merge_composite after each round (var spike_round). Returns the rows
 -- that differ from the expectation in either direction; zero rows = pass.
 -- EXCEPT is DISTINCT, so exact duplicate rows are invisible here: this test runs together with

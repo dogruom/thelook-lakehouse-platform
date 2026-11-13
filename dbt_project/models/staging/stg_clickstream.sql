@@ -10,5 +10,5 @@ select
     event_timestamp,
     event_date,
     produced_at,
-    _updated_at as silver_updated_at
+    {{ adapter.quote('_updated_at') }} as silver_updated_at
 from {{ source('silver', 'clickstream') }}
