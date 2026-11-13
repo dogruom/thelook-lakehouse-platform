@@ -34,7 +34,7 @@
 - **Risks**: coverage headroom 0.41 pt; a full Gold build takes ≈ 10 min.
 - **Learning queued**: star schema (dimensions vs facts, grain), surrogate vs natural keys, dbt contracts, portable SQL / adapter dispatch.
 - **Next day**: W4.D21 — clickstream fix, `obt_customer_360`, `agg_rfm_segments`.
-- **Merge status**: pending (PR, CI, merge recorded after the merge).
+- **Merge status**: PR [#17](https://github.com/dogruom/thelook-lakehouse-platform/pull/17) merged as `add3b1e` under D-032 (CI green on `9224690`; review APPROVE WITH NITS, all should-fix applied; evidence-auditor GATE PASS after three wording fixes); `main` CI [run 43474680612](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/43474680612) success.
 
 ---
 
