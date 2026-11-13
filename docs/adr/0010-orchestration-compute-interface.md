@@ -45,6 +45,12 @@ function boundary, not a claim that the DAG already runs on Glue.
 | `dbt_build` | `all_success` | halts when any brand breached the threshold: Gold marts are multi-tenant tables built in one run |
 | `run_verdict` | `one_failed` | the only leaf that fails on purpose, so "a brand failed, the others completed" ends red, not green |
 
+**Scope of brand isolation.** Per-brand isolation exists in two places only: the mapped
+`landing_check` and the mapped `dlq_rate_gate`. `bronze_stream`, `bronze_batch`, `dlq_gate`, the
+Silver jobs and `reconcile` process all brands in one run (they are not brand-scoped), so a failure
+in the shared chain halts every brand. A failed brand is excluded from the DLQ-rate gate, not
+from ingestion: its already landed data is still processed by the shared jobs.
+
 **Quality gates and alerts.** The DLQ-rate gate is a Spark job (`dlq_rate_gate`) so it reads the
 same Delta tables as `reconcile`; the decision itself is a pure function in `lakehouse.quality`.
 Failures and breaches produce a JSON alert payload (contract in D-099) that is logged and, only if
@@ -62,6 +68,8 @@ state. This is an "idempotent outcome" of at-least-once ingestion, not exactly-o
 - The scheduler container hosts the Spark driver JVM and the dbt subprocess (LocalExecutor), so
   its memory limit is sized for that (D-098). `core` + `orchestration` on a 7.6 GB Docker VM is a
   tight fit; `dbt build` additionally needs the `sql` profile (Thrift Server). Unmeasured.
+- `run_verdict` does not alert itself: its failure only rolls up failures that already produced an
+  alert (one alert per underlying failure).
 - Failure semantics depend on Airflow 3 behaviour that has not been observed yet: mapped-task
   results when an instance failed, `one_failed` firing, and `airflow dags test` re-running the same
   logical date. The integration tests (`test_dag_failure_isolation.py`, `test_backfill_idempotent.py`)

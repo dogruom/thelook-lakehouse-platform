@@ -5,14 +5,15 @@
 #
 # Deliberately absent (they were in the Airflow 2 file and have no caller any more):
 #   dbt-core / dbt-postgres  -> dbt lives in its own venv built from requirements/dbt.txt
-#   pandas, pyarrow, confluent-kafka, great-expectations, requests, tenacity, click, dotenv
+#   pandas, pyarrow, confluent-kafka, great-expectations, requests, tenacity, click
 #   structlog, pydantic, boto3 -> provided by Airflow 3 / its amazon provider (constrained)
-#   delta-spark -> installed with --no-deps in the Dockerfile (no second pyspark)
+#   delta-spark, pydantic-settings -> installed with --no-deps in the Dockerfile
 
-# `lakehouse.common.spark` settings (the Spark driver runs under this interpreter). Not in
-# Airflow's constraint set, so the exact pin of the Spark image is used. importlib-metadata and
-# zipp (needed by delta-spark) come from the constraints; pinning them here could conflict.
-pydantic-settings==2.3.4
+# pydantic-settings==2.3.4 is installed with --no-deps in the Dockerfile: it is not in Airflow's
+# constraint set, so an exact pin here could conflict. Its runtime dependency python-dotenv is
+# listed here (pinned by the constraints when they contain it). importlib-metadata and zipp
+# (needed by delta-spark) come from the constraints.
+python-dotenv
 
 # S3 (landing check via boto3) and the FAB auth manager used by `airflow users create`
 apache-airflow-providers-amazon

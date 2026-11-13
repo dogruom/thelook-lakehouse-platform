@@ -1,11 +1,19 @@
-"""W4.D23.4 - running the DAG again for the same past logical date changes nothing.
+"""W4.D23.4 - running the DAG again for the same past logical date gives an idempotent outcome.
 
-Runs ``airflow dags test`` twice for one past date inside the Airflow container (skips with a clear
-reason when it is not running) and compares the ``content_hash`` job output of the Silver tables
-after each run: hashes and row counts must be identical. The jobs are idempotent by construction
-(``availableNow`` checkpoints, deterministic ``MERGE``); this is the evidence for the claim
-"idempotent outcome" at orchestration level - not exactly-once. ``_updated_at`` (a wall clock) is
-the default exclusion of ``content_hash`` (D-084).
+Runs ``airflow dags test`` twice for one past date inside the Airflow container and compares the
+``content_hash`` job output of the Silver tables after each run: hashes and row counts must be
+identical. The jobs are idempotent by construction (``availableNow`` checkpoints, deterministic
+``MERGE``); this is the evidence for "idempotent outcome" at orchestration level - not
+exactly-once. ``_updated_at`` (a wall clock) is the default exclusion of ``content_hash`` (D-084).
+
+Needs the ``orchestration`` and ``sql`` profiles (the DAG ends with ``dbt build`` on the Thrift
+Server); the test skips with a clear reason when either container is not running. Memory: stop the
+api-server and dag-processor if the Docker VM is short (``dags test`` runs in the scheduler
+container only).
+
+The test is not vacuous: both runs must end ``success`` with the shared chain executed (not
+skipped), and the second run must be a real second execution - a different ``run_id`` or a later
+``end_date`` than the first - otherwise equal hashes would prove nothing.
 """
 
 from __future__ import annotations
@@ -26,6 +34,7 @@ SILVER_TABLES = (
     "clickstream",
     "products",
 )
+EXECUTED_TASKS = ("bronze_stream", "dlq_gate", "silver_orders", "reconcile", "dbt_build")
 
 
 def _silver_content() -> tuple[dict[str, str], dict[str, int]]:
@@ -36,17 +45,28 @@ def _silver_content() -> tuple[dict[str, str], dict[str, int]]:
     return dict(metrics["hashes"]), dict(metrics["rows"])
 
 
+def _assert_full_success(run: airflow_cli.RunStates, label: str) -> None:
+    assert run.state == "success", f"{label}: run {run.state}, tasks {run.tasks}"
+    for task_id in EXECUTED_TASKS:
+        assert run.state_of(task_id) == "success", f"{label}: {task_id} is {run.state_of(task_id)}"
+
+
 def test_second_run_of_the_same_interval_changes_no_silver_table() -> None:
     airflow_cli.require_airflow()
+    airflow_cli.require_thrift()
 
     airflow_cli.dags_test(PAST_DATE)
     first_run = airflow_cli.latest_run_states()
-    assert first_run.state == "success", f"first run: {first_run.state} {first_run.tasks}"
+    _assert_full_success(first_run, "first run")
     hashes_1, rows_1 = _silver_content()
 
     airflow_cli.dags_test(PAST_DATE)
     second_run = airflow_cli.latest_run_states()
-    assert second_run.state == "success", f"second run: {second_run.state} {second_run.tasks}"
+    _assert_full_success(second_run, "second run")
+    assert (second_run.run_id, second_run.end_date) != (
+        first_run.run_id,
+        first_run.end_date,
+    ), "the second `airflow dags test` did not execute a new run; the comparison would be vacuous"
     hashes_2, rows_2 = _silver_content()
 
     assert set(hashes_1) == set(SILVER_TABLES)

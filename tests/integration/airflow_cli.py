@@ -47,6 +47,7 @@ with create_session() as session:
         out = {{
             "run_id": run.run_id,
             "state": str(run.state),
+            "end_date": str(run.end_date),
             "tasks": [
                 {{"task_id": t.task_id, "map_index": t.map_index, "state": str(t.state)}}
                 for t in tis
@@ -63,6 +64,7 @@ class RunStates:
     run_id: str
     state: str
     tasks: tuple[tuple[str, int, str], ...]  # (task_id, map_index, state); map_index -1 = unmapped
+    end_date: str = ""  # when the run finished; changes when the same run is executed again
 
     def state_of(self, task_id: str) -> str | None:
         """State of an unmapped task, or ``None`` when it has no instance."""
@@ -89,6 +91,7 @@ def parse_run_states(output: str) -> RunStates:
                 tuple(
                     (t["task_id"], int(t["map_index"]), _state(t["state"])) for t in data["tasks"]
                 ),
+                str(data.get("end_date", "")),
             )
     raise ValueError("no RUN_STATES line in the output")
 
@@ -116,6 +119,19 @@ def require_airflow() -> None:
     """Skip the calling test (never fail) when the Airflow scheduler container is not running."""
     if not container_running():
         pytest.skip(SKIP_REASON)
+
+
+THRIFT_CONTAINER = "crm_spark_thrift"
+THRIFT_SKIP_REASON = (
+    f"the Spark Thrift Server container {THRIFT_CONTAINER} is not running; the DAG ends with "
+    "`dbt build`, which needs it: docker compose --profile core --profile sql up -d"
+)
+
+
+def require_thrift() -> None:
+    """Skip the calling test when the ``sql`` profile (Thrift Server for dbt) is not running."""
+    if not container_running(THRIFT_CONTAINER):
+        pytest.skip(THRIFT_SKIP_REASON)
 
 
 def _exec(args: list[str], timeout_s: float) -> subprocess.CompletedProcess[str]:

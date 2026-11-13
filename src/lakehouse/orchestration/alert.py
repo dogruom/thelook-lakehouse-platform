@@ -56,6 +56,29 @@ def sanitize_reason(text: str) -> str:
     return cleaned
 
 
+#: Tasks whose failure is only a roll-up of other failures that already alerted: no second alert.
+ROLLUP_TASKS: Final = ("run_verdict",)
+
+
+def is_alertable_task(task_id: str) -> bool:
+    """False for roll-up tasks (one alert per underlying failure, not two)."""
+    return task_id not in ROLLUP_TASKS
+
+
+def failure_text(exception: object = None, reason: object = None, state: object = None) -> str:
+    """Best available reason text of a failed task; ``"unknown"`` when the context has nothing.
+
+    Airflow callbacks do not always carry ``exception`` (for example after a timeout or an
+    externally set state); fall back to ``reason`` and then to the task state.
+    """
+    for candidate in (exception, reason):
+        text = str(candidate).strip() if candidate is not None else ""
+        if text:
+            return text
+    state_text = str(state).strip() if state is not None else ""
+    return f"task failed (state={state_text})" if state_text else "unknown"
+
+
 def classify_kind(reason: str) -> str:
     """``threshold`` when the reason starts with the breach marker, else ``failure``."""
     return KIND_THRESHOLD if reason.lstrip().startswith(THRESHOLD_MARKER) else KIND_FAILURE

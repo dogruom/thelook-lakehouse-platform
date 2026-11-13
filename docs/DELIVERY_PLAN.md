@@ -284,7 +284,7 @@ Branching: one short-lived branch per day or task group (`feat/w1-contracts`, `f
 | | |
 |---|---|
 | Objective | One parametrised, re-runnable pipeline |
-| Work | W4.D22.1 Airflow 3.x image (Python 3.11, Java 17, Spark client) in the `orchestration` profile · W4.D22.2 DAG `lakehouse_pipeline`: per-brand landing check (`.expand`) → bronze → silver jobs → reconcile gate → `dbt build`; retries, timeouts, `max_active_runs=1` · W4.D22.3 ADR-0010 (orchestration ↔ compute interface: SparkSubmit locally, EMR Serverless operator on AWS) |
+| Work | W4.D22.1 Airflow 3.x image (Python 3.11, Java 17, Spark client) in the `orchestration` profile · W4.D22.2 DAG `lakehouse_pipeline`: per-brand landing check (`.expand`) → bronze → silver jobs → reconcile gate → `dbt build`; retries, timeouts, `max_active_runs=1` · W4.D22.3 ADR-0010 (orchestration ↔ compute interface: SparkSubmit locally, AWS Glue job operator on AWS; ADR-0011 supersedes EMR Serverless; Airflow pins and memory: D-098) |
 | Learn | Airflow 3 task SDK, dynamic task mapping, idempotent tasks |
 | Verify | `airflow dags test lakehouse_pipeline <date>` · UI run green |
 | Depends / blockers | Memory: `core` + `orchestration` together on 7.6 GB Docker — stop the `sql` profile while Airflow runs |

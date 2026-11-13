@@ -76,7 +76,6 @@ x-airflow-common: &airflow-common
       SPARK_VERSION: "3.5.9"
   profiles: ["orchestration"]
   environment: &airflow-common-env
-    <<: *s3-credentials
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
@@ -86,16 +85,12 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:?AIRFLOW__CORE__FERNET_KEY missing - see .env.example}
     AIRFLOW__API__SECRET_KEY: ${AIRFLOW__API__SECRET_KEY:?AIRFLOW__API__SECRET_KEY missing - run scripts/bootstrap_env.py}
-    # One secret for the api-server and the scheduler: the JWT that authorises task runs.
-    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API__SECRET_KEY:?AIRFLOW__API__SECRET_KEY missing - run scripts/bootstrap_env.py}
-    AWS_DEFAULT_REGION: us-east-1
-    LAKEHOUSE_BUCKET: ${LAKEHOUSE_BUCKET:-lakehouse}
+    # Shared by the api-server and the scheduler: signs the JWT that authorises task runs.
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET:?AIRFLOW__API_AUTH__JWT_SECRET missing - run scripts/bootstrap_env.py}
     AIRFLOW_DB_NAME: ${AIRFLOW_DB_NAME:-airflow_metadata}
     AIRFLOW_DB_USER: ${AIRFLOW_DB_USER:-airflow}
     AIRFLOW_DB_PASSWORD: ${AIRFLOW_DB_PASSWORD:?AIRFLOW_DB_PASSWORD missing - run scripts/bootstrap_env.py}
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER:-airflow}:${AIRFLOW_DB_PASSWORD:?AIRFLOW_DB_PASSWORD missing}@postgres:5432/${AIRFLOW_DB_NAME:-airflow_metadata}
-    AWS_ENDPOINT_URL: http://seaweedfs:9000
-    KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     PYTHONUNBUFFERED: "1"
   volumes:
     - ./dags:/opt/airflow/dags
@@ -105,8 +100,6 @@ x-airflow-common: &airflow-common
     - airflow_plugins:/opt/airflow/plugins
   depends_on:
     postgres:
-      condition: service_healthy
-    seaweedfs:
       condition: service_healthy
   networks:
     - lakehouse_net
@@ -412,12 +405,17 @@ services:
     mem_limit: 768m
     environment:
       <<: *airflow-common-env
-      # The official entrypoint migrates the metadata DB and creates the admin user from these.
-      _AIRFLOW_DB_MIGRATE: "true"
-      _AIRFLOW_WWW_USER_CREATE: "true"
+      # Read by the command below (FAB auth manager: `airflow users create`).
       _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:-admin}
       _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:?AIRFLOW_ADMIN_PASSWORD missing - run scripts/bootstrap_env.py}
-    command: ["version"]
+    # `users create` fails when the user already exists: `|| true` keeps the init idempotent.
+    # `db migrate` must succeed (&&). Needs the FAB auth manager configured above.
+    command:
+      - bash
+      - -c
+      - |
+        airflow db migrate &&
+        (airflow users create --username "$$_AIRFLOW_WWW_USER_USERNAME" --password "$$_AIRFLOW_WWW_USER_PASSWORD" --firstname Admin --lastname User --role Admin --email admin@crm-lakehouse.local || true)
     restart: "no"
 
   airflow-api-server:
@@ -456,10 +454,17 @@ services:
     # The hive-site.xml renderer runs first (as in spark-master), then the Airflow entrypoint.
     entrypoint: *hive-entrypoint
     command: ["/usr/bin/dumb-init", "--", "/entrypoint", "scheduler"]
-    # Scheduler + task supervisors + one Spark driver JVM (768m heap) + a dbt subprocess.
-    mem_limit: 2g
+    # Scheduler + task supervisors + one Spark driver JVM (768m heap) + a dbt subprocess (estimate).
+    mem_limit: 3g
     environment:
-      <<: [*airflow-common-env, *hive-client-env]
+      # S3 credentials, endpoint and Kafka address only here: tasks (landing check, Spark drivers)
+      # are the only code that talks to storage; init, api-server and dag-processor get none.
+      <<: [*airflow-common-env, *s3-credentials, *hive-client-env]
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://seaweedfs:9000
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      LAKEHOUSE_BUCKET: ${LAKEHOUSE_BUCKET:-lakehouse}
+      AIRFLOW__CORE__PARALLELISM: "4"
       LAKEHOUSE_CATALOG: hive
       ENVIRONMENT: local
       # Executors on the worker connect back to the driver in this container by service name.
@@ -486,6 +491,8 @@ services:
       start_period: 90s
     depends_on:
       postgres:
+        condition: service_healthy
+      seaweedfs:
         condition: service_healthy
       airflow-init:
         condition: service_completed_successfully

@@ -170,3 +170,17 @@ def test_emit_alert_logs_always_and_posts_only_when_configured(
     assert len(lines) == 2
     assert all(alert.parse_log_line(line) == payload for line in lines)
     assert len(_Sink.received) == 1
+
+
+def test_failure_text_falls_back_when_the_context_has_no_exception() -> None:
+    assert alert.failure_text(RuntimeError("boom"), "other", "failed") == "boom"
+    assert alert.failure_text(None, "timed out", "failed") == "timed out"
+    assert alert.failure_text(None, None, "failed") == "task failed (state=failed)"
+    assert alert.failure_text("", "  ", None) == "unknown"
+    assert alert.failure_text() == "unknown"
+
+
+def test_only_one_alert_per_failure_rollup_task_is_silent() -> None:
+    assert not alert.is_alertable_task("run_verdict")
+    assert alert.is_alertable_task("landing_check")
+    assert alert.is_alertable_task("dlq_rate_gate")

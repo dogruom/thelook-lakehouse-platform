@@ -12,8 +12,8 @@
 #       `pip install pyspark==3.5.x` guarantees the client equals the cluster (3.5.9) and brings the
 #       pinned connector JARs (Delta, S3A/hadoop-aws, Kafka, PostgreSQL). Whether pyspark 3.5.9 is
 #       published on PyPI was not checked, and PyPI wheels carry none of those JARs anyway.
-#   delta-spark 3.3.3 (--no-deps, Python API only; same as the Spark image) + the few runtime
-#       dependencies of the `lakehouse` package. pydantic / structlog / boto3 come from Airflow's
+#   delta-spark 3.3.3 and pydantic-settings 2.3.4 (--no-deps; same pins as the Spark image) + the
+#       few runtime dependencies of the `lakehouse` package. pydantic / structlog / boto3 come from Airflow's
 #       own constrained set.
 #   dbt in a SEPARATE virtualenv (/opt/dbt-venv) from requirements/dbt.txt, so dbt's dependency tree
 #       never constrains Airflow's (same reason as .venv-dbt on the host, D-060).
@@ -67,10 +67,12 @@ RUN python -m venv /opt/dbt-venv \
 
 USER airflow
 
-# Delta Python API (no deps: PySpark itself is the one from /opt/spark), then the rest under the
-# official Airflow constraints so the Airflow install is not disturbed.
+# Delta Python API and pydantic-settings (both --no-deps, the exact pins of the Spark image: PySpark
+# is the one from /opt/spark, pydantic comes from Airflow), then the rest under the official Airflow
+# constraints so the Airflow install is not disturbed. pydantic-settings is not in Airflow's
+# constraint set, so an `==` pin inside the constrained step could fail.
 COPY requirements-airflow.txt /tmp/requirements-airflow.txt
-RUN pip install --no-cache-dir --no-deps delta-spark==3.3.3 \
+RUN pip install --no-cache-dir --no-deps delta-spark==3.3.3 pydantic-settings==2.3.4 \
     && pip install --no-cache-dir -r /tmp/requirements-airflow.txt \
        --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
 

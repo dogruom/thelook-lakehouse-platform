@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import signal
 import socket
 import sys
+
+import pytest
 
 from lakehouse.orchestration import runner
 
@@ -41,3 +44,47 @@ def test_tcp_reachable() -> None:
         port = server.getsockname()[1]
         assert runner.tcp_reachable("127.0.0.1", port, 2.0)
     assert not runner.tcp_reachable("127.0.0.1", port, 0.5)
+
+
+class _Stop(Exception):
+    """Raised by the stand-in 'previous' SIGTERM handler of the forwarding test."""
+
+
+def test_sigterm_is_forwarded_to_the_child_and_handlers_are_restored() -> None:
+    import threading
+    import time
+
+    def previous(_signum: int, _frame: object) -> None:
+        raise _Stop
+
+    old_term = signal.signal(signal.SIGTERM, previous)
+    old_int = signal.getsignal(signal.SIGINT)
+    started = time.monotonic()
+    timer = threading.Timer(1.0, lambda: signal.raise_signal(signal.SIGTERM))
+    timer.start()
+    try:
+        with pytest.raises(_Stop):
+            runner.run_streaming([sys.executable, "-c", "import time; time.sleep(60)"], 120)
+        # run_streaming reaped the child (SIGTERM to its group) instead of waiting for it
+        assert time.monotonic() - started < 30
+        assert signal.getsignal(signal.SIGTERM) is previous
+        assert signal.getsignal(signal.SIGINT) is old_int
+    finally:
+        timer.cancel()
+        signal.signal(signal.SIGTERM, old_term)
+
+
+def test_signal_handlers_are_not_touched_outside_the_main_thread() -> None:
+    import threading
+
+    seen: list[object] = []
+
+    def work() -> None:
+        before = signal.getsignal(signal.SIGTERM)
+        runner.run_streaming([sys.executable, "-c", "pass"], 30)
+        seen.append(signal.getsignal(signal.SIGTERM) is before)
+
+    thread = threading.Thread(target=work)
+    thread.start()
+    thread.join()
+    assert seen == [True]

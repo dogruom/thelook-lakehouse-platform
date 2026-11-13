@@ -55,3 +55,16 @@ def test_states_script_compiles_and_targets_the_dag() -> None:
 def test_skip_reason_is_actionable() -> None:
     assert "crm_airflow_scheduler" in airflow_cli.SKIP_REASON
     assert "orchestration" in airflow_cli.SKIP_REASON
+
+
+def test_end_date_is_parsed_and_defaults_to_empty() -> None:
+    data = {"run_id": "r", "state": "success", "end_date": "2026-01-03 10:00:00+00:00", "tasks": []}
+    run = airflow_cli.parse_run_states(airflow_cli.STATES_MARKER + json.dumps(data))
+    assert run.end_date == "2026-01-03 10:00:00+00:00"
+    del data["end_date"]
+    assert airflow_cli.parse_run_states(airflow_cli.STATES_MARKER + json.dumps(data)).end_date == ""
+
+
+def test_thrift_skip_reason_names_the_profile() -> None:
+    assert "crm_spark_thrift" in airflow_cli.THRIFT_SKIP_REASON
+    assert "--profile sql" in airflow_cli.THRIFT_SKIP_REASON

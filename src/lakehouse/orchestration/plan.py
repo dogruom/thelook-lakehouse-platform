@@ -11,6 +11,8 @@ Airflow. Failure-isolation design (W4.D23.1), per task:
   one failed shared job halts everything after it, because every later job reads its output.
 * ``dlq_rate_gate`` is mapped per healthy brand; ``dbt_build`` keeps ``all_success``, so one brand
   above the DLQ-rate threshold halts Gold (Gold marts are multi-tenant tables built in one run).
+* Isolation scope: per-brand isolation exists in ``landing_check`` and ``dlq_rate_gate`` only; the
+  Bronze, ``dlq_gate``, Silver and ``reconcile`` jobs process all brands in one run.
 * ``run_verdict`` (``one_failed``) is the only leaf that can fail on purpose: it turns "a brand
   failed but the other brands completed" into a failed DAG run instead of a silently green one.
 """

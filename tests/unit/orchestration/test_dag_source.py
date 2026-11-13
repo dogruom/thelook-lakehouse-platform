@@ -133,3 +133,39 @@ def test_dag_does_not_import_other_components_or_hold_secrets() -> None:
     source = DAG_FILE.read_text(encoding="utf-8").lower()
     assert "password" not in source
     assert "pii_hmac_key" not in source
+
+
+def test_dlq_gate_task_passes_all_four_bronze_tables() -> None:
+    """V-28: dlq_gate gates only customers and clickstream by default (D-077); the DAG must name all four."""
+    assert plan.DLQ_GATE_JOB.name == "dlq_gate"
+    assert plan.DLQ_GATE_JOB.args == (
+        "--table",
+        "raw_customers",
+        "--table",
+        "raw_clickstream",
+        "--table",
+        "raw_orders",
+        "--table",
+        "raw_products",
+    )
+    # the DAG hands the arguments of every JobSpec to the job, unchanged
+    helper = next(
+        n for n in ast.walk(_tree()) if isinstance(n, ast.FunctionDef) and n.name == "spark"
+    )
+    assert "job_args=list(spec.args)" in ast.unparse(helper)
+    chain = next(
+        n for n in ast.walk(_tree()) if isinstance(n, ast.For) and "DLQ_GATE_JOB" in ast.unparse(n)
+    )
+    assert "spark(spec)" in ast.unparse(chain)
+
+
+def test_callback_skips_rollup_and_handles_a_missing_exception() -> None:
+    source = ast.unparse(
+        next(
+            n
+            for n in ast.walk(_tree())
+            if isinstance(n, ast.FunctionDef) and n.name == "alert_on_failure"
+        )
+    )
+    assert "is_alertable_task" in source
+    assert "failure_text" in source

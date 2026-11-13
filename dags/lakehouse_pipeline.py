@@ -1,10 +1,14 @@
 """DAG ``lakehouse_pipeline``: one parametrised, re-runnable pass over the lakehouse (W4.D22/D23).
 
 Airflow triggers, Spark owns state (ADR-0010): every Spark job is submitted in client mode to the
-standalone cluster and talks back only through its exit code and JSON log. A job is idempotent
-(``availableNow`` checkpoints, deterministic ``MERGE``), so a second run of the same interval
-changes nothing. This is a batch orchestration of ``availableNow`` runs - it does not orchestrate a
-running stream.
+standalone cluster and talks back only through its exit code and JSON log. Each job is idempotent
+(``availableNow`` checkpoints, deterministic ``MERGE``), so a second run of the same interval has
+an idempotent outcome on the tables (not exactly-once delivery; the integration test compares
+content hashes). This is a batch orchestration of ``availableNow`` runs - it does not orchestrate
+a running stream.
+
+Brand isolation exists in ``landing_check`` and ``dlq_rate_gate`` only. The Bronze, DLQ-gate and
+Silver jobs process all brands in one run, so a failure there halts every brand.
 
 Flow::
 
@@ -44,6 +48,8 @@ from lakehouse.orchestration.alert import (
     classify_kind,
     emit_alert,
     extract_brand_id,
+    failure_text,
+    is_alertable_task,
 )
 from lakehouse.orchestration.joblog import (
     breached_brands_from_log,
@@ -109,7 +115,11 @@ def alert_on_failure(context: dict[str, Any]) -> None:
     """
     try:
         ti = context["task_instance"]
-        reason = str(context.get("exception") or context.get("reason") or "task failed")
+        if not is_alertable_task(ti.task_id):
+            return  # run_verdict only rolls up failures that already alerted
+        reason = failure_text(
+            context.get("exception"), context.get("reason"), getattr(ti, "state", None)
+        )
         payload = build_alert_payload(
             dag_id=ti.dag_id,
             run_id=ti.run_id,
