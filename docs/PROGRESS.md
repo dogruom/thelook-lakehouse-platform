@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-13 (Week 3 closed; v9.0 2026-11-05: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **Week 3 closed** (W3.D13–D18 ✅) → next **W4.D19** (dbt project + staging on Silver) · M1: 36/37 ✅ (`v0.1.0` tag owner-only)
+> **Active**: **W4.D19** closed partially (D19.2 ✅, D19.1 🔄 until orders are landed, V-25) → next **W4.D20** (dimensions and facts) · M1: 36/37 ✅ (`v0.1.0` tag owner-only)
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,17 +13,17 @@
 
 ## Current State
 
-- **Updated**: 2026-11-13 (Week 3 closed) · **Branch**: `feat/w4-d19-dbt-staging` (Week 3 merged as `23cdb97`, PR #15); merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
-- **Last delivered**: W3.D14–D18 ✅ — `silver_customers` (sequence-guarded CDC MERGE, tombstones, HMAC `email_token`, late CDC generator), SCD2 history rebuilt by `_cdc_sequence`, `silver_orders`/`order_items` with FK orphans → retryable DLQ + `replay`, `silver_clickstream` lookback MERGE, `ops.pipeline_metrics` + `reconcile`, tenant views + `isolation_check`, crash-mid-batch re-run proof (`505143c` … `c6ab4b9`).
-- **Unfinished**: tutor gates with the owner — M1 (V-11, round 1 answers pending) and W3 (Learning queue). V-23 customers data-level reconciliation is weak (known limit, covered by the CDC suite).
-- **Tests & results**: Week 3 close: unit 1634 passed, 1 skipped, coverage 80.91 % (gate 80 %); Spark full suite 514 passed (+ `test_isolation.py` 6 after the fix); integration W3 set 77 tests, all passing after the fixes (tenant 7/7, re-run 5/5); M1 regression integration 50 passed, 1 skipped (broker chaos opt-in); ruff/format/mypy/import-linter clean.
+- **Updated**: 2026-11-13 (W4.D19 close) · **Branch**: `feat/w4-d19-dbt-staging` pushed at `7397428` (+ docs commit), CI green, **not merged** (D19.1 open; week branch continues); Week 3 merged as `23cdb97`, PR #15
+- **Last delivered**: W4.D19 — dbt staging views on the five Silver tables (no raw names, D-088), tenant-safe tests `relationships_by_brand` + `assert_no_cross_tenant_joins` with var-gated negative fixtures, contract tests (one current history version, tombstones without PII), `dbt parse` CI job (D-089); V-15 closed (D-090).
+- **Unfinished**: W4.D19.1 🔄 — `silver.orders`/`order_items` empty in the shared catalog (V-25 owner landing), so `stg_orders`/`stg_order_items` are not data-verified. Tutor gates M1 (V-11) and W3 + W4.D19 (Learning queue). V-23 known limit.
+- **Tests & results**: W4.D19 close: staging build on 3 data-backed tables PASS=25 ERROR=0; `test_dbt_tenant_tests.py` 5 passed (3 consecutive runs); unit 1634 passed, 1 skipped, coverage 80.91 %; ruff/format/mypy clean; CI run 43427736811 green (incl. `dbt parse`). Week 3 numbers in DAY_CLOSE_REPORTS.
 - **Test cadence (D-059)**: only the relevant tests while developing, full suite once per day close; integration tests run sequentially (2 worker cores); broker chaos opt-in (`RUN_BROKER_CHAOS=1`).
-- **Owner action** — rows in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) class *Owner action*: V-17 guard-hook regex patch (pytest `-rs`/`-rf` false block; the working-tree change in `.claude/hooks/guard_commands.py` is left uncommitted for the owner) · V-18 `v0.1.0` tag · V-11 learning gates · V-19 one `/security-review` run · V-10 legacy anonymous volume · V-09 `COMPOSE_PROJECT_NAME` in the local env file · V-13 (deferred) Hive schema.
-- **Stack**: stopped after the close. Docker Desktop needed a forced restart on 2026-11-12 (engine 500).
-- **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): earlier list plus D-073 late CDC generator, D-074 customers MERGE, D-075 HMAC token, D-076 SCD2 rebuild, D-078 orders FK DLQ, D-079/D-086 clickstream lateness, D-080 replay, D-081/D-082 metrics + reconcile, D-083/D-084 crash proof, D-085 tenant views, D-087 test-world collision rate and lineage exclusion.
-- **Risks / blockers**: 7.6 GB Docker memory, 2 worker cores (integration suites are slow); metastore concurrency job + dbt (V-15 → W4.D19); Delta commit safety on S3 → W5.
+- **Owner action** — rows in [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) class *Owner action*: **V-25 land orders once** (unblocks W4.D19.1 and D20 facts) · V-17 guard-hook regex patch (working-tree change in `.claude/hooks/guard_commands.py` left uncommitted for the owner) · V-18 `v0.1.0` tag · V-11 learning gates · V-19 one `/security-review` run · V-10 legacy anonymous volume · V-09 `COMPOSE_PROJECT_NAME` in the local env file · V-13 (deferred) Hive schema.
+- **Stack**: stopped after the W4.D19 close. Shared catalog now holds Bronze, DLQ and Silver customers/history/clickstream (seed 1910 + earlier runs); orphan S3 locations under `warehouse/gold_fixtures.db/` from the first seed-based fixture runs are harmless.
+- **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): earlier list plus D-073 … D-087 (Week 3), D-088 staging conventions (`gold_staging`, no raw names), D-089 tenant-safe dbt tests + fixtures as views, D-090 V-15 closed / V-24 re-targeted / V-25 / `silver.products` gap.
+- **Risks / blockers**: 7.6 GB Docker memory, 2 worker cores; `silver.products` does not exist but `dim_products` is planned for W4.D20 (decide first: Silver products job vs Gold from Bronze — Gold must read Silver only, DATA_CONTRACTS §5); V-24 coverage headroom; Delta commit safety on S3 → W5.
 - **Way of working**: Claude implements everything; every pipeline step is mapped in [DATA_FLOW.md](DATA_FLOW.md) (D-046); per-session trace in [SESSION_LOG.md](SESSION_LOG.md).
-- **Next task ("Start today's task")**: **W4.D19** — dbt project + staging on Silver, tenant-safe tests (`relationships_by_brand`), `dbt parse` in CI (DELIVERY_PLAN D19 card).
+- **Next task ("Start today's task")**: **W4.D20** — dimensions and facts (DELIVERY_PLAN D20 card); first the `silver.products` decision; if the owner has landed orders (V-25), re-run `dbt build --select staging` and close W4.D19.1.
 - **Autonomous run**: not started (setup on `chore/autonomous-run`, D-041/D-042)
 
 ---
@@ -286,8 +286,8 @@ Evidence:
 ### Week 4
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
-| W4.D19.1 | dbt project + staging | sources on Silver; profiles from env | `dbt build --select staging` | ⏳ |
-| W4.D19.2 | Tenant-safe tests + CI parse | `relationships_by_brand`, `assert_no_cross_tenant_joins`; `dbt parse` in CI | CI link | ⏳ |
+| W4.D19.1 | dbt project + staging | sources on Silver; profiles from env | `dbt build --select staging` | 🔄 |
+| W4.D19.2 | Tenant-safe tests + CI parse | `relationships_by_brand`, `assert_no_cross_tenant_joins`; `dbt parse` in CI | CI link | ✅ |
 | W4.D20.1 | Dimensions | dim_customers, dim_customers_history, dim_products, dim_date; surrogate keys include `brand_id`; no raw PII | `dbt build --select dims` | ⏳ |
 | W4.D20.2 | Facts | fct_orders, fct_order_items, fct_sessions; composite relationship tests | `dbt build --select facts` | ⏳ |
 | W4.D21.1 | `obt_customer_360` | grain `(brand_id, customer_id)`; `as_of_date` var | `dbt build --select obt_customer_360` | ⏳ |
@@ -305,7 +305,12 @@ Evidence:
 | W4.D24.3 | M2 review + tag | runbook, reviewer APPROVE, auditor PASS, `v0.2.0` (owner) | `checkpoint milestone M2` | ⏳ |
 | W4.D24.4 | dbt contracts | enforced where the adapter supports it, else documented alternative | `dbt build` | ⏳ |
 
-**Evidence**: _—_ · **M2 checkpoint**: _not run_
+**Evidence**:
+- W4.D19.1 🔄: `7397428` — sources on the five Silver tables, `stg_*` views in `gold_staging`, profiles from env (unchanged, D-088). Data-backed on the shared catalog (2026-11-13; 897 customers, 2604 history rows, 12805 clickstream rows, 3 brands): `dbt build --select stg_customers stg_customers_history stg_clickstream assert_customers_history_one_current assert_tombstones_have_no_pii` (orders-dependent tests excluded) → **PASS=25 ERROR=0**. Open: `silver.orders`/`order_items` are empty locally (landing upload needs the owner, V-25), so `stg_orders`, `stg_order_items` and the orders legs are parse- and fixture-verified only; full `dbt build --select staging` not yet green.
+- W4.D19.2 ✅: `7397428` — `relationships_by_brand`, `cross_tenant_key_matches` + `assert_no_cross_tenant_joins` (D-089). `pytest tests/integration/test_dbt_tenant_tests.py -q` → **5 passed** (leaky fixture: plain `relationships` 1 failure, `relationships_by_brand` 2, cross-tenant macro 1; fixtures selected only with the var; 3 consecutive runs green after seeds → views). CI [run 43427736811](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/43427736811): `dbt parse` (both var states, fixture gating check), unit, gitleaks → success.
+- Gates: ruff/format/mypy clean; unit **1634 passed, 1 skipped, coverage 80.91 %** (no `src/` change). V-15 closed (Spark job + dbt overlap, D-090). Review: code review **APPROVE WITH NITS**, should-fix 1–3 applied before the commit.
+
+**M2 checkpoint**: _not run_
 
 ---
 

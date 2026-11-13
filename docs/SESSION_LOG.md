@@ -23,6 +23,16 @@ to add a missing link. File lines are clickable repo-relative links.
 
 ---
 
+## 2026-11-13 · W4.D19 dbt foundations (partial close)
+
+- **Tasks**: W4.D19.1 🔄 (orders/items not data-verified, V-25) · W4.D19.2 ✅ ([PROGRESS Week 4](PROGRESS.md))
+- **Commits / PR**: `7397428` feat(dbt) · docs close commit · branch pushed, CI run 43427736811 green · no PR (day open)
+- **Decisions**: D-088 … D-090 ([DECISION_LOG](DECISION_LOG.md))
+- **Files**: [dbt_project.yml](../dbt_project/dbt_project.yml), [models/staging/](../dbt_project/models/staging/), [models/tenant_fixtures/](../dbt_project/models/tenant_fixtures/), [cross_tenant_key_matches.sql](../dbt_project/macros/cross_tenant_key_matches.sql), [relationships_by_brand.sql](../dbt_project/tests/generic/relationships_by_brand.sql), [tests/singular/](../dbt_project/tests/singular/), [tests/tenant_fixtures/](../dbt_project/tests/tenant_fixtures/), [test_dbt_tenant_tests.py](../tests/integration/test_dbt_tenant_tests.py), [ci.yml](../.github/workflows/ci.yml); docs [PROGRESS.md](PROGRESS.md), [DATA_FLOW.md](DATA_FLOW.md), [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md), [DECISION_LOG.md](DECISION_LOG.md), [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md), [PORTFOLIO_NOTES.md](PORTFOLIO_NOTES.md), [TASKS.md](TASKS.md)
+- **Agents**: implementer ‖ test-author → coordinator verification → reviewer (code) → fixes by both
+- **Finding**: dbt silently ignores SQL in `tests/fixtures/`; dbt-spark seeds leave S3 locations on drop (fixtures → views); pre-commit caught invalid CI YAML and a gitleaks false positive
+- **Learning**: W4.D19 concepts queued for the tutor
+
 ## 2026-11-12/13 · W3.D14–D18 Silver correctness (Week 3 close)
 
 - **Tasks**: W3.D14.1–D18.4 ✅ ([PROGRESS Week 3](PROGRESS.md))
