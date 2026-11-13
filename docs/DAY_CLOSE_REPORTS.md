@@ -9,7 +9,7 @@
 
 ---
 
-## W4.D19 · dbt foundations — closed partially 2026-11-13
+## W4.D19 · dbt foundations — closed 2026-11-13
 
 **Executive summary.** dbt now reads Silver through one staging view per table and has tests that
 understand tenants. The key new test, `relationships_by_brand`, fails when an order points at a
@@ -17,7 +17,8 @@ customer who exists only in another brand. dbt's built-in `relationships` test m
 and a small leaky fixture proves the difference (built-in: 1 failure, ours: 2). Customers, history
 and clickstream are verified on real Silver data. Orders and order items are not yet: their Silver
 tables are empty locally, and loading them needs one owner step (V-25).
-- **Delivered**: W4.D19.1 🔄 (staging on Silver; orders/items not data-verified) · W4.D19.2 ✅ (tenant-safe tests, `dbt parse` in CI).
+- **Update (same day, after the owner landed orders, V-25)**: `silver_orders` 249 read = 225 accepted + 9 DLQ + 9 duplicates + 6 FK orphans, 488 items; full `dbt build --select staging` → PASS=42 ERROR=0; 1 order references a customer id that exists in two brands, so the orders leg is exercised. W4.D19.1 → ✅. `v0.1.0` tagged on the M1 merge `ac239b3` (D-092); `silver.products` decided (D-091).
+- **Delivered**: W4.D19.1 ✅ (data-verified after V-25) · W4.D19.2 ✅ (tenant-safe tests, `dbt parse` in CI).
 - **Evidence**:
   - Commit `7397428`; CI [run 43427736811](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/43427736811) green (`dbt parse` in both fixture states + gating check, unit, gitleaks).
   - Staging build on the shared catalog (897 customers, 2604 history rows, 12805 clickstream rows, 3 brands): PASS=25 ERROR=0, orders-dependent tests excluded.
