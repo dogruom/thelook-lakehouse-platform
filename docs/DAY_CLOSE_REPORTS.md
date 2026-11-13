@@ -18,7 +18,7 @@
   - Commits `3e49b32`, `6828076`, `f3dd0b2`, `de4dc63`. `dbt build --select staging marts` → PASS=146 WARN=0 ERROR=0; after the contract rename `dbt build --select obt_customer_360+` → PASS=29; after the review fixes PASS=30 (4 unit tests, non-degenerate test).
   - Rebuild: Bronze 5200 = Silver 4925 + DLQ 50 + duplicates 200 + parse 25; 0 orphan identified sessions (1706/913/279).
   - RFM: 5 segments in every brand, 5.9–41.2 %; identical checksum on two builds with the same `as_of_date` (also after the review fix), different with another date.
-  - `check_dbt_docs.py` → 15 models, 0 gaps; unit 1660 passed / 1 skipped, coverage ≈ 80.25 %.
+  - `check_dbt_docs.py` → 15 models, 0 gaps; unit 1661 passed / 1 skipped, coverage ≈ 80.32 % (after the review fixes); mypy clean, lint-imports 2 kept.
 - **Reviews / audit**: code review APPROVE WITH NITS, no must-fix; both should-fix applied (truncated `recency_hours` via portable `whole_hours_between` — dbt-spark `datediff` rounds up; OBT unit test for the day cut, cross-brand id, cancelled revenue, no-order customer, with a negative check) and nits 1, 3, 4, 5 (brand regex `{1,40}\Z`, tie-break wording, negative `tenure_days` documented, reset metrics-delete test); nit 2 documented (views of removed brands are not dropped).
 - **Decisions**: D-097 (generator pools, audited rebuild, `as_of_date`, valid orders, hours recency, RFM rules, unit-test override, tenant views, contracts v8.1).
 - **Found during the day**:
@@ -30,7 +30,7 @@
 - **Infra / config touched**: Kafka topic `clickstream_events` recreated (same settings); `dbt_project.yml` vars `as_of_date`, `tenant_brands`, post-hook on `marts/analytics`.
 - **Not verified / limitations**: customer attributes in the OBT are the current Silver state, not the state at `as_of_date`; RFM on 2 days of synthetic history (recency in hours); portable SQL of the new models untested on Athena (W5.D28.4); tenant views are not access control.
 - **Carry-overs**: V-28 orders reconcile mismatch → W4.D23.2.
-- **Risks**: coverage headroom ≈ 0.25 pt (V-24).
+- **Risks**: coverage headroom ≈ 0.32 pt (V-24).
 - **Learning queued**: OBT vs star schema, reproducible metrics (`as_of_date`), NTILE and ties, dbt unit tests vs data tests.
 - **Next day**: W4.D22 — Airflow 3 image (owner approves the build), `lakehouse_pipeline` DAG, ADR-0010.
 - **Merge status**: pending (PR, CI, merge recorded after the merge).
