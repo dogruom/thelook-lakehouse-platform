@@ -5,7 +5,8 @@
   validated against the brand_id contract pattern before any SQL is rendered, so a var cannot
   inject SQL. The views are a consumer convenience (one tenant per BI connection), NOT access
   control: anyone who can read gold_marts reads every tenant (same stance as the Silver views,
-  D-085). Idempotent (create or replace). Each statement runs on its own (adapter.execute): the Thrift
+  D-085). Views of a brand removed from tenant_brands are not dropped (drop them by hand).
+  Idempotent (create or replace). Each statement runs on its own (adapter.execute): the Thrift
   Server takes one statement per call; the hook itself renders to an empty string.
 #}
 {% macro tenant_scoped_views() %}
@@ -13,7 +14,7 @@
   {%- set schema = target.schema ~ '_tenant' -%}
   {%- set statements = ['create schema if not exists ' ~ schema] -%}
   {%- for brand in var('tenant_brands') -%}
-    {%- if not modules.re.match('^brand_[a-z0-9_]+$', brand) -%}
+    {%- if not modules.re.match('^brand_[a-z0-9_]{1,40}\Z', brand) -%}
       {{ exceptions.raise_compiler_error("tenant_scoped_views: invalid brand_id '" ~ brand ~ "'") }}
     {%- endif -%}
     {%- do statements.append(

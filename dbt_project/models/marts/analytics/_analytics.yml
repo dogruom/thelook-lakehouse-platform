@@ -41,7 +41,7 @@ models:
       - name: is_deleted
         description: True for tombstoned customers (PII already nulled in Silver).
       - name: tenure_days
-        description: Days from signup_date to as_of_date.
+        description: Days from signup_date to as_of_date; negative if the signup is after as_of_date (not clamped).
       - name: order_count
         description: All orders up to as_of_date, any status.
         data_tests: [not_null]
@@ -64,7 +64,7 @@ models:
       - name: recency_days
         description: Days from the date of last_order_ts to as_of_date; null without valid orders.
       - name: recency_hours
-        description: Whole hours from last_order_ts to the end of as_of_date; the RFM recency input.
+        description: Whole hours (truncated, macro whole_hours_between) from last_order_ts to the end of as_of_date; the RFM recency input.
       - name: session_count
         description: Identified sessions of the customer up to as_of_date.
       - name: converted_session_count
@@ -212,3 +212,34 @@ unit_tests:
         - {customer_id: c3, r_score: 3, f_score: 3, m_score: 3, rfm_segment: loyal}
         - {customer_id: c4, r_score: 4, f_score: 4, m_score: 4, rfm_segment: champions}
         - {customer_id: c5, r_score: 5, f_score: 2, m_score: 2, rfm_segment: promising}
+
+  - name: obt_customer_360_cut_tenancy_and_revenue_rules
+    description: >
+      as_of_date 2026-01-02: an order at 23:59 is in, one at 2026-01-03 00:00 is out; the same
+      customer_id in two brands keeps separate metrics (joins on brand_id); a cancelled order is
+      counted but adds no revenue; a customer without orders gets zeros and null averages;
+      recency_hours truncates (23:59 -> 00:00 is 0 h, dbt-spark datediff would give 1).
+    model: obt_customer_360
+    overrides:
+      vars: {as_of_date: "2026-01-02"}
+    given:
+      - input: ref('dim_customers')
+        rows:
+          - {customer_sk: a1, brand_id: brand_a, customer_id: c1, signup_date: "2025-12-31", is_deleted: false}
+          - {customer_sk: b1, brand_id: brand_b, customer_id: c1, signup_date: "2026-01-01", is_deleted: false}
+          - {customer_sk: a2, brand_id: brand_a, customer_id: c2, signup_date: "2026-01-02", is_deleted: false}
+      - input: ref('fct_orders')
+        rows:
+          - {brand_id: brand_a, customer_id: c1, order_status: completed, net_amount: 10.00, order_timestamp: "2026-01-02 23:59:00"}
+          - {brand_id: brand_a, customer_id: c1, order_status: completed, net_amount: 99.00, order_timestamp: "2026-01-03 00:00:00"}
+          - {brand_id: brand_a, customer_id: c1, order_status: cancelled, net_amount: 50.00, order_timestamp: "2026-01-01 10:00:00"}
+          - {brand_id: brand_b, customer_id: c1, order_status: pending, net_amount: 7.00, order_timestamp: "2026-01-01 12:00:00"}
+      - input: ref('fct_sessions')
+        rows:
+          - {brand_id: brand_a, customer_id: c1, converted: true, page_views: 3, add_to_carts: 1, session_start: "2026-01-02 08:00:00"}
+          - {brand_id: brand_a, customer_id: c1, converted: false, page_views: 9, add_to_carts: 9, session_start: "2026-01-03 00:00:00"}
+    expect:
+      rows:
+        - {brand_id: brand_a, customer_id: c1, tenure_days: 2, order_count: 2, frequency_orders: 1, cancelled_order_count: 1, monetary_total_spend: 10.00, avg_order_value: 10.00, recency_days: 0, recency_hours: 0, session_count: 1, converted_session_count: 1, total_page_views: 3, total_cart_additions: 1}
+        - {brand_id: brand_b, customer_id: c1, tenure_days: 1, order_count: 1, frequency_orders: 1, cancelled_order_count: 0, monetary_total_spend: 7.00, avg_order_value: 7.00, recency_days: 1, recency_hours: 36, session_count: 0, converted_session_count: 0, total_page_views: 0, total_cart_additions: 0}
+        - {brand_id: brand_a, customer_id: c2, tenure_days: 0, order_count: 0, frequency_orders: 0, cancelled_order_count: 0, monetary_total_spend: 0.00, avg_order_value: null, recency_days: null, recency_hours: null, session_count: 0, converted_session_count: 0, total_page_views: 0, total_cart_additions: 0}

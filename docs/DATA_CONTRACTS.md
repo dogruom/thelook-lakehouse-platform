@@ -405,7 +405,7 @@ Grain: `(brand_id, customer_id)`. Denormalised for BI and feature consumption wi
 | `first_order_ts` | TIMESTAMP | First order (any status) |
 | `last_order_ts` | TIMESTAMP | Last valid order; recency anchor |
 | `recency_days` | INTEGER | `DATEDIFF(as_of_date, DATE(last_order_ts))` |
-| `recency_hours` | BIGINT | Hours from `last_order_ts` to the end of `as_of_date`; the RFM recency input (D-097) |
+| `recency_hours` | BIGINT | Whole hours (truncated, macro `whole_hours_between`; dbt-spark `datediff` would round up) from `last_order_ts` to the end of `as_of_date`; the RFM recency input (D-097) |
 | `frequency_orders` | INTEGER | Count of valid orders (`completed` + `pending`, D-097) |
 | `monetary_total_spend` | DECIMAL(12,2) | Sum of net amounts of valid orders |
 | `avg_order_value` | DECIMAL(10,2) | `monetary_total_spend / frequency_orders` |
@@ -421,7 +421,7 @@ Metrics are cut at the end of `as_of_date`; customer attributes are the current 
 `as_of_date` is a model variable (not `CURRENT_DATE`) so that builds are reproducible.
 
 ### 5.3 `agg_rfm_segments`
-`NTILE(5)` on recency, frequency and monetary **partitioned by `brand_id`**, ties broken by `customer_id` (deterministic); composite `rfm_score` (`r-f-m`); segments `champions`, `loyal`, `promising`, `at_risk`, `hibernating` from the `rfm_segment` macro (rules in the macro and the model YAML; `Lost` merged into `hibernating` because two days of synthetic history cannot separate them, D-097). Grain `(brand_id, customer_id)` for non-deleted customers with ≥ 1 valid order. Distributions are reported as synthetic-data results, not as real-world retail benchmarks.
+`NTILE(5)` on recency, frequency and monetary **partitioned by `brand_id`**, ties broken by `customer_id` (deterministic but arbitrary: customers with equal values, e.g. one order each, can land in different quintiles); composite `rfm_score` (`r-f-m`); segments `champions`, `loyal`, `promising`, `at_risk`, `hibernating` from the `rfm_segment` macro (rules in the macro and the model YAML; `Lost` merged into `hibernating` because two days of synthetic history cannot separate them, D-097). Grain `(brand_id, customer_id)` for non-deleted customers with ≥ 1 valid order. Distributions are reported as synthetic-data results, not as real-world retail benchmarks.
 
 ### 5.4 Stretch: `agg_churn_risk_features`
 Rule-based heuristic score in [0, 1] (not a trained model). Built only if Core and Extended tiers are verified.

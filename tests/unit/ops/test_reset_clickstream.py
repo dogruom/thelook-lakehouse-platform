@@ -107,3 +107,49 @@ def test_apply_drops_catalog_entries_and_deletes_exactly_the_targets(
     ]
     assert sorted(fake_fs["delete"]) == sorted(t["location"] for t in report["targets"].values())
     assert report["metrics_rows"] == 0
+
+
+def test_apply_deletes_the_raw_clickstream_metrics_rows(
+    monkeypatch: pytest.MonkeyPatch, fake_fs: dict[str, list[str]]
+) -> None:
+    import sys
+    import types
+
+    monkeypatch.setattr(reset_clickstream, "_file_count", lambda _s, _u: 2)
+    deleted: list[tuple[str, str]] = []
+
+    class _Delta:
+        def __init__(self, path: str) -> None:
+            self.path = path
+
+        @classmethod
+        def forPath(cls, _spark: Any, path: str) -> _Delta:  # - Delta API name
+            return cls(path)
+
+        def delete(self, condition: str) -> None:
+            deleted.append((self.path, condition))
+
+    fake_delta = types.ModuleType("delta.tables")
+    fake_delta.DeltaTable = _Delta  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "delta", types.ModuleType("delta"))
+    monkeypatch.setitem(sys.modules, "delta.tables", fake_delta)
+
+    class _Reader:
+        def format(self, _f: str) -> _Reader:
+            return self
+
+        def load(self, _p: str) -> _Reader:
+            return self
+
+        def where(self, condition: str) -> _Reader:
+            assert condition == "source_table = 'raw_clickstream'"
+            return self
+
+        def count(self) -> int:
+            return 4
+
+    spark = _FakeSpark()
+    spark.read = _Reader()  # type: ignore[attr-defined]
+    report = JOB().run(spark, _args("--apply", "--confirm", "clickstream"), _ctx())  # type: ignore[arg-type]
+    assert report["metrics_rows"] == 4
+    assert deleted == [("s3a://lakehouse/ops/pipeline_metrics", "source_table = 'raw_clickstream'")]

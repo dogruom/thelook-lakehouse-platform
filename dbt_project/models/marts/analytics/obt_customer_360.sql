@@ -74,7 +74,7 @@ select
     cast(
         case
             when o.last_valid_order_at is not null
-                then {{ dbt.datediff('o.last_valid_order_at', as_of_end, 'hour') }}
+                then {{ whole_hours_between('o.last_valid_order_at', as_of_end) }}
         end as {{ dbt.type_bigint() }}
     ) as recency_hours,
     cast(coalesce(s.session_count, 0) as {{ dbt.type_int() }}) as session_count,
