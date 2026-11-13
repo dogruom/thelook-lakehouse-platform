@@ -28,6 +28,7 @@
   - The Thrift Server cannot return `min()/max()` of a DATE column served from Delta statistics (V-27).
   - The Thrift Server ran in UTC only by JVM default; now pinned (`spark.sql.session.timeZone=UTC`).
   - `sales_channel` is NULL on all 225 orders by design (present from landing batch 10).
+- **Infra / config touched**: `docker-compose.yml` (Thrift Server `spark.sql.session.timeZone=UTC`), `pyproject.toml` (import-linter ignore for `silver_products → ops.metrics`, same as the other Silver jobs).
 - **Not verified / limitations**: the `default__` (Trino) branch of the portable macros is untested until W5.D28.4; the empty-staging branch of the reconcile test is not exercised; contracts only on two pilot models.
 - **Carry-overs**: W4.D21.0 clickstream ↔ customers fix and data rebuild (planned; owner approves the rebuild).
 - **Risks**: coverage headroom 0.41 pt; a full Gold build takes ≈ 10 min.

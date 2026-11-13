@@ -52,8 +52,8 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 
 ```
 M1 (D1–D12)   [████████████████████] 37 / 37
-M2 (D13–D24)  [██████████░░░░░░░░░░] 17 / 35
-M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 35
+M2 (D13–D24)  [████████████░░░░░░░░] 22 / 37
+M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 36
 ```
 
 ## Pre-M1 (completed before this plan)
@@ -311,7 +311,7 @@ Evidence:
 - W4.D19.1 ✅: `7397428` — sources on the five Silver tables, `stg_*` views in `gold_staging`, profiles from env (unchanged, D-088). After the owner landed orders (V-25): `bronze_batch` 249 lines → `silver_orders` 225 accepted + 9 DLQ + 9 duplicates + 6 FK orphans = 249, 488 items. `dbt build --select staging --profiles-dir profiles` → **PASS=42 WARN=0 ERROR=0** (2026-11-13; 897 customers, 2604 history rows, 225 orders, 488 items, 12805 clickstream rows, 3 brands). The orders leg is not vacuous: 1 order references a customer id that exists in two brands.
 - W4.D19.2 ✅: `7397428` — `relationships_by_brand`, `cross_tenant_key_matches` + `assert_no_cross_tenant_joins` (D-089). `pytest tests/integration/test_dbt_tenant_tests.py -q` → **5 passed** (leaky fixture: plain `relationships` 1 failure, `relationships_by_brand` 2, cross-tenant macro 1; fixtures selected only with the var; 3 consecutive runs green after seeds → views). CI [run 43427736811](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/43427736811): `dbt parse` (both var states, fixture gating check), unit, gitleaks → success.
 - W4.D20.0 ✅: `ff84b4b` — Spark `silver_products` (D-094): Spark `tests/spark/test_tables.py` + `test_silver_products.py` → 11 + 53 passed; shared catalog run 1 → bronze_rows 120 = accepted 120, inserted 120; reruns (also after the review fix) → inserted 0, updated 0; `silver.products` registered. `dbt build --select stg_products+` PASS=13.
-- W4.D20.1 ✅ / W4.D20.2 ✅: `ff84b4b` — `dbt build --select staging marts --profiles-dir profiles` → **PASS=117 WARN=1 ERROR=0** (2026-11-13, Thrift session UTC). Per brand alpha/beta/gamma: dim_customers 537/269/91, dim_customers_history 1566/778/260, dim_products 40/40/40, fct_orders 75/75/75 (net 58183.78/64424.53/51920.85), fct_order_items 168/165/155, fct_sessions 3866/1929/646; dim_date 1095 days. `assert_marts_reconcile_to_staging` PASS (counts and net sums per brand). WARN = `fct_sessions.customer_id` relationship, 3879 identified sessions with generator-random customer ids (D-096, V-26 → W4.D21.0); error-level cross-tenant check on sessions PASS. Contracts enforced on `dim_date`, `fct_orders` (data types, D-095). Negative check: `assert_dim_date_calendar` fails with a shifted `dim_date_start`.
+- W4.D20.1 ✅ / W4.D20.2 ✅: `ff84b4b` — `dbt build --select staging marts --profiles-dir profiles` (superset of `tag:dims` / `tag:facts`) → **PASS=117 WARN=1 ERROR=0** (2026-11-13, Thrift session UTC). Per brand alpha/beta/gamma: dim_customers 537/269/91, dim_customers_history 1566/778/260, dim_products 40/40/40, fct_orders 75/75/75 (net 58183.78/64424.53/51920.85), fct_order_items 168/165/155, fct_sessions 3866/1929/646; dim_date 1095 days. `assert_marts_reconcile_to_staging` PASS (counts and net sums per brand). WARN = `fct_sessions.customer_id` relationship, 3879 identified sessions with generator-random customer ids (D-096, V-26 → W4.D21.0); error-level cross-tenant check on sessions PASS. Contracts enforced on `dim_date`, `fct_orders` (data types, D-095). Negative check: `assert_dim_date_calendar` fails with a shifted `dim_date_start`.
 - W4.D20 gates: ruff/format/mypy clean; unit **1646 passed, 1 skipped, coverage 80.41 %**; review APPROVE WITH NITS, all should-fix applied.
 - Gates (W4.D19): ruff/format/mypy clean; unit **1634 passed, 1 skipped, coverage 80.91 %** (no `src/` change). V-15 closed (Spark job + dbt overlap, D-090). Review: code review **APPROVE WITH NITS**, should-fix 1–3 applied before the commit.
 

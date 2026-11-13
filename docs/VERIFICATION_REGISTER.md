@@ -1,6 +1,6 @@
 # Verification register
 
-> **Version**: 1.9 · **Last updated**: 2026-11-13 (W4.D19) · Decision: D-055
+> **Version**: 1.9 · **Last updated**: 2026-11-13 (W4.D20) · Decision: D-055
 
 One list of every statement that a day report marked "not verified". Each row has a class and an
 owner day, so nothing stays as an unowned caveat. Update this file whenever a day report names a

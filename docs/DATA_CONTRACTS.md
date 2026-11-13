@@ -375,11 +375,13 @@ Single history owner: Spark (Charter invariant 6). No dbt snapshots on customers
 - `D` closes the current version. Out-of-order arrivals trigger a deterministic rebuild of the affected keys' history; the same events in any arrival order produce identical history.
 
 ### 4.3 Transactions & interactions
-- `silver.products`: latest valid Bronze copy per `(brand_id, product_id)` (ranked by `_ingest_ts`, landing file, line number; parse errors and `product.v1` rule failures excluded), MERGE insert / update when `_bronze_ref` changes, no deletes (D-094).
 - `silver.orders` / `silver.order_items`: insert-only MERGE on `(brand_id, order_id)` / `(brand_id, order_id, item_id)`; the first valid Bronze copy wins and later copies (also of an order already in Silver) are counted `duplicates_removed`; composite FK checks against `silver.customers` (a tombstone counts as present) and valid Bronze products of the same brand; orphans → `dead_letter.dlq_orders` with `_retryable = true` (`customer_fk_missing` / `product_fk_missing`, `REFERENTIAL_INTEGRITY_VIOLATION`). A late parent is indistinguishable from an orphan at run time and is recovered by the `replay` job: `PENDING`/`FAILED_AGAIN` rows below `--max-replays` are re-checked, recovered rows inserted into Silver before their DLQ row becomes `REPLAYED` (`_replay_count + 1`). In the reconciliation `dlq` term, `REPLAYED` rows count as `silver_accepted` (D-078, D-080).
 - `silver.clickstream`: in-batch dedup on `(brand_id, event_id)` (lowest Kafka partition/offset wins) + insert-only MERGE on `(brand_id, event_id, event_date)`: an event is `late_beyond_window` when `produced_at − event_timestamp > lookback_days` (default 7, both payload fields on the simulated clock), so outcomes do not depend on batching or on other events (D-086). Generated late events are minutes late, so `late_beyond_window` is 0 on generated data (D-079).
 
 ---
+
+### 4.4 Catalog (`silver.products`)
+- `silver.products`: latest valid Bronze copy per `(brand_id, product_id)` (ranked by `_ingest_ts`, landing file, line number; parse errors and `product.v1` rule failures excluded), MERGE insert / update when `_bronze_ref` changes, no deletes (D-094).
 
 ## 5. Gold Layer Specifications (dbt-owned)
 
