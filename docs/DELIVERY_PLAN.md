@@ -1,7 +1,7 @@
 # Delivery Plan: Six Weeks, Three Demonstrable Milestones
 
-> **Document Version**: 8.1
-> **Last Updated**: 2026-11-05 (v8.1: AWS Glue 5.0 replaces EMR Serverless — [ADR-0011](adr/0011-aws-glue-instead-of-emr-serverless.md); bounded Databricks Free Edition track in W6 — [ADR-0012](adr/0012-databricks-free-edition-track.md); tutor learning gate and portfolio notes in every checkpoint)
+> **Document Version**: 8.2
+> **Last Updated**: 2026-11-13 (v8.2: Gold on Athena W5.D28.4, D-093; W4.D20.0 `silver.products`, D-091); 2026-11-05 (v8.1: AWS Glue 5.0 replaces EMR Serverless — [ADR-0011](adr/0011-aws-glue-instead-of-emr-serverless.md); bounded Databricks Free Edition track in W6 — [ADR-0012](adr/0012-databricks-free-edition-track.md); tutor learning gate and portfolio notes in every checkpoint)
 > **Budget**: 6 weeks × 6 days × ~6 focused hours ≈ 216 h (owner + Claude Code, Sonnet) · cloud spend ≤ **USD 50** total (target < USD 15), AWS Free Tier credits first
 > **Relationship to other documents**: scope and invariants → [PROJECT_CHARTER.md](PROJECT_CHARTER.md); task-level acceptance criteria, statuses and evidence → [PROGRESS.md](PROGRESS.md) (task IDs `W<week>.D<day>.<n>`). This plan decides **sequencing, daily goals, checkpoints and milestone gates**.
 
@@ -269,13 +269,13 @@ Branching: one short-lived branch per day or task group (`feat/w1-contracts`, `f
 | | |
 |---|---|
 | Work | W4.D20.0 Spark `silver_products` job + `stg_products` (D-091) · W4.D20.1 `dim_customers`, `dim_customers_history`, `dim_products`, `dim_date` · W4.D20.2 `fct_orders`, `fct_order_items`, `fct_sessions`; composite relationship tests; contracts where supported |
-| Verify | `dbt build --select marts` |
+| Verify | `dbt build --select staging marts` |
 | Done when | No orphan keys; all tests green |
 
 #### D21 · Customer 360 and RFM
 | | |
 |---|---|
-| Work | W4.D21.1 `obt_customer_360` (grain `(brand_id, customer_id)`, `as_of_date` var) · W4.D21.2 `agg_rfm_segments` (NTILE per brand) + dbt unit tests + distribution check · W4.D21.3 `dbt docs generate`; tenant-scoped Gold views |
+| Work | W4.D21.0 generator: identified clickstream sessions use same-brand CDC customers; rebuild shared clickstream data (owner approval); `fct_sessions` customer test back to `error` (D-096) · W4.D21.1 `obt_customer_360` (grain `(brand_id, customer_id)`, `as_of_date` var) · W4.D21.2 `agg_rfm_segments` (NTILE per brand) + dbt unit tests + distribution check · W4.D21.3 `dbt docs generate`; tenant-scoped Gold views |
 | Learn | OBT vs star schema, reproducible metrics, dbt unit tests |
 | Verify | `dbt build --select +agg_rfm_segments` · segment distribution query |
 | Done when | No segment at 0%/100% per brand; same `as_of_date` → identical output |
@@ -349,8 +349,8 @@ Cloud days follow one pattern: `terraform apply` (owner-approved) → run → ve
 #### D28 · Silver on Glue, tenant policy test, local-vs-cloud report
 | | |
 |---|---|
-| Work | W5.D28.1 Silver jobs + reconcile on Glue · W5.D28.2 tenant demo policy: `brand_alpha` role denied on `brand_beta/` (CLI evidence) · W5.D28.3 `docs/LOCAL_VS_CLOUD.md` (catalog, credentials, Delta build, S3 semantics, logs, Glue specifics) · teardown |
-| Verify | Reconcile output on AWS = local; AccessDenied evidence |
+| Work | W5.D28.1 Silver jobs + reconcile on Glue · W5.D28.2 tenant demo policy: `brand_alpha` role denied on `brand_beta/` (CLI evidence) · W5.D28.3 `docs/LOCAL_VS_CLOUD.md` (catalog, credentials, Delta build, S3 semantics, logs, Glue specifics) · W5.D28.4 `dbt-athena` target: the same Gold marts built on Athena from Glue-catalog Silver; owner queries Gold in Athena (D-093) · teardown |
+| Verify | Reconcile output on AWS = local; AccessDenied evidence; `dbt build --target athena --select marts` green, Gold row counts = local |
 | Done when | Differences documented with evidence; spend recorded |
 
 #### D29 · CI/CD
@@ -496,6 +496,7 @@ GitHub Actions: private-repo free minutes; integration job only on PRs to `main`
 1. W6.D33.3 table-layout note → post-v1.
 2. W6.D33.1–2 dbt-databricks + dashboard → post-v1 (keep D32: Unity Catalog + jobs).
 3. W4.D23.4 backfill → post-v1 (re-run idempotency already proven in W3.D18.2).
+3a. W5.D28.4 Gold on Athena → W5.D36 buffer (owner wants it, D-093; cut only after the items above).
 4. W5.D29.2 deploy workflow → manual `run_job.py` with the owner's short-lived credentials (CI job 2 stays).
 5. Never cut: 🔺 suites, reconciliation, IaC + Glue run, secret scanning, evidence.
 

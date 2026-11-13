@@ -1,0 +1,174 @@
+version: 2
+
+# Gold dimensions (dbt-owned, Delta tables in gold_marts). Every surrogate key hashes brand_id.
+models:
+  - name: dim_customers
+    description: >
+      Current customer dimension, one row per (brand_id, customer_id), tombstones kept with
+      is_deleted = true. Privacy columns only (email_token, phone_masked); no raw PII and no
+      hashing in dbt.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, customer_id]
+    columns:
+      - name: customer_sk
+        description: Surrogate key = hash(brand_id, customer_id).
+        data_tests: [unique, not_null]
+      - name: brand_id
+        description: Tenant id.
+        data_tests: [not_null]
+      - name: customer_id
+        description: Customer id, unique only within a brand.
+        data_tests: [not_null]
+      - name: email_token
+        description: HMAC-SHA256 pseudonym of the email.
+      - name: phone_masked
+        description: Masked phone number.
+      - name: city
+        description: City.
+      - name: country
+        description: Country.
+      - name: loyalty_tier
+        description: Loyalty tier.
+      - name: signup_date
+        description: Signup date.
+      - name: is_deleted
+        description: True for tombstones (erasure or CDC delete).
+        data_tests: [not_null]
+      - name: cdc_action
+        description: Last CDC action (I, U, D).
+      - name: cdc_sequence
+        description: Source CDC sequence; orders changes, never the wall clock.
+      - name: silver_updated_at
+        description: Time the Silver row was last written.
+
+  - name: dim_customers_history
+    description: >
+      SCD2 customer history exposed from Silver, one row per (brand_id, customer_id, valid_from).
+      Privacy columns only; no raw PII.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, customer_id, valid_from]
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, customer_id, version]
+    columns:
+      - name: customer_history_sk
+        description: Surrogate key = hash(brand_id, customer_id, valid_from).
+        data_tests: [unique, not_null]
+      - name: customer_sk
+        description: Surrogate key of the customer, = hash(brand_id, customer_id); joins to dim_customers.customer_sk.
+        data_tests: [not_null]
+      - name: brand_id
+        description: Tenant id.
+        data_tests: [not_null]
+      - name: customer_id
+        description: Customer id, unique only within a brand.
+        data_tests:
+          - not_null
+          - relationships_by_brand:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_id
+      - name: version
+        description: SCD2 version number, ascending per customer.
+      - name: valid_from
+        description: Start of validity of this version.
+        data_tests: [not_null]
+      - name: valid_to
+        description: End of validity; null for the current version.
+      - name: is_current
+        description: True for the latest version.
+        data_tests: [not_null]
+      - name: is_deleted
+        description: True when this version is a tombstone.
+      - name: email_token
+        description: HMAC-SHA256 pseudonym of the email.
+      - name: phone_masked
+        description: Masked phone number.
+      - name: city
+        description: City.
+      - name: country
+        description: Country.
+      - name: loyalty_tier
+        description: Loyalty tier.
+      - name: signup_date
+        description: Signup date.
+      - name: cdc_action
+        description: CDC action behind this version (I, U, D).
+      - name: cdc_sequence
+        description: Source CDC sequence of this version.
+
+  - name: dim_products
+    description: Product dimension, one row per (brand_id, product_id).
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, product_id]
+    columns:
+      - name: product_sk
+        description: Surrogate key = hash(brand_id, product_id).
+        data_tests: [unique, not_null]
+      - name: brand_id
+        description: Tenant id.
+        data_tests: [not_null]
+      - name: product_id
+        description: Product id, unique only within a brand.
+        data_tests: [not_null]
+      - name: product_name
+        description: Product name.
+      - name: category
+        description: Product category.
+      - name: retail_price
+        description: List price, decimal(10,2).
+      - name: cost_price
+        description: Cost price, decimal(10,2); null when unknown.
+      - name: margin_amount
+        description: retail_price - cost_price; null when cost_price is null.
+      - name: is_active
+        description: True while the product is sold.
+      - name: silver_updated_at
+        description: Time the Silver row was last written.
+
+  - name: dim_date
+    description: >
+      Conformed calendar dimension at day grain, from vars dim_date_start to dim_date_end
+      (inclusive). It is the one Gold dimension that is NOT tenant-scoped: it has no brand_id and
+      its key is the plain calendar date, because dates carry no tenant data. Model contract enforced.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: date_key
+        description: Integer yyyymmdd key.
+        data_type: int
+        data_tests: [unique, not_null]
+      - name: date_day
+        description: Calendar date.
+        data_type: date
+        data_tests: [unique, not_null]
+      - name: year
+        description: Calendar year.
+        data_type: int
+      - name: quarter
+        description: Calendar quarter (1-4).
+        data_type: int
+      - name: month
+        description: Calendar month (1-12).
+        data_type: int
+      - name: day_of_month
+        description: Day of month (1-31).
+        data_type: int
+      - name: day_of_week
+        description: ISO day of week, 1 = Monday ... 7 = Sunday.
+        data_type: int
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5, 6, 7]
+                quote: false
+      - name: is_weekend
+        description: True for Saturday and Sunday.
+        data_type: boolean

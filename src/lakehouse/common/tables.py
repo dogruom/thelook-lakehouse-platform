@@ -85,6 +85,7 @@ CATALOG_TABLES: Mapping[str, TableSpec] = MappingProxyType(
             TableSpec("silver", "silver", "orders"),
             TableSpec("silver", "silver", "order_items"),
             TableSpec("silver", "silver", "clickstream"),
+            TableSpec("silver", "silver", "products"),
         )
     }
 )

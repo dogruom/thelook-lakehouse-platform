@@ -127,12 +127,12 @@ BLOCK_RULES: list[tuple[re.Pattern[str], str]] = [
         "Deleting Docker containers, images or volumes requires explicit owner approval.",
     ),
     (
-        re.compile(r"(?i)(?<!git )(?<!git)\brm\s+(\S+\s+)*(-[a-z]*r[a-z]*|--recursive)\b"),
+        re.compile(r"(?i)(?<!git )(?<!git)(?<![-\w])rm\s+(\S+\s+)*(-[a-z]*r[a-z]*|--recursive)\b"),
         "Recursive deletion is blocked. Delete single files, or ask the owner.",
     ),
     (
         re.compile(
-            r"(?i)(?<!git )\b(Remove-Item|ri|rm|rmdir|rd|del|erase)\b[^;&|]*"
+            r"(?i)(?<!git )(?<![-\w])(Remove-Item|ri|rm|rmdir|rd|del|erase)\b[^;&|]*"
             r"\s-r(e(c(u(r(s(e)?)?)?)?)?)?\b"
         ),
         "Recursive deletion (Remove-Item -Recurse) is blocked. Delete single files, or ask the owner.",
@@ -375,6 +375,13 @@ SELF_TEST: list[tuple[str, bool]] = [
     ("Remove-Item build -Recurse", True),
     ("Remove-Item build -rec -Force", True),
     ("Remove-Item build\\x.txt", False),
+    # `--rm` is a docker flag, not a delete (false positive seen in W2.D8 and W2.D12)
+    ("docker compose --profile tools run --rm spark-test pytest tests/spark -q -rs", False),
+    ("docker compose run --rm -T seaweedfs-init -c 'aws s3 ls s3://b/ --recursive'", False),
+    ("docker compose run --rm x sh -c 'rm -rf /data'", True),
+    ("docker run --rm img; rm -r build", True),
+    ("rm --recursive build", True),
+    ("Remove-Item -Path build --rm-like-flag -Recurse", True),
     ("del /s /q build", True),
     ("rd /s /q build", True),
     ("curl https://example.com", True),

@@ -45,3 +45,10 @@ sources:
             description: Tenant id.
           - name: event_id
             description: Event id, unique only within a brand.
+      - name: products
+        description: Product catalog per (brand_id, product_id). cost_price is nullable.
+        columns:
+          - name: brand_id
+            description: Tenant id.
+          - name: product_id
+            description: Product id, unique only within a brand.

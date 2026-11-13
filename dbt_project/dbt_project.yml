@@ -18,6 +18,9 @@ vars:
   spike_round: 1
   # Tenant-isolation test fixtures (models/tenant_fixtures); enable with --vars '{tenant_fixtures: true}'.
   tenant_fixtures: false
+  # dim_date range (inclusive); the calendar must cover every business date in Silver.
+  dim_date_start: "2025-01-01"
+  dim_date_end: "2027-12-31"
 
 models:
   crm_lakehouse:
@@ -30,6 +33,15 @@ models:
     staging:
       +schema: staging
       +materialized: view
+    marts:
+      # Contracts (data types only, V-14) are enforced on dim_date and fct_orders as the pilot;
+      # the other marts follow once Athena (W5.D28.4) confirms the types.
+      +schema: marts
+      +materialized: table
+      dims:
+        +tags: [dims]
+      facts:
+        +tags: [facts]
     tenant_fixtures:
       +materialized: view
       +schema: fixtures

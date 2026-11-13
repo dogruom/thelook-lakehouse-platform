@@ -222,6 +222,7 @@ ignore_imports = [
     "lakehouse.silver.jobs.silver_customers -> lakehouse.ops.metrics",
     "lakehouse.silver.jobs.silver_orders -> lakehouse.ops.metrics",
     "lakehouse.silver.jobs.silver_clickstream -> lakehouse.ops.metrics",
+    "lakehouse.silver.jobs.silver_products -> lakehouse.ops.metrics",
     "lakehouse.quality.jobs.reconcile -> lakehouse.ops.metrics",
     "lakehouse.quality.jobs.isolation_check -> lakehouse.silver.views",
     "lakehouse.ops.jobs.register_tenant_views -> lakehouse.silver.views",

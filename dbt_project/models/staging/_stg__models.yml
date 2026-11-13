@@ -190,7 +190,12 @@ models:
         description: Line id within the order.
         data_tests: [not_null]
       - name: product_id
-        description: Product id.
+        description: Product id (same brand).
+        data_tests:
+          - relationships_by_brand:
+              arguments:
+                to: ref('stg_products')
+                field: product_id
       - name: quantity
         description: Units ordered.
       - name: unit_price
@@ -237,5 +242,35 @@ models:
         description: Event date.
       - name: produced_at
         description: Producer timestamp.
+      - name: silver_updated_at
+        description: Time the Silver row was last written.
+
+  - name: stg_products
+    description: Product catalog per (brand_id, product_id). cost_price is nullable.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, product_id]
+    columns:
+      - name: brand_id
+        description: Tenant id.
+        data_tests: [not_null]
+      - name: product_id
+        description: Product id, unique only within a brand.
+        data_tests: [not_null]
+      - name: product_name
+        description: Product name.
+      - name: category
+        description: Product category.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [Apparel, Electronics, Home, Beauty]
+      - name: retail_price
+        description: List price, decimal(10,2).
+      - name: cost_price
+        description: Cost price, decimal(10,2); null when unknown.
+      - name: is_active
+        description: True while the product is sold.
       - name: silver_updated_at
         description: Time the Silver row was last written.

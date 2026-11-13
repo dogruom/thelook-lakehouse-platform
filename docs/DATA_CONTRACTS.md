@@ -380,6 +380,9 @@ Single history owner: Spark (Charter invariant 6). No dbt snapshots on customers
 
 ---
 
+### 4.4 Catalog (`silver.products`)
+- `silver.products`: latest valid Bronze copy per `(brand_id, product_id)` (ranked by `_ingest_ts`, landing file, line number; parse errors and `product.v1` rule failures excluded), MERGE insert / update when `_bronze_ref` changes, no deletes (D-094).
+
 ## 5. Gold Layer Specifications (dbt-owned)
 
 dbt reads Silver only and never writes it. No raw PII columns exist in Gold.
