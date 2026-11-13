@@ -18,6 +18,7 @@ build/
 .venv/
 venv/
 .venv-dbt/
+.venv-dbt-athena/
 ENV/
 
 # ==========================
@@ -53,6 +54,7 @@ docker/seaweedfs/s3.local.json
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
+backend.hcl
 crash.log
 .terraform.tfstate.lock.info
 .aws/

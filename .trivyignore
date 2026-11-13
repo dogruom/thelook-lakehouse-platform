@@ -1,0 +1,6 @@
+# Trivy misconfiguration exceptions for infra/terraform (see infra/terraform/README.md).
+# CI scans HIGH and CRITICAL only; findings below HIGH (access logging, versioning, log-group CMK)
+# are not ignored here, they are simply out of scope of that gate. Each entry has a one-line justification above it. IAM wildcard findings are never ignored.
+
+# Customer-managed KMS keys are not used: SSE-S3 per ADR-0008 (a KMS key costs USD 1/month).
+AWS-0132
