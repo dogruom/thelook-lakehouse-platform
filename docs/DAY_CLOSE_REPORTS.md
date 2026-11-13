@@ -9,6 +9,34 @@
 
 ---
 
+## W4.D20 · Dimensions and facts — closed 2026-11-13
+
+**Executive summary.** The Gold layer exists: four dimensions and three facts in `gold_marts`, built by dbt from staging, with brand-aware surrogate keys and a tenant-aware foreign-key test on every link. A singular test proves per brand that no order, item or session is lost between staging and Gold. `silver.products` now exists as a Spark job, so `dim_products` reads Silver like everything else. The SQL is written to run on Athena too (owner decision D-093). One real data defect surfaced: the generator gives clickstream sessions random customer ids, so sessions do not link to customers yet; that test is a visible warning and is fixed first in W4.D21.
+
+- **Delivered**: W4.D20.0 ✅ (`silver.products` + `stg_products`) · W4.D20.1 ✅ (dimensions) · W4.D20.2 ✅ (facts)
+- **Evidence**:
+  - Commit `ff84b4b`. `dbt build --select staging marts` → PASS=117 WARN=1 ERROR=0 (Thrift session UTC).
+  - `silver_products` on the shared catalog: 120 → 120 accepted, inserted 120; reruns inserted 0 / updated 0.
+  - Spark `test_silver_products.py` 53 passed, `test_tables.py` 11 passed; unit 1646 passed / 1 skipped, coverage 80.41 %; ruff/format/mypy clean.
+  - Per-brand counts and net sums: PROGRESS W4.D20 Evidence.
+- **Reviews / audit**: code review APPROVE WITH NITS; 4 should-fix applied (numeric line-number tie-break for products, dim_date calendar test, error-level cross-tenant check on sessions while the FK test warns, UTC pinned on the Thrift Server) plus the nits (real `check_equation` test, null `customer_sk` on orphans, empty-staging guard in the reconcile test).
+- **Decisions**: D-093 Gold also on Athena (W5.D28.4) · D-094 `silver.products` · D-095 Gold conventions · D-096 clickstream customer-id defect.
+- **Found during the day**:
+  - Generator clickstream: identified sessions get fresh UUIDs, so 3879/3879 reference no customer (D-096, V-26).
+  - The products tie-break on `_source_ref` was lexical (`#L9` after `#L10`) and all 120 rows share one `_ingest_ts`; fixed with numeric line order.
+  - dbt folder names are not selectors on their own (`--select dims` matches nothing); tags `dims`/`facts` added, PROGRESS verify updated.
+  - The Thrift Server cannot return `min()/max()` of a DATE column served from Delta statistics (V-27).
+  - The Thrift Server ran in UTC only by JVM default; now pinned (`spark.sql.session.timeZone=UTC`).
+  - `sales_channel` is NULL on all 225 orders by design (present from landing batch 10).
+- **Not verified / limitations**: the `default__` (Trino) branch of the portable macros is untested until W5.D28.4; the empty-staging branch of the reconcile test is not exercised; contracts only on two pilot models.
+- **Carry-overs**: W4.D21.0 clickstream ↔ customers fix and data rebuild (planned; owner approves the rebuild).
+- **Risks**: coverage headroom 0.41 pt; a full Gold build takes ≈ 10 min.
+- **Learning queued**: star schema (dimensions vs facts, grain), surrogate vs natural keys, dbt contracts, portable SQL / adapter dispatch.
+- **Next day**: W4.D21 — clickstream fix, `obt_customer_360`, `agg_rfm_segments`.
+- **Merge status**: pending (PR, CI, merge recorded after the merge).
+
+---
+
 ## W4.D19 · dbt foundations — closed 2026-11-13
 
 **Executive summary.** dbt now reads Silver through one staging view per table and has tests that

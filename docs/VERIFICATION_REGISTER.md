@@ -1,6 +1,6 @@
 # Verification register
 
-> **Version**: 1.7 · **Last updated**: 2026-11-13 (W4.D19) · Decision: D-055
+> **Version**: 1.9 · **Last updated**: 2026-11-13 (W4.D19) · Decision: D-055
 
 One list of every statement that a day report marked "not verified". Each row has a class and an
 owner day, so nothing stays as an unowned caveat. Update this file whenever a day report names a
@@ -28,6 +28,8 @@ Classes: **Closed** (verified, evidence linked) · **Planned** (has a task and a
 | V-22 | `write_batch` / `write_products` against SeaweedFS (only moto-tested; the integration test lands via `*_local` + aws CLI because the host has no S3 credentials) | Planned | W5.D27 (generator writes through the AWS adapter) | An S3-API difference in the boto3 path would surface only in the cloud run |
 | V-23 | `reconcile` cannot derive customers' `silver_accepted`, `duplicates_removed` and `stale_cdc_noop` from data (Silver keeps one row per key); the customers reconcile row only checks `dlq <= bronze` at data level (W3 code review should-fix 1) | Known limit | Covered instead by the CDC suite: per-batch counters equal the crafted events exactly and the final rows equal the manifest (`test_cdc_correctness.py`); a data-level check (Silver rows per brand = distinct valid Bronze keys) is a candidate for W4.D23 quality gates | A customers counter bug that keeps each batch row balanced would pass `reconcile` |
 | V-24 | Unit coverage headroom is thin (80.91 % vs the 80 % CI gate): Spark-only code is tested in the Spark container, which does not feed host coverage | Planned | Next Spark-heavy change (W4.D19 changed no Python under `src/`, D-090): combine Spark-container coverage or add host tests for pure-Python parts | The next Spark-heavy change can fail the CI coverage gate without a real test gap |
+| V-26 | Identified clickstream sessions reference no customer (generator draws random ids); `fct_sessions.customer_id` relationship test at `warn` (D-096) | Planned | W4.D21.0 | Customer 360 session metrics would be empty; a tenant FK test stays non-blocking |
+| V-27 | Thrift Server / Delta: a bare `min()`/`max()` on a DATE column (answered from Delta file statistics) fails with `ClassCastException LocalDate → java.sql.Date`; workaround: aggregate via string (`assert_dim_date_calendar`) | Known limit | Local Thrift Server only; re-check on Athena (W5.D28.4) and Databricks | A new test or query using date min/max fails at runtime (visible, not silent) |
 | V-19 | One `/security-review` run over M1 (owner-triggered command) | Owner action | Owner runs `/security-review` once on `main` after the merge | No independent security pass besides the reviewer agent |
 
 ## Closed (2026-11-13, W4.D19)
