@@ -40,7 +40,7 @@ tables are empty locally, and loading them needs one owner step (V-25).
 - **Risks**: `silver.products` must be built before `dim_products` (D-091); V-24 coverage headroom.
 - **Learning queued**: dbt sources/staging, generic vs singular tests, tenant-safe referential tests, var-gated negative fixtures (TASKS Learning queue).
 - **Next**: W4.D20: `silver_products` (D-091), then dimensions and facts.
-- **Merge status**: under D-032 after the `evidence-auditor` re-check. The first pass found 2 stale lines in this report (merge status, carry-over); they are fixed in this commit. PR and merge commit: see PROGRESS Current State.
+- **Merge status**: PR [#16](https://github.com/dogruom/thelook-lakehouse-platform/pull/16) merged as `90d4f4f` (merge commit) on 2026-11-13 under D-032: PR CI green, code review APPROVE WITH NITS, `evidence-auditor` gate PASS (after a 2-line doc fix), `main` CI [run 43441915188](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/43441915188) success.
 
 ---
 

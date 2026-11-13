@@ -13,7 +13,7 @@
 
 ## Current State
 
-- **Updated**: 2026-11-13 (W4.D19 closed) · **Branch**: `feat/w4-d19-dbt-staging`; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md); `v0.1.0` tagged on `ac239b3`
+- **Updated**: 2026-11-13 (W4.D19 closed) · **Branch**: `feat/w4-d19-dbt-staging` (W4.D19 merged as `90d4f4f`, PR #16); merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md); `v0.1.0` tagged on `ac239b3`
 - **Last delivered**: W4.D19 — dbt staging views on the five Silver tables (no raw names, D-088), tenant-safe tests `relationships_by_brand` + `assert_no_cross_tenant_joins` with var-gated negative fixtures, contract tests (one current history version, tombstones without PII), `dbt parse` CI job (D-089); V-15 closed (D-090).
 - **Unfinished**: tutor gates M1 (V-11), W3 and W4.D19 (Learning queue). V-23 known limit.
 - **Tests & results**: W4.D19 close: `dbt build --select staging` PASS=42 ERROR=0; `test_dbt_tenant_tests.py` 5 passed (3 consecutive runs); unit 1634 passed, 1 skipped, coverage 80.91 %; ruff/format/mypy clean; CI run 43427736811 green (incl. `dbt parse`).
