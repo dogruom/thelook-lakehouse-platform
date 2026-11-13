@@ -1,7 +1,7 @@
 # Data Contracts & Medallion Specifications
 
 > **Document Version**: 8.0
-> **Last Updated**: 2026-11-11 (v8.0: orders/products gate rules, insert-only orders with first-copy-wins, FK orphans and replay, clickstream lookback window, no items DLQ, D-077..D-080; v7.9: reconciliation term definitions — `bronze` = distinct parseable `_source_ref`, `reread_rows`/`parse_errors` reported beside the equation, CDC `late_beyond_window` = 0 by design, D-072; v7.8: landing → Bronze as built — `sales_channel` via contract schema, `mergeSchema` only on the Bronze write of landing files, D-071; v7.7: non-UTF-8 Kafka key → `brand_key_mismatch`, D-068; v7.6: gate transport rules `kafka_key_missing` / `brand_header_missing`, `rejected_duplicates` vs `duplicates_removed` glossary, Q-002/Q-004; v7.5: DLQ envelope §3.2 as built — `_rejection_codes`, `event_id`, Kafka `_bronze_ref`, `PARSE_ERROR` reserved, D-062; v7.4: Bronze metadata columns as built §3.1, stable `_parse_error` codes, headers persisted, no `mergeSchema` on Bronze, D-047; v7.3: CDC ground-truth manifest §2.1.1, gate order and outcome precedence §4.1; v7.2: `event_id`/`schema_version`/`produced_at` payload fields, duplicate CDC defect, producer/consumer unknown-field rule, 2-decimal money strings; v7.1: orders carry embedded line items; static product seed; `schema_version` in the envelope; schema-evolution demo moved to orders; reconciliation adds `stale_cdc_noop` — DELIVERY_PLAN v8, ADR-0009)
+> **Last Updated**: 2026-11-13 (v8.1: Gold Customer 360 columns as built, RFM columns only in `agg_rfm_segments`, valid orders = completed + pending, recency in hours, five RFM segments, D-097; v8.0: orders/products gate rules, insert-only orders with first-copy-wins, FK orphans and replay, clickstream lookback window, no items DLQ, D-077..D-080; v7.9: reconciliation term definitions — `bronze` = distinct parseable `_source_ref`, `reread_rows`/`parse_errors` reported beside the equation, CDC `late_beyond_window` = 0 by design, D-072; v7.8: landing → Bronze as built — `sales_channel` via contract schema, `mergeSchema` only on the Bronze write of landing files, D-071; v7.7: non-UTF-8 Kafka key → `brand_key_mismatch`, D-068; v7.6: gate transport rules `kafka_key_missing` / `brand_header_missing`, `rejected_duplicates` vs `duplicates_removed` glossary, Q-002/Q-004; v7.5: DLQ envelope §3.2 as built — `_rejection_codes`, `event_id`, Kafka `_bronze_ref`, `PARSE_ERROR` reserved, D-062; v7.4: Bronze metadata columns as built §3.1, stable `_parse_error` codes, headers persisted, no `mergeSchema` on Bronze, D-047; v7.3: CDC ground-truth manifest §2.1.1, gate order and outcome precedence §4.1; v7.2: `event_id`/`schema_version`/`produced_at` payload fields, duplicate CDC defect, producer/consumer unknown-field rule, 2-decimal money strings; v7.1: orders carry embedded line items; static product seed; `schema_version` in the envelope; schema-evolution demo moved to orders; reconciliation adds `stale_cdc_noop` — DELIVERY_PLAN v8, ADR-0009)
 > **Status**: 🟡 DRAFT — aligned with [PROJECT_CHARTER.md](PROJECT_CHARTER.md) v7. **Not yet enforced in code**; each contract becomes enforced when the corresponding PROGRESS task is ✅ with evidence.
 > **Target Platform**: Multi-Tenant CRM Lakehouse (Delta Lake OSS locally; cloud targets documented separately)
 
@@ -402,21 +402,26 @@ Grain: `(brand_id, customer_id)`. Denormalised for BI and feature consumption wi
 | `country` | STRING | Current location |
 | `loyalty_tier` | STRING | Tier status |
 | `tenure_days` | INTEGER | `DATEDIFF(as_of_date, signup_date)` |
-| `first_order_ts` | TIMESTAMP | First order |
-| `last_order_ts` | TIMESTAMP | Recency anchor |
-| `recency_days` | INTEGER | `DATEDIFF(as_of_date, last_order_ts)` |
-| `frequency_orders` | INTEGER | Count of completed orders |
-| `monetary_total_spend` | DECIMAL(12,2) | Sum of lifetime net amounts |
+| `first_order_ts` | TIMESTAMP | First order (any status) |
+| `last_order_ts` | TIMESTAMP | Last valid order; recency anchor |
+| `recency_days` | INTEGER | `DATEDIFF(as_of_date, DATE(last_order_ts))` |
+| `recency_hours` | BIGINT | Hours from `last_order_ts` to the end of `as_of_date`; the RFM recency input (D-097) |
+| `frequency_orders` | INTEGER | Count of valid orders (`completed` + `pending`, D-097) |
+| `monetary_total_spend` | DECIMAL(12,2) | Sum of net amounts of valid orders |
 | `avg_order_value` | DECIMAL(10,2) | `monetary_total_spend / frequency_orders` |
-| `total_page_views` | INTEGER | Lifetime clickstream engagement |
-| `total_cart_additions` | INTEGER | High-intent interactions |
-| `rfm_score` | STRING | From `agg_rfm_segments` (e.g. `5-5-4`) |
-| `rfm_segment` | STRING | `Champions`, `Loyal`, `At-Risk`, `Hibernating`, `Lost` |
+| `order_count`, `cancelled_order_count`, `returned_order_count` | INTEGER | All / cancelled / returned orders |
+| `total_page_views` | INTEGER | Clickstream engagement (identified sessions) |
+| `total_cart_additions` | INTEGER | High-intent interactions (`add_to_cart` events) |
+| `session_count`, `converted_session_count`, `last_session_at` | INTEGER / TIMESTAMP | Identified sessions |
+
+RFM columns (`rfm_score`, `rfm_segment`) are **not** in the OBT: `agg_rfm_segments` is built from it,
+so they would form a cycle; consumers join `agg_rfm_segments` on `(brand_id, customer_id)` (D-097).
+Metrics are cut at the end of `as_of_date`; customer attributes are the current Silver state.
 
 `as_of_date` is a model variable (not `CURRENT_DATE`) so that builds are reproducible.
 
 ### 5.3 `agg_rfm_segments`
-`NTILE(5)` on recency, frequency and monetary **partitioned by `brand_id`**; composite `rfm_score`; segment rules documented in the model YAML. Distributions are reported as synthetic-data results, not as real-world retail benchmarks.
+`NTILE(5)` on recency, frequency and monetary **partitioned by `brand_id`**, ties broken by `customer_id` (deterministic); composite `rfm_score` (`r-f-m`); segments `champions`, `loyal`, `promising`, `at_risk`, `hibernating` from the `rfm_segment` macro (rules in the macro and the model YAML; `Lost` merged into `hibernating` because two days of synthetic history cannot separate them, D-097). Grain `(brand_id, customer_id)` for non-deleted customers with ≥ 1 valid order. Distributions are reported as synthetic-data results, not as real-world retail benchmarks.
 
 ### 5.4 Stretch: `agg_churn_risk_features`
 Rule-based heuristic score in [0, 1] (not a trained model). Built only if Core and Extended tiers are verified.
