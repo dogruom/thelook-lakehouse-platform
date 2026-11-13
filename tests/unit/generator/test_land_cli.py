@@ -183,3 +183,21 @@ def test_target_aws_rejects_dry_run(capsys: pytest.CaptureFixture[str]) -> None:
         cli.main(["land", *SMALL, "--target", "aws", "--dry-run"])
     assert exc.value.code == 2
     assert "--dry-run" in capsys.readouterr().err
+
+
+def test_blank_endpoint_on_local_target_fails_and_never_reaches_aws(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stray empty ``S3_ENDPOINT`` must not route local landing data to AWS (W5 review)."""
+    monkeypatch.setenv("S3_ENDPOINT", "")
+    monkeypatch.setenv("LAKEHOUSE_AWS_BUCKET", "crm-lakehouse-dev-123")
+
+    def no_aws(*_a: Any, **_k: Any) -> Any:
+        raise AssertionError("the AWS client must only be used with --target aws")
+
+    monkeypatch.setattr(cli, "create_aws_s3_client", no_aws)
+    try:
+        code = cli.main(["land", *SMALL])
+    except ValueError:  # botocore rejects an empty endpoint URL
+        code = 1
+    assert code != 0

@@ -331,28 +331,28 @@ Evidence:
 ### Week 5
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
-| W5.D25.1 | Account readiness (owner) | Free plan confirmed (ends ≈ 2027-03-22, USD 100 credits); root MFA; short-lived CLI access; tools installed | `aws sts get-caller-identity` (owner) | ⏳ |
-| W5.D25.2 | Terraform bootstrap | state bucket: versioning, SSE, public-access block, native lockfile | `terraform plan` | ⏳ |
-| W5.D25.3 | Budgets | 5/20/40 USD actual + forecast alerts | console (owner) | ⏳ |
-| W5.D25.4 | IaC CI | fmt, validate, tflint, trivy config | CI link | ⏳ |
-| W5.D26.1 | Storage + catalog | lifecycle, SSE-S3, `artifacts/` prefix, Glue DBs | `terraform plan` | ⏳ |
-| W5.D26.2 | Identity | Glue job role prefix-scoped; tenant demo policy; OIDC role limited to repo/branch/env | reviewer APPROVE (`security`) | ⏳ |
-| W5.D26.3 | Glue job definitions | Glue 5.0, G.1X × 2, timeout, max concurrency 1, Delta enabled | `terraform plan` | ⏳ |
-| W5.D27.1 | Wheel artefact | built and uploaded; `aws` adapter via job arguments | upload listing | ⏳ |
-| W5.D27.2 | Apply (owner) | resources created | `terraform output` | ⏳ |
-| W5.D27.3 | Bronze on Glue | run SUCCEEDED; Glue tables; Athena query; counts = local; spend; teardown | `scripts/cloud/run_job.py bronze_batch` | ⏳ |
-| W5.D28.1 | Silver + reconcile on Glue | reconcile = local | job output | ⏳ |
-| W5.D28.2 | Tenant prefix denial | AccessDenied for `brand_alpha` role on `brand_beta/` | CLI evidence | ⏳ |
-| W5.D28.3 | LOCAL_VS_CLOUD.md | every observed difference with evidence | file review | ⏳ |
-| W5.D28.4 | Gold on Athena (D-093) | `dbt-athena` target builds the same marts from Glue-catalog Silver; row counts = local | `dbt build --target athena --select marts` | ⏳ |
-| W5.D29.1 | CI job 2 | `core`-profile integration suites on PRs to `main` + manual | CI link | ⏳ |
-| W5.D29.2 | Deploy-and-run workflow | OIDC only; environment approval; Glue run asserted | workflow run link | ⏳ |
-| W5.D30.1 | Metrics report | counts, DLQ rate, late/stale, freshness, lag | command output | ⏳ |
-| W5.D30.2 | Runbooks | replay, checkpoint recovery, teardown, incident | dry-run notes | ⏳ |
-| W5.D30.3 | Cost report + teardown proof | spend per day and per run; nothing running | billing figures (owner) | ⏳ |
-| W5.D30.4 | Airflow → Glue | cloud DAG variant triggers Glue jobs once | DAG run log | ⏳ |
+| W5.D25.1 | Account readiness (owner) | Free plan confirmed (ends ≈ 2027-03-22, USD 100 credits); root MFA; short-lived CLI access; tools installed | `aws sts get-caller-identity` (owner) | ⏳ owner |
+| W5.D25.2 | Terraform bootstrap | state bucket: versioning, SSE, public-access block, native lockfile | `terraform plan` | 🔄 code `8aaf927`; validate ✅ CI; apply (owner) pending |
+| W5.D25.3 | Budgets | 5/20/40 USD actual + forecast alerts | console (owner) | 🔄 code `8aaf927` (credits excluded); apply (owner) pending |
+| W5.D25.4 | IaC CI | fmt, validate, tflint, trivy config | CI link | ✅ |
+| W5.D26.1 | Storage + catalog | lifecycle, SSE-S3, `artifacts/` prefix, Glue DBs | `terraform plan` | 🔄 code `8aaf927`; validate + trivy ✅ CI; plan needs AWS credentials (owner) |
+| W5.D26.2 | Identity | Glue job role prefix-scoped; tenant demo policy; OIDC role limited to repo/branch/env | reviewer APPROVE (`security`) | 🔄 code `8aaf927`; reviewer CHANGES REQUIRED → fixes applied, re-review pending |
+| W5.D26.3 | Glue job definitions | Glue 5.0, G.1X × 2, timeout, max concurrency 1, Delta enabled | `terraform plan` | 🔄 code `8aaf927`; validate ✅ CI; plan (owner) pending |
+| W5.D27.1 | Wheel artefact | built and uploaded; `aws` adapter via job arguments | upload listing | 🔄 code `4360271` (unit-tested, never uploaded) |
+| W5.D27.2 | Apply (owner) | resources created | `terraform output` | ⏳ owner |
+| W5.D27.3 | Bronze on Glue | run SUCCEEDED; Glue tables; Athena query; counts = local; spend; teardown | `scripts/cloud/run_job.py bronze_batch` | 🔄 code `4360271` (`land --target aws`, `seed_bronze.py`); needs apply |
+| W5.D28.1 | Silver + reconcile on Glue | reconcile = local | job output | 🔄 runner sequence `4360271`; needs apply |
+| W5.D28.2 | Tenant prefix denial | AccessDenied for `brand_alpha` role on `brand_beta/` | CLI evidence | 🔄 policy `8aaf927`; CLI evidence needs apply |
+| W5.D28.3 | LOCAL_VS_CLOUD.md | every observed difference with evidence | file review | 🔄 rows 7–12 expected, unobserved (`4cf4b6f`) |
+| W5.D28.4 | Gold on Athena (D-093) | `dbt-athena` target builds the same marts from Glue-catalog Silver; row counts = local | `dbt build --target athena --select marts` | 🔄 `8c706e1` (`dbt parse --target athena` ✅ CI); Athena run needs apply |
+| W5.D29.1 | CI job 2 | `core`-profile integration suites on PRs to `main` + manual | CI link | 🔄 workflow `f1ef562`; first run on draft PR #20 |
+| W5.D29.2 | Deploy-and-run workflow | OIDC only; environment approval; Glue run asserted | workflow run link | 🔄 workflow `f1ef562`; needs apply + environment `aws-dev` (owner) |
+| W5.D30.1 | Metrics report | counts, DLQ rate, late/stale, freshness, lag | command output | 🔄 `40ec177` (host tests ✅; Spark test not run — Docker down) |
+| W5.D30.2 | Runbooks | replay, checkpoint recovery, teardown, incident | dry-run notes | 🔄 runbooks `4cf4b6f` (not dry-run) |
+| W5.D30.3 | Cost report + teardown proof | spend per day and per run; nothing running | billing figures (owner) | 🔄 per-run cost estimate + `docs/cloud_runs.csv` `4360271`; billing figures (owner) |
+| W5.D30.4 | Airflow → Glue | cloud DAG variant triggers Glue jobs once | DAG run log | ⏳ blocked by W4.D22 merge (DAG + Airflow image) |
 
-**Evidence**: _—_ · **Week 5 checkpoint**: _not run_
+**Evidence** (2026-11-14, branch `feat/w5-aws-foundation`, draft PR #20): commits `8aaf927` infra, `4360271` cloud scripts, `40ec177` metrics report, `8c706e1` dbt-athena, `f1ef562` + `e8cb9b9` CI, `4cf4b6f` docs. W5.D25.4: CI run [43530360289](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/43530360289) — `terraform fmt -check` ok, `terraform validate` "The configuration is valid" for `bootstrap` and `envs/dev` (hashicorp/aws v6.73.0), tflint ok, trivy config HIGH/CRITICAL: 0 misconfigurations (one reviewed exception, AWS-0132 SSE-S3 instead of KMS, D-102). Unit: `pytest tests/unit` 1773 passed / 1 skipped, coverage 80.50 %. Nothing has run on AWS; no `terraform plan` (needs the owner's credentials). · **Week 5 checkpoint**: _not run_
 
 ### Week 6
 | ID | Task | Acceptance | Verify | Status |
