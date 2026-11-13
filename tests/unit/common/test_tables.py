@@ -41,6 +41,7 @@ def test_catalog_tables_are_the_charter_names() -> None:
         "orders": "silver.orders",
         "order_items": "silver.order_items",
         "clickstream": "silver.clickstream",
+        "products": "silver.products",
     }
     assert all(s.layer == s.database for s in CATALOG_TABLES.values())
 

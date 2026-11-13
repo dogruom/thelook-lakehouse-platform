@@ -1,0 +1,204 @@
+version: 2
+
+# Gold facts (dbt-owned, Delta tables in gold_marts). Every surrogate key hashes brand_id, and
+# every tenant foreign key is checked with relationships_by_brand (brand AND key).
+models:
+  - name: fct_orders
+    description: >
+      Orders, grain (brand_id, order_id), enriched with per-order item aggregates. Items are
+      joined on brand_id and order_id. Model contract enforced.
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, order_id]
+    columns:
+      - name: order_sk
+        description: Surrogate key = hash(brand_id, order_id).
+        data_type: string
+        data_tests: [unique, not_null]
+      - name: customer_sk
+        description: Surrogate key of the customer = hash(brand_id, customer_id).
+        data_type: string
+        data_tests: [not_null]
+      - name: brand_id
+        description: Tenant id.
+        data_type: string
+        data_tests: [not_null]
+      - name: order_id
+        description: Order id, unique only within a brand.
+        data_type: string
+        data_tests: [not_null]
+      - name: customer_id
+        description: Customer of the order (same brand).
+        data_type: string
+        data_tests:
+          - not_null
+          - relationships_by_brand:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_id
+      - name: order_date_key
+        description: Integer yyyymmdd of the order date; joins to dim_date.date_key.
+        data_type: int
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: order_timestamp
+        description: Order time.
+        data_type: timestamp
+      - name: order_status
+        description: Order status.
+        data_type: string
+      - name: payment_method
+        description: Payment method.
+        data_type: string
+      - name: currency
+        description: Order currency.
+        data_type: string
+      - name: sales_channel
+        description: Sales channel.
+        data_type: string
+      - name: gross_amount
+        description: Amount before discount.
+        data_type: decimal(10,2)
+      - name: discount_amount
+        description: Discount amount.
+        data_type: decimal(10,2)
+      - name: net_amount
+        description: Amount after discount.
+        data_type: decimal(10,2)
+      - name: item_count
+        description: Number of order lines; 0 when the order has no items.
+        data_type: int
+      - name: item_quantity
+        description: Sum of line quantities; 0 when the order has no items.
+        data_type: bigint
+      - name: items_total
+        description: Sum of line totals; 0 when the order has no items.
+        data_type: decimal(18,2)
+
+  - name: fct_order_items
+    description: Order lines, grain (brand_id, order_id, item_id).
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, order_id, item_id]
+    columns:
+      - name: order_item_sk
+        description: Surrogate key = hash(brand_id, order_id, item_id).
+        data_tests: [unique, not_null]
+      - name: order_sk
+        description: Surrogate key of the parent order = hash(brand_id, order_id).
+        data_tests: [not_null]
+      - name: product_sk
+        description: Surrogate key of the product = hash(brand_id, product_id).
+        data_tests: [not_null]
+      - name: customer_sk
+        description: Surrogate key of the ordering customer = hash(brand_id, customer_id).
+        data_tests: [not_null]
+      - name: brand_id
+        description: Tenant id.
+        data_tests: [not_null]
+      - name: order_id
+        description: Parent order id within the brand.
+        data_tests:
+          - not_null
+          - relationships_by_brand:
+              arguments:
+                to: ref('fct_orders')
+                field: order_id
+      - name: item_id
+        description: Line id within the order.
+        data_tests: [not_null]
+      - name: product_id
+        description: Product id within the brand.
+        data_tests:
+          - not_null
+          - relationships_by_brand:
+              arguments:
+                to: ref('dim_products')
+                field: product_id
+      - name: customer_id
+        description: Customer of the parent order; null only if the order is missing from staging (orphan line).
+        data_tests: [not_null]
+      - name: order_date_key
+        description: Integer yyyymmdd of the parent order date; joins to dim_date.date_key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: quantity
+        description: Units ordered.
+      - name: unit_price
+        description: Price per unit.
+      - name: line_total
+        description: Line total.
+
+  - name: fct_sessions
+    description: >
+      Clickstream sessions, grain (brand_id, session_id). customer_id is the non-null customer of
+      the session (null = anonymous); a singular test asserts a session has at most one.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            columns: [brand_id, session_id]
+    columns:
+      - name: session_sk
+        description: Surrogate key = hash(brand_id, session_id).
+        data_tests: [unique, not_null]
+      - name: customer_sk
+        description: Surrogate key of the customer = hash(brand_id, customer_id); null for anonymous sessions.
+      - name: brand_id
+        description: Tenant id.
+        data_tests: [not_null]
+      - name: session_id
+        description: Session id, unique only within a brand.
+        data_tests: [not_null]
+      - name: customer_id
+        description: Customer of the session; null for anonymous sessions (skipped by the relationship test by design).
+        data_tests:
+          # severity warn until the generator draws identified sessions from the CDC customer
+          # pool (D-096, V-26, W4.D21.0); today every identified session id is unknown in Silver.
+          # Cross-tenant matches stay an ERROR: assert_fct_sessions_no_cross_tenant_customer.
+          - relationships_by_brand:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_id
+              config:
+                severity: warn
+      - name: session_date_key
+        description: Integer yyyymmdd of the session start; joins to dim_date.date_key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: session_start
+        description: Time of the first event in the session.
+      - name: session_end
+        description: Time of the last event in the session.
+      - name: duration_seconds
+        description: Seconds between the first and last event.
+      - name: event_count
+        description: Number of events in the session.
+      - name: page_views
+        description: Number of page_view events.
+      - name: searches
+        description: Number of search events.
+      - name: add_to_carts
+        description: Number of add_to_cart events.
+      - name: checkouts
+        description: Number of checkout events.
+      - name: purchases
+        description: Number of purchase events.
+      - name: converted
+        description: True when the session contains at least one purchase event.

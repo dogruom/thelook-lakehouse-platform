@@ -335,6 +335,9 @@ services:
       - spark.executor.memory=512m
       - --conf
       - spark.sql.warehouse.dir=s3a://lakehouse/warehouse
+      # dbt date keys (order_date_key, session_date_key) assume a UTC session, like the jobs (D-095)
+      - --conf
+      - spark.sql.session.timeZone=UTC
       - spark-internal
       - --hiveconf
       - hive.server2.thrift.port=10000
