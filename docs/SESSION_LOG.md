@@ -23,6 +23,27 @@ to add a missing link. File lines are clickable repo-relative links.
 
 ---
 
+## 2026-11-14 (evening) · W4.D22/D23 retry fix, PR #21, M2 runbook, owner checklist
+
+- **Tasks**: W4.D22.3 ✅ · W4.D22.2 🔄 (green run ×2) · W4.D23.4 🔄 inconclusive (attempts 4–5) · W4.D24.3 🔄 runbook ([PROGRESS](PROGRESS.md))
+- **Commits / PR**: D22 `edf1b95` fix(orchestration) · `ccb1340` test + D-106 · `5dcd420` ADR-0010 accepted — **PR #21** · D24 `16937d6` runbook · W5 merge of D24 + docs
+- **Files**: [lakehouse_pipeline.py](../dags/lakehouse_pipeline.py) · [airflow_cli.py](../tests/integration/airflow_cli.py) · [test_backfill_idempotent.py](../tests/integration/test_backfill_idempotent.py) · [test_dag_source.py](../tests/unit/orchestration/test_dag_source.py) · [ADR-0010](adr/0010-orchestration-compute-interface.md) · [m2-correctness-demo.md](runbooks/m2-correctness-demo.md) · [OWNER_ACTIONS.md](OWNER_ACTIONS.md) (new) · [PROGRESS.md](PROGRESS.md)
+- **Decisions**: D-106 ([DECISION_LOG](DECISION_LOG.md), on the D22 branch)
+- **Evidence**: unit 1776 passed / 1 skipped, coverage 81.81 % · orchestration unit 92 passed · `lakehouse_pipeline` green incl. `dbt_build` (runs `manual__2026-11-14T12:37:44`, `…T13:31:39`) · reviewer (code) APPROVE WITH NITS
+- **Agents**: reviewer (code, Sonnet) — no must-fix; 2 should-fix (1 applied as a test, 1 recorded in D-106)
+- **Incidents**: `dlq_gate` executor stall (900 s timeout, no retry because of the bug); Docker engine failed again (DNS, API 500)
+- **Learning items**: `AirflowFailException` vs `AirflowException` (retry semantics), Delta `txnAppId`/`txnVersion` idempotent writes, why a retry needs idempotent tasks
+
+## 2026-11-14 · W5 AWS foundation (code) + W4.D22/D23 verification (partial)
+
+- **Tasks**: W5.D25.4 ✅ · W5.D25.2–D30.4 🔄 code (AWS runs = owner) · W4.D22.1 ✅ · W4.D23.1 ✅ · W4.D23.3/.4, W4.D24.2 🔄 ([PROGRESS](PROGRESS.md))
+- **Commits / PR**: `8aaf927` infra · `4360271` cloud scripts · `40ec177` metrics report · `8c706e1` dbt-athena · `f1ef562` `e8cb9b9` `4ca3b96` `1e00abf` CI · `4cf4b6f` `42d9b6d` `976136e` docs/tests — draft PR #20 · D22: `3156be7` merge of `main` · `feat/w5-glue-dag` `2653536`
+- **Files**: [infra/terraform/](../infra/terraform/) · [scripts/cloud/](../scripts/cloud/) · [metrics_report.py](../src/lakehouse/ops/jobs/metrics_report.py) · [register_athena_silver.sql](../dbt_project/macros/register_athena_silver.sql) · [.github/workflows/](../.github/workflows/) · [runbooks/](runbooks/)
+- **Decisions**: D-101 … D-105 ([DECISION_LOG](DECISION_LOG.md))
+- **Evidence**: CI 43530360289 (terraform validate ×2, tflint, trivy 0 HIGH/CRITICAL) · unit 1773 passed, cov 80.50 % · Spark 571 passed · failure isolation 3 passed
+- **Incidents**: Docker Desktop engine failed three times (API 500, DNS); Spark master dropped the worker silently after the first one
+- **Learning items**: Terraform state/locking, OIDC trust (`sub` per environment), Glue job model and DPU cost, Athena-native Delta tables, IAM `StringLikeIfExists`
+
 ## 2026-11-13 · W4.D19 dbt foundations (partial close)
 
 - **Tasks**: W4.D19.1 🔄 (orders/items not data-verified, V-25) · W4.D19.2 ✅ ([PROGRESS Week 4](PROGRESS.md))

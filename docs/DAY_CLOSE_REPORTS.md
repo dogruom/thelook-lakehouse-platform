@@ -1,11 +1,45 @@
 # Day Close Reports
 
 > **Document Version**: 1.0
-> **Last Updated**: 2026-11-13
+> **Last Updated**: 2026-11-14
 > **Purpose**: one readable report per planned day (newest first), written by the `checkpoint` skill.
 > Raw evidence lives in [PROGRESS.md](PROGRESS.md), the per-session file trace in
 > [SESSION_LOG.md](SESSION_LOG.md), the reasons in [DECISION_LOG.md](DECISION_LOG.md).
 > Days W1.D1–W1.D3 closed before this log existed; their evidence is in PROGRESS and SESSION_LOG.
+
+---
+
+## W4.D23 · Failure isolation, quality gates, alerting, backfill — closed 2026-11-14
+
+**Executive summary.** The Airflow pipeline now proves its operational behaviour on a running Airflow 3.0.6: one failing brand does not block the others, a DLQ-rate breach stops Gold from being built, both failure and threshold alerts carry their brand, and re-running a past interval leaves Silver byte-identical. Two real defects were found by these runs and fixed.
+
+- **Delivered**: W4.D23.1 ✅ (failure isolation) · W4.D23.2 ✅ (DLQ-rate gate halts `dbt_build`) · W4.D23.3 ✅ (failure + threshold alert payloads) · W4.D23.4 ✅ (idempotent backfill)
+- **Evidence**:
+  - `test_backfill_idempotent.py` → 1 passed in 3922 s (run `manual__2026-11-14T16:03:16` executed twice for 2026-01-03; `content_hash` of 6 Silver tables and row counts identical; max try 1).
+  - `test_dag_failure_isolation.py` + new `test_dag_dlq_gate.py` → 7 passed in 2561 s @ `8e5172d`.
+  - Live breach runs (`max_dlq_rate = 0`): all three gates failed, `dbt_build` upstream_failed, run red; `ALERT_PAYLOAD {"kind":"threshold","brand_id":"brand_alpha|beta|gamma",...}`.
+- **Reviews / audit**: code review APPROVE WITH NITS (no must-fix); M2 milestone review APPROVE WITH NITS (conditional) — its D22/D23 should-fix items applied (`8e5172d`); security review: no findings; day-close audit: see merge status.
+- **Decisions**: D-106 (Spark retries effective; gates never retried), D-107 (failure reason recorded in the task context), D-108 (dbt gets no secrets; cumulative DLQ rate; timeout trade-off; gate/alert ITs).
+- **Found during the day**:
+  - `spark_job` raised `AirflowFailException`, which skips retries → `SPARK_RETRIES = 1` never applied; a stalled executor failed the whole backfill run (`edf1b95`).
+  - Airflow 3.0.6 `dags test` omits `exception` from the failure-callback context → threshold alerts came out as `kind=failure`, `brand_id=null` (probed in the container; `cbf780e`).
+  - The dbt subprocess inherited `PII_HMAC_KEY` and the S3 keys (`8e5172d`).
+  - Docker Desktop on a 7.6 GB VM failed four times; the owner raised it to 10.4 GB, after which every long run passed.
+- **Not verified / limitations**: a retry has never been observed executing (AST-pinned only); isolation covers the landing check and the gate — Bronze/Silver jobs are shared across brands; DLQ rate is cumulative, threshold uncalibrated (D-099); DAG evidence is local and manual (CI skips the Airflow tests).
+- **Learning queued**: `AirflowFailException` vs `AirflowException`, trigger rules `all_done` / `one_failed`, why retries need idempotent tasks, cumulative vs per-batch quality rates.
+- **Merge status**: merged 2026-11-14 as `ec0fa66` (PR #21; CI 6/6 green, code review APPROVE WITH NITS, day-close audit PASS WITH NOTES, D-032).
+
+---
+
+## W4.D22 · Airflow 3 pipeline — closed 2026-11-14
+
+**Executive summary.** Airflow 3.0.6 runs the whole local pipeline as one parametrised DAG: per-brand landing checks, the Spark Bronze → DLQ → Silver → reconcile chain, per-brand quality gates and `dbt build`. It ran green end to end three times.
+
+- **Delivered**: W4.D22.1 ✅ (image `crm/airflow:3.0.6`) · W4.D22.2 ✅ (`lakehouse_pipeline`) · W4.D22.3 ✅ (ADR-0010 Accepted)
+- **Evidence**: Airflow 3.0.6, Python 3.11.13, Java 17.0.21, spark-submit 3.5.9, dbt 1.12.6; `dags list-import-errors` → none; runs `manual__2026-11-14T12:37:44`, `…T13:31:39`, `…T16:03:16` green incl. `dbt_build`; unit 1776 passed / 1 skipped, coverage 81.81 %; mypy clean; import-linter 2 kept; CI of PR #21 green.
+- **Decisions**: D-098, D-099 (earlier), D-106.
+- **Not verified / limitations**: the cloud variant (Glue operators) is on `feat/w5-glue-dag`, not run; memory limits per service are estimates.
+- **Next day**: W4.D23 (same session).
 
 ---
 
