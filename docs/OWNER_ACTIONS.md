@@ -71,7 +71,7 @@ python scripts/check_env.py
 
 # 2c) Stack'i başlat (Airflow, yeni anahtarla yeniden oluşturulur):
 docker compose --profile core --profile sql up -d
-docker compose --profile orchestration up -d --force-recreate airflow-scheduler
+docker compose --profile core --profile sql --profile orchestration up -d --force-recreate airflow-scheduler
 docker compose ps --format "table {{.Name}}\t{{.Status}}"
 ```
 **Görmen gereken**: 2b'de `all keys set`; 2c'de `crm_*` konteynerleri `Up ... (healthy)`.
