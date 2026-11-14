@@ -97,6 +97,10 @@ try:  # Airflow 3 Task SDK first; the classic module is the fallback for older 3
 except ImportError:  # pragma: no cover - depends on the installed Airflow
     from airflow.exceptions import AirflowFailException, AirflowSkipException
 
+# Retryable failure: AirflowFailException skips the task's retries, AirflowException honours them.
+from airflow.exceptions import AirflowException
+
+
 log = logging.getLogger(__name__)
 
 SRC_DIR = Path(os.environ.get("LAKEHOUSE_SRC_DIR", "/opt/airflow/src"))
@@ -235,11 +239,13 @@ def lakehouse_pipeline() -> None:  # noqa: PLR0915 (task definitions are nested 
     def spark_job(job: str, job_args: list[str], timeout_s: int) -> dict[str, Any]:
         """Submit one Spark job; fail on a non-zero exit or a missing ``job.succeeded`` line."""
         code, records = _submit(job, job_args, timeout_s)
+        # AirflowException (not AirflowFailException) so the spec's retries apply: a timeout or a
+        # lost executor is often transient and the jobs are idempotent (checkpoints, MERGE).
         if code != 0:
-            raise AirflowFailException(failure_reason(job, code, records))
+            raise AirflowException(failure_reason(job, code, records))
         metrics = job_metrics(records)
         if metrics is None:
-            raise AirflowFailException(f"spark job {job} ended without a job.succeeded record")
+            raise AirflowException(f"spark job {job} ended without a job.succeeded record")
         return {"job": job, "metrics": metrics}
 
     @task(

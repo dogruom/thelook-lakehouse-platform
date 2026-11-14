@@ -18,9 +18,15 @@ skipped), and the second run must be a real second execution - a different ``run
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
 from tests.integration import airflow_cli, spark_jobs
+
+
+if TYPE_CHECKING:
+    import subprocess
 
 
 pytestmark = pytest.mark.integration
@@ -45,24 +51,28 @@ def _silver_content() -> tuple[dict[str, str], dict[str, int]]:
     return dict(metrics["hashes"]), dict(metrics["rows"])
 
 
-def _assert_full_success(run: airflow_cli.RunStates, label: str) -> None:
-    assert run.state == "success", f"{label}: run {run.state}, tasks {run.tasks}"
+def _assert_full_success(
+    run: airflow_cli.RunStates, label: str, proc: subprocess.CompletedProcess[str]
+) -> None:
+    tail = airflow_cli.output_tail(proc)
+    assert run.state == "success", f"{label}: run {run.state}, tasks {run.tasks}\n{tail}"
     for task_id in EXECUTED_TASKS:
-        assert run.state_of(task_id) == "success", f"{label}: {task_id} is {run.state_of(task_id)}"
+        state = run.state_of(task_id)
+        assert state == "success", f"{label}: {task_id} is {state}\n{tail}"
 
 
 def test_second_run_of_the_same_interval_changes_no_silver_table() -> None:
     airflow_cli.require_airflow()
     airflow_cli.require_thrift()
 
-    airflow_cli.dags_test(PAST_DATE)
+    first_proc = airflow_cli.dags_test(PAST_DATE)
     first_run = airflow_cli.latest_run_states()
-    _assert_full_success(first_run, "first run")
+    _assert_full_success(first_run, "first run", first_proc)
     hashes_1, rows_1 = _silver_content()
 
-    airflow_cli.dags_test(PAST_DATE)
+    second_proc = airflow_cli.dags_test(PAST_DATE)
     second_run = airflow_cli.latest_run_states()
-    _assert_full_success(second_run, "second run")
+    _assert_full_success(second_run, "second run", second_proc)
     assert (second_run.run_id, second_run.end_date) != (
         first_run.run_id,
         first_run.end_date,

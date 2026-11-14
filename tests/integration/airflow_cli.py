@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -161,8 +162,28 @@ def dags_test(
     return _exec(dags_test_command(logical_date, conf), timeout_s)
 
 
-def latest_run_states() -> RunStates:
-    """Newest run of the DAG, read from the Airflow metadata database."""
-    proc = _exec(["python", "-c", STATES_SCRIPT], 120)
-    assert proc.returncode == 0, f"state query failed:\n{proc.stderr[-1500:]}"
-    return parse_run_states(proc.stdout)
+NON_TERMINAL_STATES = frozenset({"queued", "running"})
+TERMINAL_WAIT_S = 180
+POLL_S = 5
+
+
+def latest_run_states(wait_terminal_s: float = TERMINAL_WAIT_S) -> RunStates:
+    """Newest run of the DAG, read from the Airflow metadata database.
+
+    ``airflow dags test`` returned once before the run's final state was visible (2026-11-14:
+    run ``running``, ``run_verdict`` ``queued``), so a non-terminal run is polled for up to
+    ``wait_terminal_s`` seconds; after that the last observed state is returned as it is.
+    """
+    deadline = time.monotonic() + wait_terminal_s
+    while True:
+        proc = _exec(["python", "-c", STATES_SCRIPT], 120)
+        assert proc.returncode == 0, f"state query failed:\n{proc.stderr[-1500:]}"
+        run = parse_run_states(proc.stdout)
+        if run.state not in NON_TERMINAL_STATES or time.monotonic() >= deadline:
+            return run
+        time.sleep(POLL_S)
+
+
+def output_tail(proc: subprocess.CompletedProcess[str], chars: int = 3000) -> str:
+    """Last ``chars`` of a ``dags test`` run's combined output, for assertion messages."""
+    return f"{proc.stdout or ''}\n{proc.stderr or ''}"[-chars:]

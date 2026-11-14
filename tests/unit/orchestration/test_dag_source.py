@@ -169,3 +169,25 @@ def test_callback_skips_rollup_and_handles_a_missing_exception() -> None:
     )
     assert "is_alertable_task" in source
     assert "failure_text" in source
+
+
+def _raised_exception_names(func_name: str) -> set[str]:
+    funcs = [n for n in ast.walk(_tree()) if isinstance(n, ast.FunctionDef) and n.name == func_name]
+    assert len(funcs) == 1, f"expected one {func_name} definition"
+    names = set()
+    for node in ast.walk(funcs[0]):
+        if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call):
+            names.add(getattr(node.exc.func, "id", ""))
+    return names
+
+
+def test_spark_job_failures_are_retryable() -> None:
+    """AirflowFailException skips retries; the Spark jobs' SPARK_RETRIES must stay effective."""
+    raised = _raised_exception_names("spark_job")
+    assert raised == {"AirflowException"}, f"spark_job raises {raised}"
+
+
+def test_deliberate_failures_are_not_retried() -> None:
+    """Gates and the verdict fail on purpose: a retry would only repeat the same answer."""
+    for func_name in ("dlq_rate_gate", "run_verdict"):
+        assert _raised_exception_names(func_name) == {"AirflowFailException"}, func_name
