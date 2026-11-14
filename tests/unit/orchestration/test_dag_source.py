@@ -177,8 +177,15 @@ def _raised_exception_names(func_name: str) -> set[str]:
     names = set()
     for node in ast.walk(funcs[0]):
         if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call):
-            names.add(getattr(node.exc.func, "id", ""))
+            names.add(getattr(_unwrap_fail(node.exc).func, "id", ""))
     return names
+
+
+def _unwrap_fail(call: ast.Call) -> ast.Call:
+    """``_fail(Exc(...))`` -> ``Exc(...)``; any other call unchanged."""
+    if getattr(call.func, "id", "") == "_fail" and call.args and isinstance(call.args[0], ast.Call):
+        return call.args[0]
+    return call
 
 
 def test_spark_job_failures_are_retryable() -> None:
@@ -206,3 +213,26 @@ def test_spark_tasks_take_retries_from_the_job_spec() -> None:
     retries = _kwargs(overrides[0])["retries"]
     assert isinstance(retries, ast.Attribute)
     assert (getattr(retries.value, "id", ""), retries.attr) == ("spec", "retries")
+
+
+def test_every_airflow_failure_records_its_reason_for_the_alert() -> None:
+    """``dags test`` drops ``exception`` from the callback context (Airflow 3.0.6): without
+    ``_fail`` a DLQ-rate breach alerts as kind ``failure`` with no brand (seen 2026-11-14)."""
+    unwrapped = []
+    for node in ast.walk(_tree()):
+        if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call):
+            name = getattr(node.exc.func, "id", "")
+            if name in {"AirflowException", "AirflowFailException"}:
+                unwrapped.append(node.lineno)
+    assert unwrapped == [], f"raise without _fail(...) at lines {unwrapped}"
+
+
+def test_failure_callback_falls_back_to_the_recorded_reason() -> None:
+    funcs = [
+        n
+        for n in ast.walk(_tree())
+        if isinstance(n, ast.FunctionDef) and n.name == "alert_on_failure"
+    ]
+    assert len(funcs) == 1
+    names = {n.id for n in ast.walk(funcs[0]) if isinstance(n, ast.Name)}
+    assert "FAILURE_REASON_KEY" in names

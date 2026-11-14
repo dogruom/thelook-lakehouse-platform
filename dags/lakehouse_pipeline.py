@@ -40,7 +40,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from airflow.sdk import Param, dag, task
+from airflow.sdk import Param, dag, get_current_context, task
 
 from lakehouse.orchestration.alert import (
     THRESHOLD_MARKER,
@@ -103,6 +103,22 @@ from airflow.exceptions import AirflowException
 
 log = logging.getLogger(__name__)
 
+
+#: Context key the tasks fill before raising: ``airflow dags test`` (3.0.6, ``run_task_in_process``)
+#: does not put ``exception`` into the failure-callback context; the task's own context object does
+#: reach the callback in both execution paths (probed 2026-11-14).
+FAILURE_REASON_KEY = "lakehouse_failure_reason"
+
+
+def _fail(exc: Exception) -> Exception:
+    """Record ``exc``'s text for :func:`alert_on_failure` and return it: ``raise _fail(...)``."""
+    try:
+        get_current_context()[FAILURE_REASON_KEY] = str(exc)  # type: ignore[index]
+    except Exception:  # - outside a task run: no context; the raise still happens
+        log.debug("no task context to record the failure reason in")
+    return exc
+
+
 SRC_DIR = Path(os.environ.get("LAKEHOUSE_SRC_DIR", "/opt/airflow/src"))
 DIST_DIR = Path(os.environ.get("LAKEHOUSE_DIST_DIR", "/tmp/lakehouse-dist"))
 DBT_BIN = os.environ.get("DBT_BIN", "/opt/dbt-venv/bin/dbt")
@@ -122,7 +138,9 @@ def alert_on_failure(context: dict[str, Any]) -> None:
         if not is_alertable_task(ti.task_id):
             return  # run_verdict only rolls up failures that already alerted
         reason = failure_text(
-            context.get("exception"), context.get("reason"), getattr(ti, "state", None)
+            context.get("exception") or context.get(FAILURE_REASON_KEY),
+            context.get("reason"),
+            getattr(ti, "state", None),
         )
         payload = build_alert_payload(
             dag_id=ti.dag_id,
@@ -202,7 +220,9 @@ def lakehouse_pipeline() -> None:  # noqa: PLR0915 (task definitions are nested 
         """One brand: every landing entity has a complete batch. Returns the brand on success."""
         if should_inject_failure(brand, str((params or {}).get("fail_brand", NO_FAILURE))):
             # AirflowFailException: no retries for a deliberate failure
-            raise AirflowFailException(f"brand_id={brand} injected failure (param fail_brand)")
+            raise _fail(
+                AirflowFailException(f"brand_id={brand} injected failure (param fail_brand)")
+            )
         import boto3
         from botocore.config import Config
 
@@ -220,8 +240,10 @@ def lakehouse_pipeline() -> None:  # noqa: PLR0915 (task definitions are nested 
                 f"brand_id={brand} landing check error: {type(exc).__name__}"
             ) from None
         if not status.ok:
-            raise AirflowFailException(
-                f"brand_id={brand} landing incomplete, missing: {', '.join(status.missing_entities)}"
+            raise _fail(
+                AirflowFailException(
+                    f"brand_id={brand} landing incomplete, missing: {', '.join(status.missing_entities)}"
+                )
             )
         return brand
 
@@ -242,10 +264,10 @@ def lakehouse_pipeline() -> None:  # noqa: PLR0915 (task definitions are nested 
         # AirflowException (not AirflowFailException) so the spec's retries apply: a timeout or a
         # lost executor is often transient and the jobs are idempotent (checkpoints, MERGE).
         if code != 0:
-            raise AirflowException(failure_reason(job, code, records))
+            raise _fail(AirflowException(failure_reason(job, code, records)))
         metrics = job_metrics(records)
         if metrics is None:
-            raise AirflowException(f"spark job {job} ended without a job.succeeded record")
+            raise _fail(AirflowException(f"spark job {job} ended without a job.succeeded record"))
         return {"job": job, "metrics": metrics}
 
     @task(
@@ -263,11 +285,15 @@ def lakehouse_pipeline() -> None:  # noqa: PLR0915 (task definitions are nested 
         if code == 0:
             return {"brand_id": brand, "max_dlq_rate": max_rate, "metrics": job_metrics(records)}
         if brand in breached_brands_from_log(records):
-            raise AirflowFailException(
-                f"{THRESHOLD_MARKER} brand_id={brand}: DLQ rate above {max_rate}; downstream halted"
+            raise _fail(
+                AirflowFailException(
+                    f"{THRESHOLD_MARKER} brand_id={brand}: DLQ rate above {max_rate}; downstream halted"
+                )
             )
-        raise AirflowFailException(
-            f"brand_id={brand} {failure_reason(DLQ_RATE_GATE_JOB, code, records)}"
+        raise _fail(
+            AirflowFailException(
+                f"brand_id={brand} {failure_reason(DLQ_RATE_GATE_JOB, code, records)}"
+            )
         )
 
     @task(
@@ -280,9 +306,11 @@ def lakehouse_pipeline() -> None:  # noqa: PLR0915 (task definitions are nested 
         host = os.environ.get("DBT_SPARK_HOST", "spark-thrift")
         port = int(os.environ.get("DBT_SPARK_PORT", "10000"))
         if not tcp_reachable(host, port):
-            raise AirflowFailException(
-                f"Spark Thrift Server {host}:{port} is unreachable; start the sql profile "
-                "(docker compose --profile sql up -d)"
+            raise _fail(
+                AirflowFailException(
+                    f"Spark Thrift Server {host}:{port} is unreachable; start the sql profile "
+                    "(docker compose --profile sql up -d)"
+                )
             )
         cmd = dbt_build_command(
             DBT_BIN, DBT_SELECT, target_path="/tmp/dbt_target", log_path="/tmp/dbt_logs"
@@ -291,15 +319,17 @@ def lakehouse_pipeline() -> None:  # noqa: PLR0915 (task definitions are nested 
             cmd, DBT_TIMEOUT_S, on_line=log.info, cwd=DBT_PROJECT_DIR, env=dict(os.environ)
         )
         if result.code != 0:
-            raise AirflowFailException(f"dbt build exited with code {result.code}")
+            raise _fail(AirflowFailException(f"dbt build exited with code {result.code}"))
         return {"exit_code": 0, "select": list(DBT_SELECT)}
 
     @task(trigger_rule=TRIGGER_ONE_FAILED, retries=0)
     def run_verdict() -> None:
         """Runs only when an upstream task failed; makes the DAG run red (never a green degraded run)."""
-        raise AirflowFailException(
-            "run degraded: at least one task failed; see the failed task instances "
-            "and their ALERT_PAYLOAD log lines"
+        raise _fail(
+            AirflowFailException(
+                "run degraded: at least one task failed; see the failed task instances "
+                "and their ALERT_PAYLOAD log lines"
+            )
         )
 
     def spark(spec: JobSpec) -> Any:
