@@ -45,11 +45,12 @@ explore = [
     "duckdb>=1.1,<2",
     "ipykernel>=6.29",
 ]
+# Airflow 3 (W4.D22, D-098). The image installs it with the official constraints file; a host
+# install is unsupported on Windows (run Airflow only in the `orchestration` compose profile).
 airflow = [
-    "apache-airflow>=2.9.3",
-    "apache-airflow-providers-amazon>=8.0",
-    "apache-airflow-providers-apache-spark>=4.7",
-    "apache-airflow-providers-postgres>=5.10",
+    "apache-airflow>=3.0.6,<3.1",
+    "apache-airflow-providers-amazon",
+    "apache-airflow-providers-fab",
 ]
 spark = [
     "pyspark>=3.5.0",
@@ -203,6 +204,7 @@ forbidden_modules = [
     "lakehouse.quality",
     "lakehouse.silver",
     "lakehouse.ops",
+    "lakehouse.orchestration",
 ]
 
 [[tool.importlinter.contracts]]
@@ -214,6 +216,7 @@ modules = [
     "lakehouse.quality",
     "lakehouse.silver",
     "lakehouse.ops",
+    "lakehouse.orchestration",
 ]
 ignore_imports = [
     "lakehouse.silver.** -> lakehouse.quality.rules",
@@ -233,3 +236,6 @@ ignore_imports = [
 # The three Silver jobs write ops.pipeline_metrics through ops.metrics and ``reconcile`` reads and
 # writes it (W3.D18, D-081); no other cross-component import is allowed for that table.
 # The tenant-isolation jobs share the one view-DDL builder, silver.views (W3.D18, D-085).
+# ``orchestration`` (W4.D22, ADR-0010) is an independent component: it imports only ``contracts``
+# (tenant-id pattern) and reaches every other component through job name, arguments, exit code and
+# JSON log, never through an import (ADR-0009 rule 5). No ignore_imports entry is needed or allowed.
