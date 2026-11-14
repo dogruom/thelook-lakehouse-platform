@@ -30,7 +30,12 @@ _AWS = 'aws --endpoint-url "http://$S3_HOST:$S3_PORT" --no-cli-pager --only-show
 def download_table(layer: str, table: str, namespace: str, dest: Path) -> None:
     """Copy ``s3://<bucket>/<layer>/<namespace>/<table>`` into ``dest`` (created if needed)."""
     dest.mkdir(parents=True, exist_ok=True)
-    script = f'{_AWS} "s3://$LAKEHOUSE_BUCKET/{layer}/{namespace}/{table}" /data --recursive'
+    # chmod: the container writes as root; on a Linux host (CI) the test user must be able to
+    # rewrite the files (the reconcile tamper test), which root-owned 0644 files forbid.
+    script = (
+        f'{_AWS} "s3://$LAKEHOUSE_BUCKET/{layer}/{namespace}/{table}" /data --recursive'
+        " && chmod -R a+rwX /data"
+    )
     proc = subprocess.run(
         [
             "docker",
