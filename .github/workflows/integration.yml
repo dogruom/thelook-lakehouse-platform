@@ -49,8 +49,12 @@ jobs:
 
       # Not `up --wait`: the one-shot init containers (kafka-init, seaweedfs-init) exit 0 by design;
       # smoke_test.py waits (up to 180 s) for healthy services AND finished init jobs.
+      # ./dist is a bind mount: if Docker creates it, it is root-owned and submit_job.py (running as
+      # the runner user) cannot write the code zip (PermissionError on the first CI run, #20).
       - name: Start core stack
-        run: docker compose --profile core up -d
+        run: |
+          mkdir -p dist
+          docker compose --profile core up -d
 
       - name: Strict smoke test
         run: python scripts/smoke_test.py
