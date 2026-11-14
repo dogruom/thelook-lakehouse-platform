@@ -1,7 +1,7 @@
 # Progress Tracker — Tasks, Statuses and Evidence
 
 > **Document Version**: 9.0
-> **Last Updated**: 2026-11-13 (W4.D20 closed; v9.0 2026-11-05: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
+> **Last Updated**: 2026-11-14 (W4.D22/D23 retry fix, PR #21; 2026-11-13 W4.D20 closed; v9.0 2026-11-05: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
 > **Active**: **W5** code complete (cloud runs need the owner); **W4.D22–D24** partly verified (backfill, full e2e, M2 review open) · M1: 37/37 ✅ (`v0.1.0` tagged)
@@ -13,16 +13,16 @@
 
 ## Current State
 
-- **Updated**: 2026-11-14 (W5 code complete; W4.D22/D23 partly verified) · **Branches** (merge order): `feat/w4-d22-airflow` (`3156be7`, `main` merged in, pushed, no PR yet) → `feat/w4-d24-e2e-contracts` (draft PR #19) → `feat/w5-aws-foundation` (this file, draft PR #20) · `feat/w5-glue-dag` (`2653536`, stacked on the D22 branch)
-- **Last delivered**: W5 code — Terraform bootstrap + `envs/dev` (storage, catalog, identity/OIDC, 10 Glue 5.0 jobs), `scripts/cloud/*`, `land --target aws`, `metrics_report`, dbt-athena target, CI `iac` + `dbt-athena` + `integration` + `deploy-and-run`, runbooks (D-101…D-105). Reviewer: CHANGES REQUIRED → fixes → APPROVE WITH NITS. CI run 43530360289 green incl. `terraform validate`, tflint, trivy 0 HIGH/CRITICAL. Airflow image built; DAG imports; failure isolation 3/3 passed.
-- **Unfinished**: everything that needs AWS (owner: `aws login`, bootstrap + dev apply, budgets e-mail, GitHub environment `aws-dev` + variables, first Glue/Athena runs, teardown, spend); W4.D23.4 backfill (three runs lost to Docker instability); W4.D24.1 full e2e with `land`; W4.D24.3 M2 review + `v0.2.0`; tutor gates.
-- **Tests & results**: unit 1773 passed / 1 skipped, coverage 80.50 %; Spark 571 passed (2936 s); orchestration unit 130 passed (glue-dag branch); `dbt parse` spark + athena ok.
-- **Owner action** — (1) restart Docker Desktop (engine API 500 again, third time on 2026-11-14) and consider more WSL memory; (2) add `AIRFLOW__API_AUTH__JWT_SECRET` to the local `.env` (`python scripts/check_env.py` lists it; any random string); (3) AWS steps in [runbooks/aws-owner-setup.md](runbooks/aws-owner-setup.md); (4) M2 review + `v0.2.0`.
-- **Stack**: Docker engine unresponsive at the end of the session; Airflow image `crm/airflow:3.0.6` exists. After a Docker hiccup the Spark master can drop the worker silently (container stays "healthy") — `docker compose restart spark-worker`, then check "Registering worker" in the master log.
-- **Decisions to remember**: earlier list plus D-097 … D-105 (D-101 cloud data path / seeded Kafka Bronze, D-102 IaC layout + budgets without credits, D-103 Glue job model + single writer, D-104 Athena via `athena_silver`, D-105 OIDC + environment gate).
-- **Risks / blockers**: Docker Desktop instability (3 engine failures in one day) blocks long local runs; 7.6 GB memory with core + sql + orchestration; Airflow Spark tasks have no capacity pre-check (a missing worker shows up only as a 900 s timeout); coverage headroom ≈ 0.5 pt (V-24).
+- **Updated**: 2026-11-14 evening (W4.D22/D23 fixes + PR; Docker engine down again) · **Branches** (merge order): `feat/w4-d22-airflow` (`5dcd420`, **PR #21**) → `feat/w4-d24-e2e-contracts` (`16937d6`, draft PR #19) → `feat/w5-aws-foundation` (this file, draft PR #20, D24 merged in) · `feat/w5-glue-dag` (`2653536`, stacked on the D22 branch)
+- **Last delivered**: retry fix `edf1b95` (Spark job failures were `AirflowFailException` → configured retries never ran, D-106) + AST tests `ccb1340`; ADR-0010 Accepted `5dcd420`; PR #21 opened; M2 demo runbook `16937d6`; owner checklist [OWNER_ACTIONS.md](OWNER_ACTIONS.md). Code review of D22/D23 (incl. `36c6a3a`, `edf1b95`): APPROVE WITH NITS, no must-fix. `lakehouse_pipeline` ran green end to end incl. `dbt_build` twice.
+- **Unfinished**: W4.D23.4 backfill (run 2 lost twice: executor stall, then Docker engine failure); W4.D24.1 full e2e with `land` (owner, OWNER_ACTIONS A3); W4.D24.3 M2 review + `v0.2.0`; PR #21 merge (CI pending); all AWS steps (owner); tutor gates.
+- **Tests & results**: unit 1776 passed / 1 skipped, coverage 81.81 % (D22 branch @ `5dcd420`); orchestration unit 92 passed; mypy clean; import-linter 2 kept; Spark 571 passed (`e8cb9b9`); integration CI 127 passed / 6 skipped.
+- **Owner action** — see [OWNER_ACTIONS.md](OWNER_ACTIONS.md): A1 Docker memory + restart (engine failed a fourth time), A2 `bootstrap_env.py --add-missing` (JWT secret), A3 full e2e with `land`, then AWS blocks C–E.
+- **Stack**: Docker engine unresponsive (API 500) at the end of the session; Airflow API server and DAG processor were stopped for memory. After a restart check "Registering worker" in the Spark master log.
+- **Decisions to remember**: earlier list plus D-097 … D-106 (D-106: Spark task retries effective, gates never retried; `silver_products` metrics row per attempt).
+- **Risks / blockers**: Docker Desktop instability (4 failures on 2026-11-14) blocks the ~55 min backfill test; 7.6 GB VM; reviewer nits open (import source of `AirflowException`, worst-case chain time > `dagrun_timeout` 3 h, `python-dotenv` unpinned in the Airflow requirements).
 - **Way of working**: Claude implements everything; every pipeline step is mapped in [DATA_FLOW.md](DATA_FLOW.md) (D-046); per-session trace in [SESSION_LOG.md](SESSION_LOG.md).
-- **Next task ("Start today's task")**: after the Docker restart: W4.D23.4 backfill test, open the D22 PR, then the M2 review; in parallel the owner's AWS day 1 (W5.D25.1 → W5.D27.3) with Claude reviewing `terraform plan`.
+- **Next task ("Start today's task")**: after A1/A2: rerun `pytest tests/integration/test_backfill_idempotent.py -q` on the D22 branch → W4.D23.4; merge PR #21 under D-032 when CI is green; owner A3 → W4.D24.1; then M2 checkpoint (reviewer + auditor) → `v0.2.0` (owner). In parallel the owner's AWS day 1 (OWNER_ACTIONS C).
 - **Autonomous run**: not started (setup on `chore/autonomous-run`, D-041/D-042)
 ---
 
@@ -294,15 +294,15 @@ Evidence:
 | W4.D21.2 | `agg_rfm_segments` | NTILE per brand; dbt unit tests; no 0%/100% segment | distribution query | ✅ `f3dd0b2` |
 | W4.D21.3 | Docs + scoped Gold views | `dbt docs generate` complete descriptions | command output | ✅ `f3dd0b2` |
 | W4.D22.1 | Airflow 3 image | Python 3.11; providers pinned; `orchestration` profile | `airflow version` | ✅ image built from `3156be7` (2026-11-14): `crm/airflow:3.0.6` — Airflow 3.0.6, Python 3.11.13, Java 17.0.21, spark-submit 3.5.9, dbt 1.12.6; `airflow-init` exit 0 |
-| W4.D22.2 | `lakehouse_pipeline` DAG | mapped per brand; retries/timeouts; re-run same interval is a no-op | `airflow dags test lakehouse_pipeline <date>` | 🔄 `airflow dags list-import-errors` → "No data found"; `lakehouse_pipeline` listed; full green run incl. `dbt_build` not yet observed (see W4.D23.4) |
-| W4.D22.3 | ADR-0010 | orchestration ↔ compute interface | file review | 🔄 `53e42af` (ADR-0010 Proposed) |
+| W4.D22.2 | `lakehouse_pipeline` DAG | mapped per brand; retries/timeouts; re-run same interval is a no-op | `airflow dags test lakehouse_pipeline <date>` | 🔄 full green run observed twice (2026-11-14, `airflow dags test lakehouse_pipeline 2026-01-03`, runs `manual__2026-11-14T12:37:44` and `…T13:31:39`: every task incl. `dbt_build` success, run `success`; branch `feat/w4-d22-airflow` @ `edf1b95`); retries made effective `edf1b95` (D-106); "re-run is a no-op" pending W4.D23.4; PR #21 |
+| W4.D22.3 | ADR-0010 | orchestration ↔ compute interface | file review | ✅ `5dcd420` ADR-0010 Accepted (image built, DAG green, code review APPROVE WITH NITS) |
 | W4.D23.1 | Tenant failure isolation | one brand fails, others complete | `pytest tests/integration/test_dag_failure_isolation.py -q` | ✅ `pytest tests/integration/test_dag_failure_isolation.py` → 3 passed (2026-11-14, branch `feat/w4-d22-airflow` @ `3156be7`, Spark worker registered) |
 | W4.D23.2 | Quality gates | DLQ-rate threshold halts downstream | gate test | 🔄 `60ab192` (unit-tested; cluster run pending) |
 | W4.D23.3 | Alert payload | JSON webhook payload on failure/threshold | payload in logs | 🔄 live failure payload observed: `ALERT_PAYLOAD {"kind":"failure","dag_id":"lakehouse_pipeline",...}` in the task log (2026-11-14); threshold payload unit-tested only |
-| W4.D23.4 | Idempotent backfill | past interval re-run → identical hashes | test output | 🔄 inconclusive: run 1 failed (Spark worker unregistered after a Docker engine hiccup → `bronze_stream` timeout 124); run 2 killed by a scheduler restart (Docker DNS failure); run 3 lost to a Docker engine crash |
+| W4.D23.4 | Idempotent backfill | past interval re-run → identical hashes | test output | 🔄 inconclusive (5 attempts): 2026-11-14 attempt 4 — run 1 green, run 2 `dlq_gate` hung to its 900 s timeout (executor heartbeat lost) and the retry never ran (bug, fixed `edf1b95`, D-106); attempt 5 — run 1 green, run 2 lost to a Docker engine failure (DNS `postgres`, then API 500) |
 | W4.D24.1 | One-command e2e | `python scripts/run_e2e.py` green | output | 🔄 `80d62da` (processing chain green; full run incl. `land` = owner) |
 | W4.D24.2 | Full regression | all suites green | outputs + CI | 🔄 unit ✅ (1773 passed) · Spark ✅ `571 passed in 2936s` (`e8cb9b9`) · integration ✅ 127 passed / 6 skipped (CI run 43580122008) · dbt ✅ · DAG backfill pending (W4.D23.4) |
-| W4.D24.3 | M2 review + tag | runbook, reviewer APPROVE, auditor PASS, `v0.2.0` (owner) | `checkpoint milestone M2` | ⏳ owner (needs D22/D23 evidence) |
+| W4.D24.3 | M2 review + tag | runbook, reviewer APPROVE, auditor PASS, `v0.2.0` (owner) | `checkpoint milestone M2` | 🔄 runbook `16937d6` ([m2-correctness-demo.md](runbooks/m2-correctness-demo.md)); review + auditor wait for W4.D23.4 and the owner's full e2e (W4.D24.1); `v0.2.0` = owner |
 | W4.D24.4 | dbt contracts | enforced where the adapter supports it, else documented alternative | `dbt build` | ✅ `790b2cc` |
 
 **Evidence**:
