@@ -1,4 +1,4 @@
-# Runbook: Milestone 2 correctness demo (about 20 minutes + optional test runs)
+# Runbook: Milestone 2 correctness demo (about 20 minutes live; the test steps are recorded runs)
 
 Shows: one-command pipeline → sequence-ordered CDC scenarios → order-independent SCD2 history →
 leaky-join negative test → dbt lineage → Customer 360 / RFM per brand → Airflow run with one
@@ -16,9 +16,10 @@ What it does not claim: legal GDPR compliance, performance at scale, anything on
   `COMPOSE_PROJECT_NAME=crm_lakehouse`), plus `.venv-dbt` (`requirements/dbt.txt`).
 - Images `crm/spark:3.5.9` and `crm/airflow:3.0.6` built.
 - `.env` contains `AIRFLOW__API_AUTH__JWT_SECRET` (`python scripts/check_env.py`).
-- Memory: `core` + `sql` + `orchestration` do not fit next to each other on a 7.6 GB Docker VM
-  with the Airflow API server running; stop `airflow-api-server` and `airflow-dag-processor`
-  for steps 7–8 (`airflow dags test` runs in the scheduler container only).
+- Memory: give the Docker VM about 10 GB (`%UserProfile%\.wslconfig`, see
+  [OWNER_ACTIONS.md](../OWNER_ACTIONS.md) step 1). On 7.6 GB, stop `airflow-api-server` and
+  `airflow-dag-processor` before steps 7–8 (`airflow dags test` runs in the scheduler only); keep
+  the `sql` profile running, the DAG ends with `dbt build`.
 
 ## Steps
 
@@ -55,12 +56,18 @@ What it does not claim: legal GDPR compliance, performance at scale, anything on
    Expected: five segments per brand, none 0 % or 100 %; the `__brand_beta` view returns only
    `brand_beta`.
 
-7. **Airflow run with one failing brand** — stop the `sql` profile first if memory is short, then
+7. **Airflow run with one failing brand** (≈ 25 min, the whole chain runs; show a recorded run live) —
    `pytest tests/integration/test_dag_failure_isolation.py -q`
    Shows: `landing_check` for `brand_beta` fails (injected with the `fail_brand` param), the other
    brands succeed, `summarize_landing` (`all_done`) collects the healthy brands, the shared chain
    (`bronze_stream` …) is not blocked by the failed brand, `run_verdict` (`one_failed`) turns the
-   run red, and the alert payload `ALERT_PAYLOAD {"kind":"failure",...}` is in the task log.
+   run red, and one alert `ALERT_PAYLOAD {"kind":"failure","brand_id":"brand_beta",...}` is logged
+   (asserted by the test). Isolation scope: the per-brand landing check and the per-brand DLQ-rate
+   gate; Bronze and Silver jobs run once for all brands (not brand-isolated).
+
+7b. **DLQ-rate gate halts Gold** (≈ 25 min) — `pytest tests/integration/test_dag_dlq_gate.py -q`
+   Shows: with `max_dlq_rate = 0` every brand's gate fails, `dbt_build` is `upstream_failed`, and
+   each brand gets one `kind: threshold` alert. The rate is cumulative per (brand, table).
 
 8. **Backfill is idempotent (optional, ≈ 60 min)** — needs `core` + `sql` + `orchestration`:
    `pytest tests/integration/test_backfill_idempotent.py -q`
