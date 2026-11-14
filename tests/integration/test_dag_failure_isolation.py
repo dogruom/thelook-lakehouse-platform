@@ -10,6 +10,8 @@ from the metadata database. The mapped ``landing_check`` instances follow the or
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from lakehouse.orchestration.plan import DEFAULT_BRANDS
@@ -23,10 +25,15 @@ FAILED_BRAND = "brand_beta"
 
 
 @pytest.fixture(scope="module")
-def states() -> airflow_cli.RunStates:
+def run() -> tuple[airflow_cli.RunStates, list[dict[str, Any]]]:
     airflow_cli.require_airflow()
-    airflow_cli.dags_test(LOGICAL_DATE, {"fail_brand": FAILED_BRAND})
-    return airflow_cli.latest_run_states()
+    proc = airflow_cli.dags_test(LOGICAL_DATE, {"fail_brand": FAILED_BRAND})
+    return airflow_cli.latest_run_states(), airflow_cli.alert_payloads(proc)
+
+
+@pytest.fixture(scope="module")
+def states(run: tuple[airflow_cli.RunStates, list[dict[str, Any]]]) -> airflow_cli.RunStates:
+    return run[0]
 
 
 def test_only_the_injected_brand_fails_its_landing_check(states: airflow_cli.RunStates) -> None:
@@ -47,3 +54,14 @@ def test_healthy_brands_are_collected_and_the_run_ends_red(states: airflow_cli.R
 def test_shared_chain_was_not_blocked_by_the_failed_brand(states: airflow_cli.RunStates) -> None:
     """The first shared job ran: it is not upstream_failed or skipped."""
     assert states.state_of("bronze_stream") in {"success", "failed"}
+
+
+def test_the_failed_brand_raises_one_failure_alert(
+    run: tuple[airflow_cli.RunStates, list[dict[str, Any]]],
+) -> None:
+    """W4.D23.3: the landing failure is alerted with its brand; the roll-up does not alert twice."""
+    landing_alerts = [p for p in run[1] if p.get("task_id") == "landing_check"]
+    assert len(landing_alerts) == 1, f"landing alerts: {landing_alerts}"
+    assert landing_alerts[0]["kind"] == "failure"
+    assert landing_alerts[0]["brand_id"] == FAILED_BRAND
+    assert not [p for p in run[1] if p.get("task_id") == "run_verdict"]

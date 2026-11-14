@@ -87,6 +87,7 @@ from lakehouse.orchestration.runner import EXIT_TIMEOUT, run_streaming, tcp_reac
 from lakehouse.orchestration.submit import (
     build_submit_command,
     dbt_build_command,
+    dbt_subprocess_env,
     dlq_rate_gate_args,
     stage_app,
 )
@@ -188,6 +189,8 @@ def _submit(job: str, job_args: list[str], timeout_s: int) -> tuple[int, list[di
     catchup=False,
     max_active_runs=1,
     is_paused_upon_creation=True,
+    # Typical full run 25-30 min. Worst case (every Spark job times out and retries once) is longer
+    # than 3 h, so the run timeout ends such a run before the chain is exhausted - on purpose.
     dagrun_timeout=timedelta(hours=3),
     default_args={"owner": "data-platform", "on_failure_callback": alert_on_failure},
     params={
@@ -236,8 +239,8 @@ def lakehouse_pipeline() -> None:  # noqa: PLR0915 (task definitions are nested 
                 client, os.environ.get("LAKEHOUSE_BUCKET", "lakehouse"), brand
             )
         except Exception as exc:  # type name only: the message may carry endpoint details
-            raise RuntimeError(
-                f"brand_id={brand} landing check error: {type(exc).__name__}"
+            raise _fail(
+                RuntimeError(f"brand_id={brand} landing check error: {type(exc).__name__}")
             ) from None
         if not status.ok:
             raise _fail(
@@ -316,7 +319,11 @@ def lakehouse_pipeline() -> None:  # noqa: PLR0915 (task definitions are nested 
             DBT_BIN, DBT_SELECT, target_path="/tmp/dbt_target", log_path="/tmp/dbt_logs"
         )
         result = run_streaming(
-            cmd, DBT_TIMEOUT_S, on_line=log.info, cwd=DBT_PROJECT_DIR, env=dict(os.environ)
+            cmd,
+            DBT_TIMEOUT_S,
+            on_line=log.info,
+            cwd=DBT_PROJECT_DIR,
+            env=dbt_subprocess_env(os.environ),
         )
         if result.code != 0:
             raise _fail(AirflowFailException(f"dbt build exited with code {result.code}"))

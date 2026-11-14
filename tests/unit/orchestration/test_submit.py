@@ -126,3 +126,29 @@ def test_dlq_rate_gate_args_and_dbt_command() -> None:
     assert cmd[:5] == ["/x/dbt", "build", "--select", "staging", "marts"]
     assert cmd[cmd.index("--target-path") + 1] == "/t"
     assert cmd[cmd.index("--profiles-dir") + 1] == "profiles"
+
+
+def test_dbt_subprocess_env_drops_secret_looking_variables() -> None:
+    from lakehouse.orchestration.submit import dbt_subprocess_env
+
+    kept = {
+        "PATH": "/usr/bin",
+        "HOME": "/home/airflow",
+        "DBT_SPARK_HOST": "spark-thrift",
+        "DBT_SPARK_PORT": "10000",
+    }
+    dropped = {
+        name: "x"
+        for name in (
+            "PII_HMAC_KEY",
+            "S3_ACCESS_KEY",
+            "S3_SECRET_KEY",
+            "AIRFLOW__CORE__FERNET_KEY",
+            "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN",
+            "AIRFLOW__API_AUTH__JWT_SECRET",
+            "POSTGRES_PASSWORD",
+            "ALERT_WEBHOOK_URL",
+            "aws_session_token",
+        )
+    }
+    assert dbt_subprocess_env({**kept, **dropped}) == kept

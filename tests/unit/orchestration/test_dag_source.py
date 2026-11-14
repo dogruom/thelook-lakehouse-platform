@@ -222,7 +222,7 @@ def test_every_airflow_failure_records_its_reason_for_the_alert() -> None:
     for node in ast.walk(_tree()):
         if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call):
             name = getattr(node.exc.func, "id", "")
-            if name in {"AirflowException", "AirflowFailException"}:
+            if name not in {"_fail", "AirflowSkipException"}:  # a skip is not a failure
                 unwrapped.append(node.lineno)
     assert unwrapped == [], f"raise without _fail(...) at lines {unwrapped}"
 

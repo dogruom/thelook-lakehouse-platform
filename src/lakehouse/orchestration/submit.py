@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Final
 
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
 SPARK_SUBMIT: Final = "/opt/spark/bin/spark-submit"
@@ -181,3 +181,18 @@ def dbt_build_command(
         "--log-path",
         log_path,
     ]
+
+
+#: Substrings of environment variable names never passed to the dbt subprocess: dbt needs only
+#: ``DBT_SPARK_HOST`` / ``DBT_SPARK_PORT`` (plus PATH, HOME, ...), not the scheduler's secrets
+#: (``PII_HMAC_KEY``, S3 keys, the Airflow Fernet key and metadata connection, webhook URL).
+DBT_ENV_DENY_SUBSTRINGS: Final = ("KEY", "SECRET", "PASSWORD", "TOKEN", "CONN", "WEBHOOK")
+
+
+def dbt_subprocess_env(environ: Mapping[str, str]) -> dict[str, str]:
+    """Copy of ``environ`` without secret-looking variables (by name, case-insensitive)."""
+    return {
+        name: value
+        for name, value in environ.items()
+        if not any(part in name.upper() for part in DBT_ENV_DENY_SUBSTRINGS)
+    }

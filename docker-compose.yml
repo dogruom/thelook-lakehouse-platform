@@ -4,7 +4,7 @@
 # Profiles (start only what the task needs):
 #   core           postgres, seaweedfs (+init), kafka (+init), spark-master, spark-worker
 #   sql            spark-thrift  (Spark Thrift Server for dbt-spark; ADR-0007, ADR-0004 spike W2.D11)
-#   orchestration  airflow-*     (Airflow 3: init, api-server, dag-processor, scheduler; W4.D22, image unverified)
+#   orchestration  airflow-*     (Airflow 3: init, api-server, dag-processor, scheduler; W4.D22, verified 2026-11-14)
 #   tools          spark-test    (pytest inside the Spark image; tests/spark from W2.D7)
 #
 # Rules (.claude/rules/infra.md):
@@ -59,10 +59,11 @@ x-hive-client-env: &hive-client-env
 x-hive-entrypoint: &hive-entrypoint ["python3", "/opt/lakehouse-docker/render_hive_site.py"]
 x-hive-render-mount: &hive-render-mount ./docker/spark/render_hive_site.py:/opt/lakehouse-docker/render_hive_site.py:ro
 
-# Airflow 3 (W4.D22, ADR-0010, D-098). The image is UNVERIFIED until the owner's first build
+# Airflow 3 (W4.D22, ADR-0010, D-098). Image built and run 2026-11-14
 # (`docker compose --profile orchestration build airflow-init`; needs crm/spark:3.5.9 built first).
-# Memory: mem_limit per service is an initial estimate, not a measurement (see D-098). Docker has
-# 7.6 GB: run `core` + `orchestration` and keep the `sql` profile stopped except for the dbt step.
+# Memory: mem_limit per service is an initial estimate (D-098). Observed: on a 7.6 GB Docker VM
+# `core` + `sql` + the scheduler fit only with the api-server and dag-processor stopped, and the
+# engine failed repeatedly; with 10 GB (`.wslconfig`) the full DAG ran green (W4.D23.4).
 x-airflow-common: &airflow-common
   image: crm/airflow:3.0.6
   build:
@@ -397,7 +398,6 @@ services:
   # AIRFLOW 3 — profile `orchestration` (W4.D22, ADR-0010). Not part of `core`.
   # LocalExecutor: tasks run inside the scheduler container, which therefore also hosts the Spark
   # client-mode drivers (spark-submit to spark://spark-master:7077) and the dbt subprocess.
-  # UNVERIFIED until the owner's first image build and run.
   # ===========================================================================
   airflow-init:
     <<: *airflow-common

@@ -137,7 +137,7 @@ def require_thrift() -> None:
 
 def _exec(args: list[str], timeout_s: float) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["docker", "exec", CONTAINER, *args],
+        ["docker", "exec", "-e", "NO_COLOR=1", CONTAINER, *args],  # plain log lines
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -187,3 +187,15 @@ def latest_run_states(wait_terminal_s: float = TERMINAL_WAIT_S) -> RunStates:
 def output_tail(proc: subprocess.CompletedProcess[str], chars: int = 3000) -> str:
     """Last ``chars`` of a ``dags test`` run's combined output, for assertion messages."""
     return f"{proc.stdout or ''}\n{proc.stderr or ''}"[-chars:]
+
+
+def alert_payloads(proc: subprocess.CompletedProcess[str]) -> list[dict[str, Any]]:
+    """Every ``ALERT_PAYLOAD {json}`` line of a ``dags test`` run (stdout and stderr)."""
+    from lakehouse.orchestration.alert import parse_log_line
+
+    payloads = []
+    for line in output_tail(proc, chars=10**9).splitlines():
+        payload = parse_log_line(line)
+        if payload is not None:
+            payloads.append(payload)
+    return payloads
