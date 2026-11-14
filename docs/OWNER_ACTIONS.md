@@ -1,6 +1,6 @@
 # Owner Actions — senin yapacakların (adım adım)
 
-> **Document Version**: 1.1 (2026-11-14) — Türkçe, komut listesi biçiminde (sahibin isteği)
+> **Document Version**: 1.2 (2026-11-14, M2 release adımları) — Türkçe, komut listesi biçiminde (sahibin isteği)
 > **Nerede çalıştırılır**: Windows **PowerShell**, depo kök klasöründe:
 > `cd C:\Users\admin\Desktop\WS-Projects\thelook-lakehouse-platform\thelook-lakehouse-platform`
 > **Dal değişince bu dosya kaybolursa**: GitHub'daki kopyası →
@@ -18,9 +18,10 @@
 |---|---|---|---|
 | 1 | Docker'a daha fazla bellek ver, yeniden başlat | 5 dk | **önce bu** |
 | 2 | `.env`'e eksik anahtarları ekle, Airflow'u yeniden başlat | 5 dk | 1'den hemen sonra |
-| 3 | Bana "Docker hazır" yaz → ben backfill testini koşarım | — | 2'den sonra |
-| 4 | Uçtan uca pipeline'ı `land` dahil koş | 30 dk | ben 3'ü bitirdim dediğimde |
-| 5 | `v0.2.0` etiketi | 2 dk | ben "M2 review PASS" dediğimde |
+| 3 | ~~Bana "Docker hazır" yaz~~ ✅ yapıldı (backfill 1 passed) | — | — |
+| 4 | Uçtan uca pipeline'ı `land` dahil koş (**M2 için zorunlu**) | 30 dk | ben "Adım 4'e geç" dediğimde |
+| 4b | Öğrenme kapıları W1–W4 (**M2 için zorunlu**) | 4 × 20 dk | istediğin zaman, 5'ten önce |
+| 5 | `v0.2.0` etiketi (**M2'nin son adımı**) | 2 dk | ben "M2 hazır, etiketle" dediğimde |
 | 6 | AWS 1. gün: hesap + araçlar + bootstrap | 45 dk | istediğin zaman |
 | 7 | AWS bulut günü: kur → koş → doğrula → **sil** | 1,5 saat | 6'dan sonra |
 | 8 | GitHub `aws-dev` ortamı | 10 dk | 7'yi bir kez yaptıktan sonra |
@@ -107,9 +108,33 @@ Remove-Item env:S3_ACCESS_KEY, env:S3_SECRET_KEY, env:S3_ENDPOINT
 **Görmen gereken**: en sonda her adım (`produce`, `land`, `bronze_stream`, … `dbt_build`) için `ok`.
 **Bana gönder**: 4c'nin son ~20 satırı (özet tablo).
 
+## Adım 4b — Öğrenme kapıları (M2 için)
+
+**Neden**: M2 kapanışı (checkpoint) bir öğrenme kapısıyla biter; W1–W2 kapısı 2026-11-11'den beri
+yanıt bekliyor (V-11), W3 ve W4 hiç koşulmadı. Bu adım bir sohbet; terminal komutu yok.
+
+Her biri için ayrı bir oturumda (veya bu sohbette) sırayla yaz:
+```text
+beni test et W1
+beni test et W2
+beni test et W3
+beni test et W4
+```
+Her kapı birkaç soru sorar, cevaplarına göre eksikleri anlatır ve tekrar sorar; sonunda
+`.claude/learning/W<n>_REHBER.md` çalışma rehberi ve görsel özetler üretilir.
+**Bana gönder**: gerek yok — kapı sonuçları dosyaya yazılır.
+
+**Bağımsız güvenlik incelemesi (V-19, M1'den beri açık)** — PR #21 ve #19 `main`'e merge edildikten
+sonra, Claude Code sohbetinde `main` dalındayken şunu yaz (bir slash komutu, terminal değil):
+```text
+/security-review
+```
+**Bana gönder**: bulduğu HIGH/MEDIUM maddeler (yoksa "temiz").
+
 ## Adım 5 — `v0.2.0` etiketi
 
-**Ne zaman**: sadece ben "M2 review: reviewer APPROVE, auditor PASS, merge edildi" dediğimde.
+**Ne zaman**: sadece ben "M2 hazır, etiketle" dediğimde (reviewer APPROVE, auditor PASS, PR #21 ve #19
+`main`'e merge edildi, Adım 4 ve 4b tamam).
 
 ```powershell
 git switch main
