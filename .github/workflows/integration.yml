@@ -18,7 +18,8 @@ jobs:
   integration:
     name: core stack, smoke test, integration suites
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Public repo: runner minutes are free. The full suite runs ~60-90 min sequentially (2 cores, D-059).
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
