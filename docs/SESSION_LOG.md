@@ -23,6 +23,16 @@ to add a missing link. File lines are clickable repo-relative links.
 
 ---
 
+## 2026-11-14 · W5 AWS foundation (code) + W4.D22/D23 verification (partial)
+
+- **Tasks**: W5.D25.4 ✅ · W5.D25.2–D30.4 🔄 code (AWS runs = owner) · W4.D22.1 ✅ · W4.D23.1 ✅ · W4.D23.3/.4, W4.D24.2 🔄 ([PROGRESS](PROGRESS.md))
+- **Commits / PR**: `8aaf927` infra · `4360271` cloud scripts · `40ec177` metrics report · `8c706e1` dbt-athena · `f1ef562` `e8cb9b9` `4ca3b96` `1e00abf` CI · `4cf4b6f` `42d9b6d` `976136e` docs/tests — draft PR #20 · D22: `3156be7` merge of `main` · `feat/w5-glue-dag` `2653536`
+- **Files**: [infra/terraform/](../infra/terraform/) · [scripts/cloud/](../scripts/cloud/) · [metrics_report.py](../src/lakehouse/ops/jobs/metrics_report.py) · [register_athena_silver.sql](../dbt_project/macros/register_athena_silver.sql) · [.github/workflows/](../.github/workflows/) · [runbooks/](runbooks/)
+- **Decisions**: D-101 … D-105 ([DECISION_LOG](DECISION_LOG.md))
+- **Evidence**: CI 43530360289 (terraform validate ×2, tflint, trivy 0 HIGH/CRITICAL) · unit 1773 passed, cov 80.50 % · Spark 571 passed · failure isolation 3 passed
+- **Incidents**: Docker Desktop engine failed three times (API 500, DNS); Spark master dropped the worker silently after the first one
+- **Learning items**: Terraform state/locking, OIDC trust (`sub` per environment), Glue job model and DPU cost, Athena-native Delta tables, IAM `StringLikeIfExists`
+
 ## 2026-11-13 · W4.D19 dbt foundations (partial close)
 
 - **Tasks**: W4.D19.1 🔄 (orders/items not data-verified, V-25) · W4.D19.2 ✅ ([PROGRESS Week 4](PROGRESS.md))
