@@ -1,0 +1,11 @@
+# dbt-athena toolchain for the Gold marts on AWS (D-093, W5.D28.4). Separate virtualenv on purpose,
+# like requirements/dbt.txt (dbt-core pins its own dependency tree; boto3 here must not constrain
+# the pipeline packages). Install:
+#   py -3.11 -m venv .venv-dbt-athena; .\.venv-dbt-athena\Scripts\python -m pip install -r requirements/dbt-athena.txt
+# `dbt-athena` is the current adapter package (dbt-athena-community is the legacy name for the same
+# project). 1.11.1 resolves with dbt-core 1.12.6 and dbt-adapters 1.24.x, the same pair as
+# requirements/dbt.txt, so both targets run the same dbt-core. No credentials are read from files:
+# boto3's default chain (owner login locally, GitHub OIDC role in CI).
+dbt-core==1.12.6
+dbt-adapters>=1.24.5,<1.25
+dbt-athena==1.11.1

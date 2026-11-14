@@ -1,6 +1,6 @@
 # Verification register
 
-> **Version**: 2.0 · **Last updated**: 2026-11-13 (W4.D21) · Decision: D-055
+> **Version**: 2.1 · **Last updated**: 2026-11-14 (W4.D24) · Decision: D-055
 
 One list of every statement that a day report marked "not verified". Each row has a class and an
 owner day, so nothing stays as an unowned caveat. Update this file whenever a day report names a
@@ -29,8 +29,13 @@ Classes: **Closed** (verified, evidence linked) · **Planned** (has a task and a
 | V-23 | `reconcile` cannot derive customers' `silver_accepted`, `duplicates_removed` and `stale_cdc_noop` from data (Silver keeps one row per key); the customers reconcile row only checks `dlq <= bronze` at data level (W3 code review should-fix 1) | Known limit | Covered instead by the CDC suite: per-batch counters equal the crafted events exactly and the final rows equal the manifest (`test_cdc_correctness.py`); a data-level check (Silver rows per brand = distinct valid Bronze keys) is a candidate for W4.D23 quality gates | A customers counter bug that keeps each batch row balanced would pass `reconcile` |
 | V-24 | Unit coverage headroom is thin (80.91 % vs the 80 % CI gate): Spark-only code is tested in the Spark container, which does not feed host coverage | Planned | Next Spark-heavy change (W4.D19 changed no Python under `src/`, D-090): combine Spark-container coverage or add host tests for pure-Python parts | The next Spark-heavy change can fail the CI coverage gate without a real test gap |
 | V-27 | Thrift Server / Delta: a bare `min()`/`max()` on a DATE column (answered from Delta file statistics) fails with `ClassCastException LocalDate → java.sql.Date`; workaround: aggregate via string (`assert_dim_date_calendar`) | Known limit | Local Thrift Server only; re-check on Athena (W5.D28.4) and Databricks | A new test or query using date min/max fails at runtime (visible, not silent) |
-| V-28 | `reconcile` reports `batch_sum_vs_data` for `raw_orders`: data `silver_accepted+dlq` 231 vs batch rows 240 and duplicates 18 vs 9 (totals equal, 249). Seen 2026-11-13 on the shared catalog; orders were not touched in W4.D21 | Planned | W4.D23.2 (quality gate must decide on it) | A real orders counter drift would hide behind a known mismatch; the gate could halt every run |
 | V-19 | One `/security-review` run over M1 (owner-triggered command) | Owner action | Owner runs `/security-review` once on `main` after the merge | No independent security pass besides the reviewer agent |
+
+## Closed (2026-11-14, W4.D24)
+
+| Item (earlier wording) | Result | Evidence |
+|---|---|---|
+| V-28 `reconcile` `batch_sum_vs_data` mismatch on `raw_orders` (231 vs 240, 18 vs 9) | Root cause: `dlq_gate` never ran for `raw_orders` (file tables only when named, D-077); 9 contract rejects were missing from `dlq_orders`. `dlq_gate --table raw_orders --table raw_products` → inserted 9 / 0; `run_e2e` and the DAG now name all four tables (D-100) | `reconcile` → `job.succeeded`; `run_e2e.py --skip-generate` → 10 steps ok incl. `reconcile` |
 
 ## Closed (2026-11-13, W4.D21)
 

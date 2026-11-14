@@ -3,8 +3,12 @@ version: 2
 # Silver is Spark-owned (ADR-0007); dbt only reads it. Business keys always include brand_id.
 sources:
   - name: silver
-    description: Spark-owned Silver Delta tables (Hive metastore database `silver`).
-    schema: silver
+    description: >
+      Spark-owned Silver Delta tables. Local: Hive metastore database `silver`. Athena: the
+      Athena-native Delta registrations in Glue database `athena_silver` (D-104; created by
+      `dbt run-operation register_athena_silver`), because Athena cannot read the tables Spark
+      registers in `silver`.
+    schema: "{{ 'athena_silver' if target.type == 'athena' else 'silver' }}"
     tables:
       - name: customers
         description: Current customer state per (brand_id, customer_id). Deleted rows are tombstones with PII nulled.

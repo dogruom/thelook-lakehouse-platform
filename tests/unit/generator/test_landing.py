@@ -206,3 +206,72 @@ def test_s3_client_from_env_uses_static_keys_only_when_both_set(
     assert client.meta.endpoint_url == "http://localhost:9000"
     creds = client._request_signer._credentials
     assert (creds is not None and creds.access_key == "ak") is expect_keys
+
+
+def _clear_aws_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for k in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_PROFILE"):
+        monkeypatch.delenv(k, raising=False)
+
+
+def test_create_aws_s3_client_ignores_local_endpoint_and_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from lakehouse.generator.landing import create_aws_s3_client
+
+    _clear_aws_env(monkeypatch)
+    monkeypatch.setenv("S3_ACCESS_KEY", "ak")
+    monkeypatch.setenv("S3_SECRET_KEY", "sk")
+    monkeypatch.setenv("S3_ENDPOINT", "http://localhost:9000")
+    monkeypatch.setenv("AWS_REGION", "eu-west-1")
+    client = create_aws_s3_client()
+    assert client.meta.region_name == "eu-west-1"
+    assert client.meta.endpoint_url == "https://s3.eu-west-1.amazonaws.com"
+    creds = client._request_signer._credentials
+    assert creds is None or creds.access_key != "ak"  # SeaweedFS keys never go to AWS
+    assert client.meta.config.s3 is None  # virtual-hosted addressing, not path-style
+
+
+def test_create_aws_s3_client_defaults_to_frankfurt(monkeypatch: pytest.MonkeyPatch) -> None:
+    from lakehouse.generator.landing import create_aws_s3_client
+
+    _clear_aws_env(monkeypatch)
+    monkeypatch.delenv("AWS_REGION", raising=False)
+    monkeypatch.delenv("AWS_DEFAULT_REGION", raising=False)
+    assert create_aws_s3_client().meta.region_name == "eu-central-1"
+
+
+@pytest.mark.parametrize(
+    "bucket", ["crm-lakehouse-dev-123456789012", "crm-lakehouse-x", " crm-lakehouse-dev-1 "]
+)
+def test_aws_bucket_from_env_accepts_project_buckets(
+    monkeypatch: pytest.MonkeyPatch, bucket: str
+) -> None:
+    from lakehouse.generator.landing import aws_bucket_from_env
+
+    monkeypatch.setenv("LAKEHOUSE_AWS_BUCKET", bucket)
+    assert aws_bucket_from_env() == bucket.strip()
+
+
+@pytest.mark.parametrize(
+    "bucket",
+    [
+        None,
+        "",
+        "lakehouse",
+        "other-bucket",
+        "crm-lakehouse-",
+        "crm-lakehouse-Dev",
+        "x/crm-lakehouse-a",
+    ],
+)
+def test_aws_bucket_from_env_refuses_other_buckets(
+    monkeypatch: pytest.MonkeyPatch, bucket: str | None
+) -> None:
+    from lakehouse.generator.landing import aws_bucket_from_env
+
+    if bucket is None:
+        monkeypatch.delenv("LAKEHOUSE_AWS_BUCKET", raising=False)
+    else:
+        monkeypatch.setenv("LAKEHOUSE_AWS_BUCKET", bucket)
+    with pytest.raises(ValueError, match="LAKEHOUSE_AWS_BUCKET"):
+        aws_bucket_from_env()

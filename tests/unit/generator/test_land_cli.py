@@ -133,3 +133,71 @@ def test_s3_target_lands_objects_in_the_configured_bucket(
     assert len(keys) == 12  # (4 order batches + 2 product files) x (data + manifest)
     assert all(k.startswith("landing/") for k in keys)
     assert "s3://lake-cli/landing" in capsys.readouterr().out
+
+
+def test_target_aws_uses_aws_client_and_aws_bucket_never_the_local_endpoint(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("LAKEHOUSE_AWS_BUCKET", "crm-lakehouse-dev-123")
+    monkeypatch.setenv("LAKEHOUSE_BUCKET", "local-bucket")
+    monkeypatch.setenv("S3_ENDPOINT", "http://localhost:9000")
+    with mock_aws():
+        client = boto3.client(
+            "s3", region_name="us-east-1", aws_access_key_id="x", aws_secret_access_key="x"
+        )
+        client.create_bucket(Bucket="crm-lakehouse-dev-123")
+
+        def local_client(_endpoint: str | None) -> Any:
+            raise AssertionError("the local S3 client must not be used for --target aws")
+
+        monkeypatch.setattr(cli, "s3_client_from_env", local_client)
+        monkeypatch.setattr(cli, "create_aws_s3_client", lambda: client)
+        assert cli.main(["land", *SMALL, "--target", "aws"]) == 0
+        keys = [
+            o["Key"] for o in client.list_objects_v2(Bucket="crm-lakehouse-dev-123")["Contents"]
+        ]
+    assert len(keys) == 12
+    assert "s3://crm-lakehouse-dev-123/landing" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("bucket", [None, "lakehouse", "other-bucket"])
+def test_target_aws_refuses_missing_or_foreign_bucket(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], bucket: str | None
+) -> None:
+    if bucket is None:
+        monkeypatch.delenv("LAKEHOUSE_AWS_BUCKET", raising=False)
+    else:
+        monkeypatch.setenv("LAKEHOUSE_AWS_BUCKET", bucket)
+
+    def no_client(*_a: Any, **_k: Any) -> Any:
+        raise AssertionError("no client may be created")
+
+    monkeypatch.setattr(cli, "create_aws_s3_client", no_client)
+    monkeypatch.setattr(cli, "s3_client_from_env", no_client)
+    assert cli.main(["land", *SMALL, "--target", "aws"]) == 2
+    assert "LAKEHOUSE_AWS_BUCKET" in capsys.readouterr().err
+
+
+def test_target_aws_rejects_dry_run(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["land", *SMALL, "--target", "aws", "--dry-run"])
+    assert exc.value.code == 2
+    assert "--dry-run" in capsys.readouterr().err
+
+
+def test_blank_endpoint_on_local_target_fails_and_never_reaches_aws(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stray empty ``S3_ENDPOINT`` must not route local landing data to AWS (W5 review)."""
+    monkeypatch.setenv("S3_ENDPOINT", "")
+    monkeypatch.setenv("LAKEHOUSE_AWS_BUCKET", "crm-lakehouse-dev-123")
+
+    def no_aws(*_a: Any, **_k: Any) -> Any:
+        raise AssertionError("the AWS client must only be used with --target aws")
+
+    monkeypatch.setattr(cli, "create_aws_s3_client", no_aws)
+    try:
+        code = cli.main(["land", *SMALL])
+    except ValueError:  # botocore rejects an empty endpoint URL
+        code = 1
+    assert code != 0

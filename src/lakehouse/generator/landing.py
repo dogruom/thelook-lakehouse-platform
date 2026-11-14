@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -42,6 +43,8 @@ NDJSON_CONTENT_TYPE = "application/x-ndjson"
 JSON_CONTENT_TYPE = "application/json"
 PUT_ATTEMPTS = 3  # application-level retries on top of the botocore "standard" retry mode
 RETRY_BACKOFF_S = 0.2
+DEFAULT_AWS_REGION = "eu-central-1"
+AWS_BUCKET_RE = re.compile(r"crm-lakehouse-[a-z0-9-]+")
 
 
 @dataclass(frozen=True)
@@ -116,6 +119,29 @@ def s3_client_from_env(endpoint_url: str | None) -> S3Client:
         region_name=os.environ.get("AWS_REGION") or "us-east-1",
         access_key=access_key,
         secret_key=secret_key,
+    )
+
+
+def aws_bucket_from_env() -> str:
+    """Data bucket for ``land --target aws``: ``LAKEHOUSE_AWS_BUCKET``, which must be a
+    ``crm-lakehouse-*`` bucket (D-102). Raises ``ValueError`` (never echoing a credential)."""
+    bucket = os.environ.get("LAKEHOUSE_AWS_BUCKET", "").strip()
+    if not AWS_BUCKET_RE.fullmatch(bucket):
+        raise ValueError(
+            "LAKEHOUSE_AWS_BUCKET must be set to a crm-lakehouse-* bucket "
+            f"(pattern {AWS_BUCKET_RE.pattern})"
+        )
+    return bucket
+
+
+def create_aws_s3_client() -> S3Client:
+    """Client for real AWS S3: boto3 default credential chain, AWS default endpoint,
+    virtual-hosted addressing. ``S3_ACCESS_KEY``/``S3_SECRET_KEY``/``S3_ENDPOINT`` (the local
+    SeaweedFS settings) are never read; the region is ``AWS_REGION`` (default eu-central-1)."""
+    return boto3.client(
+        "s3",
+        region_name=os.environ.get("AWS_REGION") or DEFAULT_AWS_REGION,
+        config=Config(retries={"mode": "standard", "max_attempts": 5}),
     )
 
 
