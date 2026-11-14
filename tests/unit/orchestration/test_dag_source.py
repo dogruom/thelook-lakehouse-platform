@@ -191,3 +191,18 @@ def test_deliberate_failures_are_not_retried() -> None:
     """Gates and the verdict fail on purpose: a retry would only repeat the same answer."""
     for func_name in ("dlq_rate_gate", "run_verdict"):
         assert _raised_exception_names(func_name) == {"AirflowFailException"}, func_name
+
+
+def test_spark_tasks_take_retries_from_the_job_spec() -> None:
+    """The override must pass ``spec.retries``; a literal would silently bypass SPARK_RETRIES."""
+    overrides = [
+        n
+        for n in ast.walk(_tree())
+        if isinstance(n, ast.Call)
+        and getattr(n.func, "attr", "") == "override"
+        and getattr(n.func.value, "id", "") == "spark_job"
+    ]
+    assert len(overrides) == 1
+    retries = _kwargs(overrides[0])["retries"]
+    assert isinstance(retries, ast.Attribute)
+    assert (getattr(retries.value, "id", ""), retries.attr) == ("spec", "retries")
