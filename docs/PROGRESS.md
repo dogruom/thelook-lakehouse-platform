@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-13 (W4.D20 closed; v9.0 2026-11-05: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W4.D21** merged; **W4.D22–D24** in progress (code done; Airflow run, full e2e and M2 review need the owner) · M1: 37/37 ✅ (`v0.1.0` tagged)
+> **Active**: **W5** code complete (cloud runs need the owner); **W4.D22–D24** partly verified (backfill, full e2e, M2 review open) · M1: 37/37 ✅ (`v0.1.0` tagged)
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,19 +13,17 @@
 
 ## Current State
 
-- **Updated**: 2026-11-14 (W4.D21 merged; W4.D22–D24 in progress) · **Branches**: `feat/w4-d24-e2e-contracts` (this file), `feat/w4-d22-airflow` (Airflow code, pushed, based on `add3b1e` — needs a merge of `main` before its PR; DATA_FLOW/DECISION_LOG will conflict)
-- **Last delivered**: W4.D21 merged (`dbb1b8e`, PR #18). W4.D24.4 contracts on `obt_customer_360` / `agg_rfm_segments` (`790b2cc`); `scripts/run_e2e.py` (`80d62da`); V-28 closed (D-100). W4.D22/D23 code complete on its branch, reviewed (fixes `36c6a3a`), never run.
-- **Unfinished**: W4.D22.1–.3 and W4.D23.1–.4 (need the owner's Airflow image build, then `dags test` + integration tests); W4.D24.1 full run incl. `land` (owner's S3 credentials); W4.D24.2 Spark suite inconclusive (Docker engine stopped responding, API 500, 2026-11-14 00:35) + integration suites; W4.D24.3 M2 review + `v0.2.0` (owner); tutor gates M1 (V-11), W3, W4.D19–D21; V-19 `/security-review`.
-- **Tests & results**: unit 1661 passed / 1 skipped on `main` + D24 tests (`test_run_e2e.py` 9 passed); D22 branch 1758 passed / 1 skipped; `run_e2e.py --skip-generate` 10 steps ok (1519 s); dbt analytics with contracts PASS=30.
-- **Test cadence (D-059)**: only the relevant tests while developing, full suite once per day close; integration tests run sequentially (2 worker cores); broker chaos opt-in (`RUN_BROKER_CHAOS=1`).
-- **Owner action** — restart Docker Desktop (engine API 500); build the Airflow 3 image (W4.D22.1); run `run_e2e.py` with `land`; V-11 learning gates · V-19 `/security-review` · V-13 (deferred) · `v0.2.0` at the M2 review.
-- **Stack**: Docker engine unresponsive at 2026-11-14 00:35 (state of `core` + `sql` unknown; restart Docker Desktop, then `docker compose --profile core --profile sql up -d --wait`). Shared catalog: Bronze, DLQ, six Silver tables, `gold_staging` views, `gold_marts` (7 marts + `obt_customer_360`, `agg_rfm_segments`), `gold_tenant` views. Clickstream lineage rebuilt 2026-11-13 (5000 base events, project seed).
-- **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): earlier list plus D-073 … D-087 (Week 3), D-088 staging conventions, D-089 tenant-safe dbt tests, D-090, D-091 Spark-owned `silver.products`, D-092 `v0.1.0`, D-093 Gold also on Athena, D-094, D-095 Gold marts conventions, D-096 clickstream customer-id defect, D-097 clickstream rebuild + Customer 360/RFM conventions.
-- **Risks / blockers**: 7.6 GB Docker memory, 2 worker cores; coverage headroom ≈ 0.32 pt (V-24); full Gold build ≈ 10 min; Airflow image not built yet; Delta commit safety on S3 → W5.
+- **Updated**: 2026-11-14 (W5 code complete; W4.D22/D23 partly verified) · **Branches** (merge order): `feat/w4-d22-airflow` (`3156be7`, `main` merged in, pushed, no PR yet) → `feat/w4-d24-e2e-contracts` (draft PR #19) → `feat/w5-aws-foundation` (this file, draft PR #20) · `feat/w5-glue-dag` (`2653536`, stacked on the D22 branch)
+- **Last delivered**: W5 code — Terraform bootstrap + `envs/dev` (storage, catalog, identity/OIDC, 10 Glue 5.0 jobs), `scripts/cloud/*`, `land --target aws`, `metrics_report`, dbt-athena target, CI `iac` + `dbt-athena` + `integration` + `deploy-and-run`, runbooks (D-101…D-105). Reviewer: CHANGES REQUIRED → fixes → APPROVE WITH NITS. CI run 43530360289 green incl. `terraform validate`, tflint, trivy 0 HIGH/CRITICAL. Airflow image built; DAG imports; failure isolation 3/3 passed.
+- **Unfinished**: everything that needs AWS (owner: `aws login`, bootstrap + dev apply, budgets e-mail, GitHub environment `aws-dev` + variables, first Glue/Athena runs, teardown, spend); W4.D23.4 backfill (three runs lost to Docker instability); W4.D24.1 full e2e with `land`; W4.D24.3 M2 review + `v0.2.0`; CI job 2 first full run (timeout raised to 150 min, `1e00abf`); tutor gates.
+- **Tests & results**: unit 1773 passed / 1 skipped, coverage 80.50 %; Spark 571 passed (2936 s); orchestration unit 130 passed (glue-dag branch); `dbt parse` spark + athena ok.
+- **Owner action** — (1) restart Docker Desktop (engine API 500 again, third time on 2026-11-14) and consider more WSL memory; (2) add `AIRFLOW__API_AUTH__JWT_SECRET` to the local `.env` (`python scripts/check_env.py` lists it; any random string); (3) AWS steps in [runbooks/aws-owner-setup.md](runbooks/aws-owner-setup.md); (4) M2 review + `v0.2.0`.
+- **Stack**: Docker engine unresponsive at the end of the session; Airflow image `crm/airflow:3.0.6` exists. After a Docker hiccup the Spark master can drop the worker silently (container stays "healthy") — `docker compose restart spark-worker`, then check "Registering worker" in the master log.
+- **Decisions to remember**: earlier list plus D-097 … D-105 (D-101 cloud data path / seeded Kafka Bronze, D-102 IaC layout + budgets without credits, D-103 Glue job model + single writer, D-104 Athena via `athena_silver`, D-105 OIDC + environment gate).
+- **Risks / blockers**: Docker Desktop instability (3 engine failures in one day) blocks long local runs; 7.6 GB memory with core + sql + orchestration; Airflow Spark tasks have no capacity pre-check (a missing worker shows up only as a 900 s timeout); coverage headroom ≈ 0.5 pt (V-24).
 - **Way of working**: Claude implements everything; every pipeline step is mapped in [DATA_FLOW.md](DATA_FLOW.md) (D-046); per-session trace in [SESSION_LOG.md](SESSION_LOG.md).
-- **Next task ("Start today's task")**: **W4.D22 verification** — after the owner's image build: merge `main` into `feat/w4-d22-airflow`, `airflow dags list-import-errors`, `dags test` (with `fail_brand`), `test_dag_failure_isolation.py`, `test_backfill_idempotent.py`; then W4.D24.2/.3.
+- **Next task ("Start today's task")**: after the Docker restart: W4.D23.4 backfill test, open the D22 PR, then the M2 review; in parallel the owner's AWS day 1 (W5.D25.1 → W5.D27.3) with Claude reviewing `terraform plan`.
 - **Autonomous run**: not started (setup on `chore/autonomous-run`, D-041/D-042)
-
 ---
 
 ## Checkpoint audit (2026-11-05)
@@ -295,15 +293,15 @@ Evidence:
 | W4.D21.1 | `obt_customer_360` | grain `(brand_id, customer_id)`; `as_of_date` var | `dbt build --select obt_customer_360` | ✅ `f3dd0b2` |
 | W4.D21.2 | `agg_rfm_segments` | NTILE per brand; dbt unit tests; no 0%/100% segment | distribution query | ✅ `f3dd0b2` |
 | W4.D21.3 | Docs + scoped Gold views | `dbt docs generate` complete descriptions | command output | ✅ `f3dd0b2` |
-| W4.D22.1 | Airflow 3 image | Python 3.11; providers pinned; `orchestration` profile | `airflow version` | 🔄 code `de60bfb` `36c6a3a` (branch `feat/w4-d22-airflow`); image build = owner |
-| W4.D22.2 | `lakehouse_pipeline` DAG | mapped per brand; retries/timeouts; re-run same interval is a no-op | `airflow dags test lakehouse_pipeline <date>` | 🔄 code `3764f08` `36c6a3a`; `dags test` pending image |
+| W4.D22.1 | Airflow 3 image | Python 3.11; providers pinned; `orchestration` profile | `airflow version` | ✅ image built from `3156be7` (2026-11-14): `crm/airflow:3.0.6` — Airflow 3.0.6, Python 3.11.13, Java 17.0.21, spark-submit 3.5.9, dbt 1.12.6; `airflow-init` exit 0 |
+| W4.D22.2 | `lakehouse_pipeline` DAG | mapped per brand; retries/timeouts; re-run same interval is a no-op | `airflow dags test lakehouse_pipeline <date>` | 🔄 `airflow dags list-import-errors` → "No data found"; `lakehouse_pipeline` listed; full green run incl. `dbt_build` not yet observed (see W4.D23.4) |
 | W4.D22.3 | ADR-0010 | orchestration ↔ compute interface | file review | 🔄 `53e42af` (ADR-0010 Proposed) |
-| W4.D23.1 | Tenant failure isolation | one brand fails, others complete | `pytest tests/integration/test_dag_failure_isolation.py -q` | 🔄 test written `3764f08`; needs Airflow |
+| W4.D23.1 | Tenant failure isolation | one brand fails, others complete | `pytest tests/integration/test_dag_failure_isolation.py -q` | ✅ `pytest tests/integration/test_dag_failure_isolation.py` → 3 passed (2026-11-14, branch `feat/w4-d22-airflow` @ `3156be7`, Spark worker registered) |
 | W4.D23.2 | Quality gates | DLQ-rate threshold halts downstream | gate test | 🔄 `60ab192` (unit-tested; cluster run pending) |
-| W4.D23.3 | Alert payload | JSON webhook payload on failure/threshold | payload in logs | 🔄 `3764f08` `36c6a3a` (unit-tested; live payload pending) |
-| W4.D23.4 | Idempotent backfill | past interval re-run → identical hashes | test output | 🔄 test written `36c6a3a`; needs Airflow |
+| W4.D23.3 | Alert payload | JSON webhook payload on failure/threshold | payload in logs | 🔄 live failure payload observed: `ALERT_PAYLOAD {"kind":"failure","dag_id":"lakehouse_pipeline",...}` in the task log (2026-11-14); threshold payload unit-tested only |
+| W4.D23.4 | Idempotent backfill | past interval re-run → identical hashes | test output | 🔄 inconclusive: run 1 failed (Spark worker unregistered after a Docker engine hiccup → `bronze_stream` timeout 124); run 2 killed by a scheduler restart (Docker DNS failure); run 3 lost to a Docker engine crash |
 | W4.D24.1 | One-command e2e | `python scripts/run_e2e.py` green | output | 🔄 `80d62da` (processing chain green; full run incl. `land` = owner) |
-| W4.D24.2 | Full regression | all suites green | outputs + CI | 🔄 unit + Spark + dbt green; integration + DAG pending |
+| W4.D24.2 | Full regression | all suites green | outputs + CI | 🔄 unit ✅ (1773 passed) · Spark ✅ `571 passed in 2936s` (W5 branch @ `e8cb9b9`, 2026-11-14) · dbt ✅ · integration (CI job 2, PR #20) pending · DAG backfill pending |
 | W4.D24.3 | M2 review + tag | runbook, reviewer APPROVE, auditor PASS, `v0.2.0` (owner) | `checkpoint milestone M2` | ⏳ owner (needs D22/D23 evidence) |
 | W4.D24.4 | dbt contracts | enforced where the adapter supports it, else documented alternative | `dbt build` | ✅ `790b2cc` |
 
@@ -347,10 +345,10 @@ Evidence:
 | W5.D28.4 | Gold on Athena (D-093) | `dbt-athena` target builds the same marts from Glue-catalog Silver; row counts = local | `dbt build --target athena --select marts` | 🔄 `8c706e1` (`dbt parse --target athena` ✅ CI); Athena run needs apply |
 | W5.D29.1 | CI job 2 | `core`-profile integration suites on PRs to `main` + manual | CI link | 🔄 workflow `f1ef562`; first run on draft PR #20 |
 | W5.D29.2 | Deploy-and-run workflow | OIDC only; environment approval; Glue run asserted | workflow run link | 🔄 workflow `f1ef562`; needs apply + environment `aws-dev` (owner) |
-| W5.D30.1 | Metrics report | counts, DLQ rate, late/stale, freshness, lag | command output | 🔄 `40ec177` (host tests ✅; Spark test not run — Docker down) |
+| W5.D30.1 | Metrics report | counts, DLQ rate, late/stale, freshness, lag | command output | 🔄 `40ec177` (host tests ✅; Spark tests ✅ within the 571; no real run yet) |
 | W5.D30.2 | Runbooks | replay, checkpoint recovery, teardown, incident | dry-run notes | 🔄 runbooks `4cf4b6f` (not dry-run) |
 | W5.D30.3 | Cost report + teardown proof | spend per day and per run; nothing running | billing figures (owner) | 🔄 per-run cost estimate + `docs/cloud_runs.csv` `4360271`; billing figures (owner) |
-| W5.D30.4 | Airflow → Glue | cloud DAG variant triggers Glue jobs once | DAG run log | ⏳ blocked by W4.D22 merge (DAG + Airflow image) |
+| W5.D30.4 | Airflow → Glue | cloud DAG variant triggers Glue jobs once | DAG run log | 🔄 `2653536` on `feat/w5-glue-dag` (stacked on `feat/w4-d22-airflow`): manual DAG `lakehouse_glue`, 10 `GlueJobOperator`s, 130 orchestration unit tests passed; container import + Glue run not verified |
 
 **Evidence** (2026-11-14, branch `feat/w5-aws-foundation`, draft PR #20): commits `8aaf927` infra, `4360271` cloud scripts, `40ec177` metrics report, `8c706e1` dbt-athena, `f1ef562` + `e8cb9b9` CI, `4cf4b6f` docs. W5.D25.4: CI run [43530360289](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/43530360289) — `terraform fmt -check` ok, `terraform validate` "The configuration is valid" for `bootstrap` and `envs/dev` (hashicorp/aws v6.73.0), tflint ok, trivy config HIGH/CRITICAL: 0 misconfigurations (one reviewed exception, AWS-0132 SSE-S3 instead of KMS, D-102). Unit: `pytest tests/unit` 1773 passed / 1 skipped, coverage 80.50 %. Nothing has run on AWS; no `terraform plan` (needs the owner's credentials). · **Week 5 checkpoint**: _not run_
 
