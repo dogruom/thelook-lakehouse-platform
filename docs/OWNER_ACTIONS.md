@@ -1,168 +1,273 @@
-# Owner Actions — what only the owner can do
+# Owner Actions — senin yapacakların (adım adım)
 
-> **Document Version**: 1.0
-> **Last Updated**: 2026-11-14
-> **Purpose**: one checklist of every step that needs the owner (credentials, accounts, consoles,
-> approvals, tags). Commands are PowerShell from the repository root unless stated otherwise.
-> Details for the AWS steps live in [runbooks/aws-owner-setup.md](runbooks/aws-owner-setup.md)
-> (on branch `feat/w5-aws-foundation` until PR #20 is merged); this file is the short path.
-> Tick a box when done and paste the "Send to Claude" output into the chat — never paste secrets.
+> **Document Version**: 1.1 (2026-11-14) — Türkçe, komut listesi biçiminde (sahibin isteği)
+> **Nerede çalıştırılır**: Windows **PowerShell**, depo kök klasöründe:
+> `cd C:\Users\admin\Desktop\WS-Projects\thelook-lakehouse-platform\thelook-lakehouse-platform`
+> **Dal değişince bu dosya kaybolursa**: GitHub'daki kopyası →
+> [OWNER_ACTIONS.md (feat/w5-aws-foundation)](https://github.com/dogruom/thelook-lakehouse-platform/blob/feat/w5-aws-foundation/docs/OWNER_ACTIONS.md)
 
-Order matters only where noted. Blocks A and B take ~15 minutes; C–E are one AWS day
-(~2–3 hours, < USD 2 estimated, credits only); F is W6 preparation.
+**Kurallar**
+- Komut bloklarını **sırayla** çalıştır; her bloktan sonra "Görmen gereken" ile karşılaştır.
+- "Bana gönder" satırındaki çıktıyı sohbete yapıştır. **Asla** `.env` içeriği, şifre, anahtar,
+  `terraform.tfstate` yapıştırma (hesap numarası ve ARN gizli değildir, onlar sorun değil).
+- Bir komut hata verirse dur, hatanın son 20 satırını bana gönder.
+
+**Özet sıra**
+
+| # | Ne | Süre | Ne zaman |
+|---|---|---|---|
+| 1 | Docker'a daha fazla bellek ver, yeniden başlat | 5 dk | **önce bu** |
+| 2 | `.env`'e eksik anahtarları ekle, Airflow'u yeniden başlat | 5 dk | 1'den hemen sonra |
+| 3 | Bana "Docker hazır" yaz → ben backfill testini koşarım | — | 2'den sonra |
+| 4 | Uçtan uca pipeline'ı `land` dahil koş | 30 dk | ben 3'ü bitirdim dediğimde |
+| 5 | `v0.2.0` etiketi | 2 dk | ben "M2 review PASS" dediğimde |
+| 6 | AWS 1. gün: hesap + araçlar + bootstrap | 45 dk | istediğin zaman |
+| 7 | AWS bulut günü: kur → koş → doğrula → **sil** | 1,5 saat | 6'dan sonra |
+| 8 | GitHub `aws-dev` ortamı | 10 dk | 7'yi bir kez yaptıktan sonra |
+| 9 | Databricks Free Edition hesabı | 10 dk | W6'dan önce |
 
 ---
 
-## A. Local machine (≈ 10 min) — unblocks long local runs
+## Adım 1 — Docker belleği ve yeniden başlatma
 
-- [ ] **A1. Give Docker more memory and restart it** (three engine crashes on 2026-11-14).
-  Create or edit `%UserProfile%\.wslconfig` ([Microsoft docs](https://learn.microsoft.com/windows/wsl/wsl-config)):
-  ```ini
-  [wsl2]
-  memory=10GB
-  swap=4GB
-  ```
-  Then:
-  ```powershell
-  wsl --shutdown          # stops Docker Desktop's VM; restart Docker Desktop afterwards
-  docker info --format "{{.MemTotal}}"   # expect ~10 GB instead of ~7.6 GB
-  ```
-  Pick `memory` ≤ half of your physical RAM if 10 GB is too much. Send to Claude: the `MemTotal` number.
+**Neden**: Docker bugün 4 kez çöktü; 7,6 GB bellek, Spark + Airflow + Thrift için dar.
 
-- [ ] **A2. Add the missing keys to `.env`** (Airflow JWT secret + generator defaults; values are
-  generated randomly, nothing is printed):
-  ```powershell
-  .\.venv\Scripts\Activate.ps1
-  python scripts/bootstrap_env.py --add-missing
-  python scripts/check_env.py            # expect "all keys set"
-  docker compose --profile orchestration up -d --force-recreate airflow-scheduler airflow-api-server airflow-dag-processor
-  ```
-  Send to Claude: the last line of `check_env.py`.
+```powershell
+# 1a) Bilgisayarındaki toplam RAM (GB):
+[math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
 
-- [ ] **A3. Full e2e run including `land`** (W4.D24.1 — the host shell needs the local SeaweedFS
-  credentials; this loads only the three S3 keys into this shell, without printing them):
-  ```powershell
-  .\.venv\Scripts\Activate.ps1
-  docker compose --profile core --profile sql up -d
-  Get-Content .env | Where-Object { $_ -match '^(S3_ACCESS_KEY|S3_SECRET_KEY)=' } |
-    ForEach-Object { $k, $v = $_ -split '=', 2; Set-Item "env:$k" $v }
-  $env:S3_ENDPOINT = "http://127.0.0.1:9000"
-  python scripts/run_e2e.py              # ~30 min; expect every step "ok"
-  Remove-Item env:S3_ACCESS_KEY, env:S3_SECRET_KEY
-  ```
-  Send to Claude: the final summary block (step names, ok/failed, seconds).
+# 1b) WSL ayar dosyasını aç (yoksa Not Defteri "oluşturulsun mu?" diye sorar → Evet):
+notepad "$env:USERPROFILE\.wslconfig"
+```
+Dosyaya şunu yaz ve kaydet (`memory` = RAM'inin yarısını geçmesin; 16 GB RAM → `8GB`, 32 GB → `12GB`):
+```ini
+[wsl2]
+memory=10GB
+swap=4GB
+```
+```powershell
+# 1c) WSL'i kapat (Docker Desktop da kapanır):
+wsl --shutdown
+# 1d) Docker Desktop'ı Başlat menüsünden aç, sol altta "Engine running" yazana kadar bekle (~1 dk).
+# 1e) Kontrol:
+docker info --format "{{.MemTotal}}"
+```
+**Görmen gereken**: 1e'de 7,6 GB'tan büyük bir sayı (bayt cinsinden, ör. `10450000000`).
+**Bana gönder**: 1e'nin çıktısı.
 
-## B. GitHub (≈ 5 min)
+## Adım 2 — Eksik `.env` anahtarları + Airflow'u yeniden başlat
 
-- [ ] **B1. Review the open PRs** — [pull requests](https://github.com/dogruom/thelook-lakehouse-platform/pulls):
-  [#21](https://github.com/dogruom/thelook-lakehouse-platform/pull/21) Airflow (D22/D23) →
-  [#19](https://github.com/dogruom/thelook-lakehouse-platform/pull/19) e2e + contracts (D24) →
-  [#20](https://github.com/dogruom/thelook-lakehouse-platform/pull/20) AWS (W5).
-  Claude merges them in this order under the standing approval (D-032) once CI is green, the review
-  passes and the day is closed; you only need to look if Claude reports a stop.
-- [ ] **B2. Tag `v0.2.0`** — only after Claude reports "M2 review: reviewer APPROVE, auditor PASS"
-  and the M2 branches are merged to `main`:
-  ```powershell
-  git switch main; git pull --ff-only
-  git log --oneline -3                   # check the M2 merge commit is on top
-  git tag -a v0.2.0 -m "M2: data correctness and analytics products"
-  git push origin v0.2.0
-  ```
-  Check: [tags](https://github.com/dogruom/thelook-lakehouse-platform/tags).
+**Neden**: Airflow'un JWT anahtarı (`AIRFLOW__API_AUTH__JWT_SECRET`) `.env`'de yok. Komut eksik
+anahtarları rastgele değerle ekler, hiçbir değeri ekrana yazmaz, mevcut değerleri değiştirmez.
 
-## C. AWS day 1 — account and bootstrap (once, ≈ 45 min)
+```powershell
+# 2a) Airflow servislerinin tanımı bu dalda:
+git switch feat/w4-d22-airflow
 
-- [ ] **C1. Account readiness (W5.D25.1)**
-  - Confirm the Free plan and credits: [Billing → Free tier / Credits](https://console.aws.amazon.com/billing/home#/credits).
-  - Root MFA: [Security credentials](https://console.aws.amazon.com/iam/home#/security_credentials) → Assign MFA. No root access keys.
-  - Tools:
-    ```powershell
-    winget install --id Amazon.AWSCLI -e
-    winget install --id Hashicorp.Terraform -e
-    # open a new terminal
-    aws --version; terraform version       # AWS CLI >= 2.32, Terraform >= 1.10
-    aws login --profile crm --region eu-central-1
-    $env:AWS_PROFILE = "crm"
-    aws sts get-caller-identity
-    ```
-  Send to Claude: the `get-caller-identity` JSON (account id and ARN are not secrets) and which login path you used.
-  Install pages: [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) · [Terraform](https://developer.hashicorp.com/terraform/install).
+# 2b) Eksik anahtarları ekle ve kontrol et:
+.\.venv\Scripts\Activate.ps1
+python scripts/bootstrap_env.py --add-missing
+python scripts/check_env.py
 
-- [ ] **C2. Bootstrap: state bucket + budgets (W5.D25.2/.3)**
-  ```powershell
-  git switch feat/w5-aws-foundation      # until PR #20 is merged
-  cd infra/terraform/bootstrap
-  $env:TF_VAR_budget_email = "<your e-mail>"
-  terraform init
-  terraform plan -out bootstrap.plan     # expect: 1 bucket (+ settings), 1 budget
-  terraform apply bootstrap.plan
-  terraform output
-  cd ../../..
-  ```
-  Then confirm the budget e-mail subscription and check [Budgets](https://console.aws.amazon.com/billing/home#/budgets) (4 alerts: 5/20/40 USD).
-  Keep `infra/terraform/bootstrap/terraform.tfstate` (git-ignored; never commit or paste it).
-  Send to Claude: the plan summary line ("Plan: N to add…") and `terraform output` (bucket name).
+# 2c) Stack'i başlat (Airflow, yeni anahtarla yeniden oluşturulur):
+docker compose --profile core --profile sql up -d
+docker compose --profile orchestration up -d --force-recreate airflow-scheduler
+docker compose ps --format "table {{.Name}}\t{{.Status}}"
+```
+**Görmen gereken**: 2b'de `all keys set`; 2c'de `crm_*` konteynerleri `Up ... (healthy)`.
+**Bana gönder**: 2b'nin son satırı + 2c'nin tablosu. **Dalı değiştirme**, `feat/w4-d22-airflow`'da kalsın.
 
-## D. AWS cloud day — apply, run, verify, tear down (≈ 1.5 h)
+## Adım 3 — Bana haber ver
 
-- [ ] **D1. Apply `envs/dev` (W5.D26/W5.D27.2)** — send the plan to Claude **before** applying:
-  ```powershell
-  aws login --profile crm --region eu-central-1; $env:AWS_PROFILE = "crm"
-  cd infra/terraform/envs/dev
-  Copy-Item backend.hcl.example backend.hcl   # put the state bucket name in it (untracked)
-  terraform init -backend-config=backend.hcl
-  $env:TF_VAR_owner_principal_arn = (aws sts get-caller-identity --query Arn --output text)
-  terraform plan -out dev.plan -no-color > dev-plan.txt   # send dev-plan.txt to Claude (no secrets in it)
-  terraform apply dev.plan
-  terraform output
-  $env:LAKEHOUSE_AWS_BUCKET = (terraform output -raw data_bucket)
-  cd ../../..
-  ```
-- [ ] **D2. Wheel + data + Glue runs (W5.D27.1/.3, W5.D28.1)**
-  ```powershell
-  .\.venv\Scripts\Activate.ps1
-  python scripts/cloud/build_artifacts.py
-  python -m lakehouse.generator land --target aws
-  docker compose --profile core up -d    # seed_bronze copies the Kafka-sourced Bronze tables
-  python scripts/cloud/seed_bronze.py
-  python scripts/cloud/seed_bronze.py --apply
-  python scripts/cloud/run_job.py register_tables --record
-  python scripts/cloud/run_job.py --sequence cloud --record
-  ```
-  Watch: [Glue jobs](https://eu-central-1.console.aws.amazon.com/gluestudio/home?region=eu-central-1#/jobs).
-  Send to Claude: the `run_job.py` output (job names, SUCCEEDED/FAILED, DPU-seconds).
-- [ ] **D3. Athena + Gold on Athena (W5.D28.4)** — [Athena console](https://eu-central-1.console.aws.amazon.com/athena/home?region=eu-central-1#/query-editor), workgroup `crm-lakehouse-dev`; commands in [runbooks/aws-owner-setup.md §4](runbooks/aws-owner-setup.md).
-  Send to Claude: `dbt build --target athena` summary line (PASS/WARN/ERROR).
-- [ ] **D4. Tenant prefix denial (W5.D28.2)** — commands in [runbooks/aws-owner-setup.md §4](runbooks/aws-owner-setup.md).
-  Send to Claude: the success listing for `brand_alpha/` and the `AccessDenied` line for `brand_beta/`.
-- [ ] **D5. Teardown + spend (W5.D30.3)** — never skip:
-  ```powershell
-  terraform -chdir=infra/terraform/envs/dev destroy
-  aws glue get-jobs --query "Jobs[].Name"     # expect []
-  aws s3 ls | Select-String crm-lakehouse     # only the tfstate bucket remains
-  ```
-  Spend: [Bills](https://console.aws.amazon.com/billing/home#/bills) or [Cost Explorer](https://console.aws.amazon.com/costmanagement/home#/cost-explorer) (data lags up to 24 h).
-  Send to Claude: the two check outputs and the day's spend (USD, gross and after credits).
+Sohbete **"Docker hazır"** yaz. Ben backfill testini (W4.D23.4, ~55 dk) koşar, sonucu yazar ve PR #21'i
+koşullar sağlanırsa merge ederim. Bu sırada Docker'a dokunma (bilgisayarı kullanabilirsin).
 
-## E. GitHub deploy environment (once, W5.D29.2 — after D1 on a later cloud day)
+## Adım 4 — Uçtan uca pipeline (`land` dahil)
 
-- [ ] [Settings → Environments](https://github.com/dogruom/thelook-lakehouse-platform/settings/environments) → New `aws-dev`: required reviewer = you; deployment branches = `main` only.
-- [ ] [Settings → Actions variables](https://github.com/dogruom/thelook-lakehouse-platform/settings/variables/actions) (**Variables**, not secrets):
-  `AWS_REGION = eu-central-1`, `AWS_DEPLOY_ROLE_ARN = <terraform output github_deploy_role_arn>`,
-  `LAKEHOUSE_AWS_BUCKET = <terraform output data_bucket>`.
-- [ ] [Actions](https://github.com/dogruom/thelook-lakehouse-platform/actions) → `deploy-and-run` → Run workflow → approve. Send to Claude: the run link. Then teardown (D5).
+**Ne zaman**: ben "backfill bitti" dediğimde. **Neden**: `land` adımı yerel S3 (SeaweedFS) şifresini
+istiyor; ben `.env` okuyamam, bu yüzden senin terminalinde koşmalı.
 
-## F. W6 preparation — Databricks Free Edition (once, ≈ 10 min)
+```powershell
+# 4a) run_e2e.py bu dalda:
+git switch feat/w5-aws-foundation
+.\.venv\Scripts\Activate.ps1
+docker compose --profile core --profile sql up -d
 
-- [ ] Sign up: [Databricks Free Edition](https://www.databricks.com/learn/free-edition) (no credit card, no paid tier — ADR-0012).
-- [ ] Install the CLI and log in (OAuth, no tokens in files):
-  ```powershell
-  winget install Databricks.DatabricksCLI
-  databricks auth login --host https://<your-workspace>.cloud.databricks.com
-  databricks current-user me
-  ```
-  Send to Claude: the workspace host and `current-user me` user name.
+# 4b) Sadece bu terminale S3 anahtarlarını yükle (ekrana bir şey yazmaz):
+Get-Content .env | Where-Object { $_ -match '^(S3_ACCESS_KEY|S3_SECRET_KEY)=' } |
+  ForEach-Object { $k, $v = $_ -split '=', 2; Set-Item "env:$k" $v }
+$env:S3_ENDPOINT = "http://127.0.0.1:9000"
 
-## G. Learning gates (any time)
+# 4c) Koş (~30 dk):
+python scripts/run_e2e.py
 
-- [ ] Tutor gates for W4 and W5: say "beni test et W4" / "beni test et W5" in a session.
+# 4d) Anahtarları terminalden sil:
+Remove-Item env:S3_ACCESS_KEY, env:S3_SECRET_KEY, env:S3_ENDPOINT
+```
+**Görmen gereken**: en sonda her adım (`produce`, `land`, `bronze_stream`, … `dbt_build`) için `ok`.
+**Bana gönder**: 4c'nin son ~20 satırı (özet tablo).
+
+## Adım 5 — `v0.2.0` etiketi
+
+**Ne zaman**: sadece ben "M2 review: reviewer APPROVE, auditor PASS, merge edildi" dediğimde.
+
+```powershell
+git switch main
+git pull --ff-only
+git log --oneline -3
+git tag -a v0.2.0 -m "M2: data correctness and analytics products"
+git push origin v0.2.0
+```
+**Görmen gereken**: [Tags sayfasında](https://github.com/dogruom/thelook-lakehouse-platform/tags) `v0.2.0`.
+**Bana gönder**: "tag atıldı".
+
+---
+
+## Adım 6 — AWS 1. gün: hesap, araçlar, bootstrap (bir kez)
+
+**6a) Tarayıcıda (konsol)**
+1. [Kredi / Free plan](https://console.aws.amazon.com/billing/home#/credits): USD 100 kredi ve plan bitiş tarihini gör.
+2. [Security credentials](https://console.aws.amazon.com/iam/home#/security_credentials) → **Assign MFA** (root için). Root access key **oluşturma**.
+
+**6b) Araçları kur (bir kez)**
+```powershell
+winget install --id Amazon.AWSCLI -e
+winget install --id Hashicorp.Terraform -e
+```
+PowerShell'i **kapatıp yeniden aç**, depo klasörüne geri dön, sonra:
+```powershell
+aws --version          # 2.32 veya üstü olmalı
+terraform version      # 1.10 veya üstü olmalı
+```
+
+**6c) AWS'ye giriş (anahtar dosyası yok, tarayıcıdan onay)**
+```powershell
+aws login --profile crm --region eu-central-1
+$env:AWS_PROFILE = "crm"
+aws sts get-caller-identity
+```
+**Bana gönder**: `get-caller-identity` çıktısı (Account + Arn).
+`aws login` "unknown command" derse dur ve bana yaz — alternatif yol [runbook §1](runbooks/aws-owner-setup.md)'de.
+
+**6d) Bootstrap: Terraform state bucket'ı + bütçe alarmları**
+```powershell
+git switch feat/w5-aws-foundation
+$env:TF_VAR_budget_email = "<e-posta-adresin>"     # bütçe alarmlarının gideceği adres
+terraform -chdir=infra/terraform/bootstrap init
+terraform -chdir=infra/terraform/bootstrap plan -out bootstrap.plan
+```
+**Görmen gereken**: `Plan: N to add, 0 to change, 0 to destroy` (1 bucket + ayarları, 1 budget).
+**Bana gönder**: o `Plan:` satırı. Ben "tamam" deyince:
+```powershell
+terraform -chdir=infra/terraform/bootstrap apply bootstrap.plan
+terraform -chdir=infra/terraform/bootstrap output
+```
+Sonra e-postana gelen **AWS budget aboneliğini onayla** ve [Budgets](https://console.aws.amazon.com/billing/home#/budgets)
+sayfasında 5 / 20 / 40 USD alarmlarını gör.
+**Bana gönder**: `output` çıktısı (bucket adı). `infra/terraform/bootstrap/terraform.tfstate` dosyasını **silme, paylaşma**.
+
+## Adım 7 — AWS bulut günü: kur → koş → doğrula → sil
+
+Her bulut gününde aynı akış. Önce giriş:
+```powershell
+git switch feat/w5-aws-foundation
+.\.venv\Scripts\Activate.ps1
+aws login --profile crm --region eu-central-1
+$env:AWS_PROFILE = "crm"
+```
+
+**7a) Kaynakları planla** (ilk seferde backend dosyası oluşur):
+```powershell
+$state = terraform -chdir=infra/terraform/bootstrap output -raw state_bucket
+"bucket = `"$state`"" | Set-Content -Encoding utf8 infra/terraform/envs/dev/backend.hcl
+terraform -chdir=infra/terraform/envs/dev init -backend-config=backend.hcl
+$env:TF_VAR_owner_principal_arn = (aws sts get-caller-identity --query Arn --output text)
+terraform -chdir=infra/terraform/envs/dev plan -no-color -out dev.plan > dev-plan.txt
+Get-Content dev-plan.txt -Tail 5
+```
+**Bana gönder**: `dev-plan.txt` dosyasının tamamı (gizli bilgi içermez). **Ben onaylamadan apply etme.**
+
+**7b) Onaydan sonra kur**:
+```powershell
+terraform -chdir=infra/terraform/envs/dev apply dev.plan
+$env:LAKEHOUSE_AWS_BUCKET = (terraform -chdir=infra/terraform/envs/dev output -raw data_bucket)
+```
+"already exists" hatası alırsan çıktıyı bana gönder (GitHub OIDC provider / Glue log grupları zaten varsa iki ayar gerekiyor).
+
+**7c) Kodu ve veriyi yükle, Glue işlerini koş**:
+```powershell
+python scripts/cloud/build_artifacts.py
+python -m lakehouse.generator land --target aws
+docker compose --profile core up -d
+python scripts/cloud/seed_bronze.py                 # önce kuru deneme: ne kopyalanacak
+python scripts/cloud/seed_bronze.py --apply
+python scripts/cloud/run_job.py register_tables --record
+python scripts/cloud/run_job.py --sequence cloud --record
+```
+İzle: [Glue jobs](https://eu-central-1.console.aws.amazon.com/gluestudio/home?region=eu-central-1#/jobs).
+**Bana gönder**: son iki komutun çıktısı (iş adı, SUCCEEDED/FAILED, DPU-saniye).
+`seed_bronze.py` S3 anahtarı isterse önce Adım 4b'yi bu terminalde çalıştır.
+
+**7d) Kiracı (tenant) izolasyonu kanıtı** — `brand_alpha` rolü `brand_beta` klasörünü okuyamamalı:
+```powershell
+$alpha = terraform -chdir=infra/terraform/envs/dev output -raw tenant_brand_alpha_role_arn
+$c = aws sts assume-role --role-arn $alpha --role-session-name tenant-demo --query Credentials --output json | ConvertFrom-Json
+$env:AWS_ACCESS_KEY_ID = $c.AccessKeyId; $env:AWS_SECRET_ACCESS_KEY = $c.SecretAccessKey; $env:AWS_SESSION_TOKEN = $c.SessionToken
+aws s3 ls "s3://$env:LAKEHOUSE_AWS_BUCKET/landing/brand_alpha/"     # liste gelmeli
+aws s3 ls "s3://$env:LAKEHOUSE_AWS_BUCKET/landing/brand_beta/"      # AccessDenied gelmeli
+Remove-Item env:AWS_ACCESS_KEY_ID, env:AWS_SECRET_ACCESS_KEY, env:AWS_SESSION_TOKEN
+```
+**Bana gönder**: iki `ls` komutunun çıktısı (gizli bilgi içermez; `$c`'yi yazdırma).
+
+**7e) Gold katmanı Athena'da** (ilk seferde sanal ortam kurulur):
+```powershell
+py -3.11 -m venv .venv-dbt-athena
+.\.venv-dbt-athena\Scripts\python -m pip install -r requirements/dbt-athena.txt
+$env:DBT_ATHENA_S3_STAGING_DIR = "s3://$env:LAKEHOUSE_AWS_BUCKET/athena-results/"
+$env:DBT_ATHENA_S3_DATA_DIR = "s3://$env:LAKEHOUSE_AWS_BUCKET/gold/"
+cd dbt_project
+..\.venv-dbt-athena\Scripts\dbt run-operation register_athena_silver --target athena --profiles-dir profiles --vars "{athena_silver_root: 's3://$env:LAKEHOUSE_AWS_BUCKET/silver'}"
+..\.venv-dbt-athena\Scripts\dbt build --target athena --select staging marts --profiles-dir profiles
+cd ..
+```
+**Bana gönder**: `dbt build`'in son satırı (`PASS=… WARN=… ERROR=…`).
+İstersen sorguları [Athena konsolunda](https://eu-central-1.console.aws.amazon.com/athena/home?region=eu-central-1#/query-editor) (workgroup `crm-lakehouse-dev`) da görebilirsin.
+
+**7f) SİL — bunu asla atlama** (para harcamasını durdurur):
+```powershell
+terraform -chdir=infra/terraform/envs/dev destroy
+aws glue get-jobs --query "Jobs[].Name"          # [] olmalı
+aws s3 ls | Select-String crm-lakehouse          # sadece ...-tfstate-... kalmalı
+```
+Ertesi gün harcamayı [Bills](https://console.aws.amazon.com/billing/home#/bills) veya
+[Cost Explorer](https://console.aws.amazon.com/costmanagement/home#/cost-explorer)'da gör (24 saat gecikebilir).
+**Bana gönder**: iki kontrol çıktısı + günün harcaması (USD, kredi öncesi ve sonrası).
+
+## Adım 8 — GitHub `aws-dev` ortamı (bir kez, 7b'den sonra bir bulut gününde)
+
+1. [Settings → Environments](https://github.com/dogruom/thelook-lakehouse-platform/settings/environments) → **New environment** → adı `aws-dev` → *Required reviewers*: kendin → *Deployment branches*: sadece `main`.
+2. [Settings → Actions → Variables](https://github.com/dogruom/thelook-lakehouse-platform/settings/variables/actions) → **Variables** sekmesi (Secrets değil) → üç değişken:
+   ```powershell
+   # değerleri almak için:
+   terraform -chdir=infra/terraform/envs/dev output -raw github_deploy_role_arn
+   terraform -chdir=infra/terraform/envs/dev output -raw data_bucket
+   ```
+   `AWS_REGION` = `eu-central-1` · `AWS_DEPLOY_ROLE_ARN` = ilk çıktı · `LAKEHOUSE_AWS_BUCKET` = ikinci çıktı
+3. [Actions](https://github.com/dogruom/thelook-lakehouse-platform/actions) → `deploy-and-run` → **Run workflow** → onay isteğini **Approve**.
+**Bana gönder**: workflow çalışmasının linki. Sonra **7f (sil)**.
+
+## Adım 9 — Databricks Free Edition (W6'dan önce, bir kez)
+
+1. [Databricks Free Edition](https://www.databricks.com/learn/free-edition) → kayıt ol (kredi kartı yok, ücretli plana geçme).
+2. CLI ve giriş (tarayıcıdan onay, token dosyası yok):
+```powershell
+winget install Databricks.DatabricksCLI
+# PowerShell'i kapatıp aç, sonra (adres = tarayıcıdaki workspace adresin):
+databricks auth login --host https://<workspace-adresin>.cloud.databricks.com
+databricks current-user me
+```
+**Bana gönder**: workspace adresi + `current-user me` çıktısındaki `userName`.
+
+## Ek — Öğrenme kapıları (istediğin zaman)
+
+Sohbette **"beni test et W4"** veya **"beni test et W5"** yaz.
