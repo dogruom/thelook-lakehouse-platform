@@ -5,6 +5,10 @@ is a prefix of the funnel) -> interleaved emission order -> payloads on a simula
 -> exact-count defect plan -> duplicates -> manifest. Every random draw comes from a sub-RNG of the
 run seed and every timestamp from the simulated clock, so the same seed and config give identical
 bytes. Defective payloads (null session, truncated JSON) deliberately bypass the contract model.
+
+Identified sessions (D-096): with ``customer_pools`` (``brand_id -> customer ids`` from
+``orders.customer_pools_from_cdc``) every identified session references a same-brand CDC customer,
+as orders do; without pools the customer id is a fresh UUID (unit tests, standalone runs).
 """
 
 from __future__ import annotations
@@ -34,10 +38,12 @@ from lakehouse.generator.messages import OutboundMessage
 
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
     from lakehouse.generator.config import GeneratorConfig
 
 
-GENERATOR_VERSION = "click-1.0.0"
+GENERATOR_VERSION = "click-1.1.0"
 FUNNEL = ("page_view", "search", "add_to_cart", "checkout", "purchase")
 # Share of base events per funnel step; strictly decreasing, so per-run counts are too.
 FUNNEL_WEIGHTS = (0.50, 0.22, 0.14, 0.09, 0.05)
@@ -116,7 +122,17 @@ class _Step:
     sort_key: tuple[int, int, int] = field(default=(0, 0, 0))
 
 
-def config_fingerprint(config: GeneratorConfig, *, brands: int, events: int) -> str:
+def _digest(items: Sequence[str]) -> str:
+    return hashlib.sha256("\n".join(items).encode("utf-8")).hexdigest()
+
+
+def config_fingerprint(
+    config: GeneratorConfig,
+    *,
+    brands: int,
+    events: int,
+    customer_pools: Mapping[str, Sequence[str]] | None = None,
+) -> str:
     """sha256 over the generation-relevant fields only (no connection settings, no secrets)."""
     relevant: dict[str, Any] = {
         "seed": config.seed,
@@ -130,14 +146,30 @@ def config_fingerprint(config: GeneratorConfig, *, brands: int, events: int) -> 
     for name in sorted(type(config).model_fields):
         if name.startswith("click_"):
             relevant[name] = getattr(config, name)
+    if customer_pools is not None:
+        relevant["customer_pools"] = {b: _digest(customer_pools[b]) for b in sorted(customer_pools)}
     return hashlib.sha256(canonical_json(relevant).encode("utf-8")).hexdigest()
 
 
-def _plan_sessions(config: GeneratorConfig, brands: int, events: int) -> list[_Session]:
+def _check_pools(
+    config: GeneratorConfig, brands: int, customer_pools: Mapping[str, Sequence[str]]
+) -> None:
+    for brand_id in config.tenants[:brands]:
+        if not customer_pools.get(brand_id):
+            raise ValueError(f"empty or missing customer pool for {brand_id}")
+
+
+def _plan_sessions(
+    config: GeneratorConfig,
+    brands: int,
+    events: int,
+    customer_pools: Mapping[str, Sequence[str]] | None = None,
+) -> list[_Session]:
     """Sessions per tenant such that the funnel step counts of the run are strictly decreasing."""
     shares = apportion(events, config.tenant_weights[:brands])
     attr_rng = sub_rng(config.seed, "click-session-attrs")
     id_rng = sub_rng(config.seed, "click-session-ids")
+    customer_rng = sub_rng(config.seed, "click-session-customers")
     sessions: list[_Session] = []
     for idx, share in enumerate(shares):
         counts = sorted(apportion(share, FUNNEL_WEIGHTS), reverse=True)
@@ -148,11 +180,20 @@ def _plan_sessions(config: GeneratorConfig, brands: int, events: int) -> list[_S
         attr_rng.shuffle(depths)
         for depth in depths:
             anonymous = attr_rng.random() < ANONYMOUS_SHARE
+            brand_id = config.tenants[idx]
+            session_id = uuid4_from(id_rng)
+            customer_id: str | None = None
+            if not anonymous:
+                customer_id = (
+                    customer_rng.choice(customer_pools[brand_id])
+                    if customer_pools is not None
+                    else uuid4_from(id_rng)
+                )
             sessions.append(
                 _Session(
-                    brand_id=config.tenants[idx],
-                    session_id=uuid4_from(id_rng),
-                    customer_id=None if anonymous else uuid4_from(id_rng),
+                    brand_id=brand_id,
+                    session_id=session_id,
+                    customer_id=customer_id,
                     device=attr_rng.choices(DEVICES, weights=DEVICE_WEIGHTS)[0],
                     depth=depth,
                 )
@@ -320,20 +361,29 @@ def _with_duplicates(
 
 
 def generate_clickstream(
-    config: GeneratorConfig, *, brands: int, events: int, topic: str | None = None
+    config: GeneratorConfig,
+    *,
+    brands: int,
+    events: int,
+    topic: str | None = None,
+    customer_pools: Mapping[str, Sequence[str]] | None = None,
 ) -> ClickstreamRun:
     """Generate ``events`` clean base events over the first ``brands`` tenants plus defects.
 
-    Raises ``ValueError`` for out-of-range arguments and ``InfeasibleDefectPlan`` when the exact
+    ``customer_pools`` (``brand_id -> customer ids``) makes identified sessions reference
+    same-brand customers (D-096). Raises ``ValueError`` for out-of-range arguments or a missing or
+    empty pool for a generated brand, and ``InfeasibleDefectPlan`` when the exact
     defect counts do not fit into the base events.
     """
     if not 1 <= brands <= len(config.tenants):
         raise ValueError(f"brands must be between 1 and {len(config.tenants)}")
     if not 1 <= events <= MAX_EVENTS:
         raise ValueError(f"events must be between 1 and {MAX_EVENTS}")
+    if customer_pools is not None:
+        _check_pools(config, brands, customer_pools)
     target_topic = topic if topic is not None else config.topic_clickstream
     kind_of, duplicate_src, n = _select_defects(config, events)
-    steps = _emission_order(config, _plan_sessions(config, brands, events), events)
+    steps = _emission_order(config, _plan_sessions(config, brands, events, customer_pools), events)
     base, event_ids = _build_base(config, steps, kind_of, target_topic)
     messages, entries = _with_duplicates(config, base, event_ids, kind_of, duplicate_src)
     counts = {"base": events, **n, "emitted": len(messages)}
@@ -342,7 +392,9 @@ def generate_clickstream(
         entries=entries,
         seed=config.seed,
         brands=brands,
-        config_fingerprint=config_fingerprint(config, brands=brands, events=events),
+        config_fingerprint=config_fingerprint(
+            config, brands=brands, events=events, customer_pools=customer_pools
+        ),
     )
     log.info("clickstream.generated", brands=brands, base_events=events, emitted=len(messages))
     return ClickstreamRun(messages=messages, manifest=manifest)

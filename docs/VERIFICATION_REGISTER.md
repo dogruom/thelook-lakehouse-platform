@@ -1,6 +1,6 @@
 # Verification register
 
-> **Version**: 1.9 · **Last updated**: 2026-11-13 (W4.D20) · Decision: D-055
+> **Version**: 2.0 · **Last updated**: 2026-11-13 (W4.D21) · Decision: D-055
 
 One list of every statement that a day report marked "not verified". Each row has a class and an
 owner day, so nothing stays as an unowned caveat. Update this file whenever a day report names a
@@ -22,15 +22,21 @@ Classes: **Closed** (verified, evidence linked) · **Planned** (has a task and a
 | V-11 | Tutor learning gates W1 and W2.D7–D11 (M1 learning gate; round 1 asked 2026-11-11, answers pending) | Owner action | Learning queue in [TASKS.md](TASKS.md); owner returns to it after starting W3.D13 | Owner cannot explain the work in interviews |
 | V-12 | Spark rules accept a JSON number in a string field (`first_name: 5`) and differ from Pydantic on rare timestamp/integer forms (D-058, `rules.KNOWN_DIVERGENCES`) | Known limit | Revisit if a producer outside the Pydantic contracts is added | A non-conforming producer could pass a few wrong-typed values into Silver |
 | V-13 | Local Hive metastore schema has no foreign keys (DataNucleus auto-create without constraints, ADR-0004 W1) | Known limit | Deferred (D-067): owner downloads the official Hive 2.3 PostgreSQL schema script only if wanted; prepared patch kept outside the repo | Orphan metadata rows possible after a crash mid-DDL; local single-user catalog only |
-| V-14 | dbt-spark gaps carried in the project: `spark__alter_column_comment` override, column-level `not_null` unusable on Delta (ADR-0004 W2/W3) | Known limit | Re-test on every dbt-spark upgrade (`dbt build --select spike`) | Override may drift from upstream; a removed workaround would break `persist_docs` |
+| V-14 | dbt-spark gaps carried in the project: `spark__alter_column_comment` override, column-level `not_null` unusable on Delta (ADR-0004 W2/W3), spark override of the `unit` materialization (`macros/materializations/unit_spark.sql`, D-097) | Known limit | Re-test on every dbt-spark upgrade (`dbt build --select spike`) | Override may drift from upstream; a removed workaround would break `persist_docs` |
 | V-16 | Spark Thrift Server has no authentication (published on 127.0.0.1 only; reachable from every container on the compose network) | Known limit | Local only; cloud targets use IAM/Glue or Databricks SQL auth (W5/W6) | A compromised local container could read/write the catalog and S3 data |
 | V-21 | Overwriting an already ingested landing key with different bytes is not re-read (the file-source checkpoint tracks paths) | Known limit | Landing keys are immutable by convention; the generator is deterministic (same bytes on rerun) | A corrected file under the same key would be ignored silently |
 | V-22 | `write_batch` / `write_products` against SeaweedFS (only moto-tested; the integration test lands via `*_local` + aws CLI because the host has no S3 credentials) | Planned | W5.D27 (generator writes through the AWS adapter) | An S3-API difference in the boto3 path would surface only in the cloud run |
 | V-23 | `reconcile` cannot derive customers' `silver_accepted`, `duplicates_removed` and `stale_cdc_noop` from data (Silver keeps one row per key); the customers reconcile row only checks `dlq <= bronze` at data level (W3 code review should-fix 1) | Known limit | Covered instead by the CDC suite: per-batch counters equal the crafted events exactly and the final rows equal the manifest (`test_cdc_correctness.py`); a data-level check (Silver rows per brand = distinct valid Bronze keys) is a candidate for W4.D23 quality gates | A customers counter bug that keeps each batch row balanced would pass `reconcile` |
 | V-24 | Unit coverage headroom is thin (80.91 % vs the 80 % CI gate): Spark-only code is tested in the Spark container, which does not feed host coverage | Planned | Next Spark-heavy change (W4.D19 changed no Python under `src/`, D-090): combine Spark-container coverage or add host tests for pure-Python parts | The next Spark-heavy change can fail the CI coverage gate without a real test gap |
-| V-26 | Identified clickstream sessions reference no customer (generator draws random ids); `fct_sessions.customer_id` relationship test at `warn` (D-096) | Planned | W4.D21.0 | Customer 360 session metrics would be empty; a tenant FK test stays non-blocking |
 | V-27 | Thrift Server / Delta: a bare `min()`/`max()` on a DATE column (answered from Delta file statistics) fails with `ClassCastException LocalDate → java.sql.Date`; workaround: aggregate via string (`assert_dim_date_calendar`) | Known limit | Local Thrift Server only; re-check on Athena (W5.D28.4) and Databricks | A new test or query using date min/max fails at runtime (visible, not silent) |
+| V-28 | `reconcile` reports `batch_sum_vs_data` for `raw_orders`: data `silver_accepted+dlq` 231 vs batch rows 240 and duplicates 18 vs 9 (totals equal, 249). Seen 2026-11-13 on the shared catalog; orders were not touched in W4.D21 | Planned | W4.D23.2 (quality gate must decide on it) | A real orders counter drift would hide behind a known mismatch; the gate could halt every run |
 | V-19 | One `/security-review` run over M1 (owner-triggered command) | Owner action | Owner runs `/security-review` once on `main` after the merge | No independent security pass besides the reviewer agent |
+
+## Closed (2026-11-13, W4.D21)
+
+| Item (earlier wording) | Result | Evidence |
+|---|---|---|
+| V-26 Identified clickstream sessions reference no customer; `fct_sessions.customer_id` test at `warn` | Generator draws from the same-brand CDC pool; shared clickstream rebuilt (D-097); test back to `error` | `dbt build --select fct_sessions …` → `relationships_by_brand_fct_sessions_customer_id` PASS; Silver check 0 orphans of 1706/913/279 identified sessions |
 
 ## Closed (2026-11-13, W4.D19)
 

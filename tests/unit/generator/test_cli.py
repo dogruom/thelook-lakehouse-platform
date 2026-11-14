@@ -145,3 +145,32 @@ def test_produce_with_too_few_events_fails_cleanly_before_connecting(tmp_path: P
     assert proc.returncode == 2
     assert "error:" in proc.stderr
     assert "Traceback" not in proc.stderr
+
+
+def test_clickstream_dry_run_links_identified_sessions_to_cdc_customers(tmp_path: Path) -> None:
+    from lakehouse.generator.cdc import generate_cdc
+    from lakehouse.generator.config import GeneratorConfig
+    from lakehouse.generator.orders import customer_pools_from_cdc
+
+    out = tmp_path / "out"
+    proc = cli(
+        tmp_path, "clickstream", "--brands", "3", "--events", "1000", "--cdc-events", "500",
+        "--seed", "7", "--dry-run", "--out-dir", str(out),
+    )  # fmt: skip
+    assert proc.returncode == 0, proc.stderr[-500:]
+    config = GeneratorConfig(_env_file=None, seed=7)  # type: ignore[call-arg]
+    pools = customer_pools_from_cdc(generate_cdc(config, brands=3, events=500))
+    linked = 0
+    for line in (out / "clickstream_events.ndjson").read_text(encoding="utf-8").splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("customer_id"):
+            assert event["customer_id"] in pools[event["brand_id"]]
+            linked += 1
+    assert linked > 0
+
+
+def test_produce_only_rejects_unknown_stream(tmp_path: Path) -> None:
+    assert cli(tmp_path, "produce", "--only", "orders").returncode == 2

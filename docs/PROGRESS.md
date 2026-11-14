@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-13 (W4.D20 closed; v9.0 2026-11-05: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W4.D20** closed (D20.0–D20.2 ✅) → next **W4.D21** (clickstream link fix, Customer 360, RFM) · M1: 37/37 ✅ (`v0.1.0` tagged)
+> **Active**: **W4.D21** closed (D21.0–D21.3 ✅) → next **W4.D22** (Airflow 3 image, DAG, ADR-0010) · M1: 37/37 ✅ (`v0.1.0` tagged)
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,17 +13,17 @@
 
 ## Current State
 
-- **Updated**: 2026-11-13 (W4.D20 closed) · **Branch**: `feat/w4-d20-gold-marts`; merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md)
-- **Last delivered**: W4.D20 — Spark `silver.products` (D-094), `stg_products`, Gold `dim_customers`, `dim_customers_history`, `dim_products`, `dim_date`, `fct_orders`, `fct_order_items`, `fct_sessions` in `gold_marts` with brand-aware surrogate keys and tenant FK tests (D-095); Gold SQL designed for Athena (D-093; Athena branch untested until W5.D28.4).
-- **Unfinished**: V-26 clickstream ↔ customer link (W4.D21.0, owner approves the clickstream data rebuild); tutor gates M1 (V-11), W3, W4.D19–D20; V-19 `/security-review`. V-23 known limit.
-- **Tests & results**: W4.D20 close: `dbt build --select staging marts` PASS=117 WARN=1 (V-26) ERROR=0; Spark `test_silver_products.py` 53 passed; unit 1646 passed, 1 skipped, coverage 80.41 %; ruff/format/mypy clean.
+- **Updated**: 2026-11-13 (W4.D21 closed) · **Branch**: `feat/w4-d21-customer360-rfm` (merge status in [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md))
+- **Last delivered**: W4.D21 — generator links identified sessions to same-brand CDC customers; shared clickstream rebuilt via audited `reset_clickstream` (owner yes); Gold `obt_customer_360`, `agg_rfm_segments` (NTILE per brand, `as_of_date` var), dbt unit tests, `gold_tenant` views, docs complete (D-097, contracts v8.1).
+- **Unfinished**: W4.D22–D24 (Airflow 3 image build needs the owner's approval); V-28 orders reconcile mismatch (→ W4.D23.2); tutor gates M1 (V-11), W3, W4.D19–D21; V-19 `/security-review`. V-23 known limit.
+- **Tests & results**: W4.D21 close: `dbt build --select staging marts` PASS=146 WARN=0 ERROR=0; analytics after the review fixes PASS=30 (4 unit tests); unit 1661 passed, 1 skipped, coverage ≈ 80.32 %; ruff/format/mypy clean.
 - **Test cadence (D-059)**: only the relevant tests while developing, full suite once per day close; integration tests run sequentially (2 worker cores); broker chaos opt-in (`RUN_BROKER_CHAOS=1`).
-- **Owner action** — [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) *Owner action*: V-11 learning gates · V-19 one `/security-review` run · V-13 (deferred). W4.D21.0 needs a yes to rebuild shared clickstream data.
-- **Stack**: running at the W4.D20 close (`core` + `sql`); stop with `docker compose --profile core --profile sql stop`. Shared catalog: Bronze, DLQ, six Silver tables incl. `silver.products`, `gold_staging` views, `gold_marts` tables. Start with `up -d --wait` (Thrift needs ~1 min before beeline connects).
-- **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): earlier list plus D-073 … D-087 (Week 3), D-088 staging conventions (`gold_staging`, no raw names), D-089 tenant-safe dbt tests + fixtures as views, D-090 V-15 closed / V-24 re-targeted / V-25 / `silver.products` gap, D-091 Spark-owned `silver.products`, D-092 `v0.1.0` on the M1 merge, D-093 Gold also on Athena (portable SQL), D-094 `silver.products` latest valid copy, D-095 Gold marts conventions, D-096 clickstream customer-id defect.
-- **Risks / blockers**: 7.6 GB Docker memory, 2 worker cores; coverage headroom 0.41 pt (V-24); full Gold build ≈ 10 min on the Thrift Server; Delta commit safety on S3 → W5.
+- **Owner action** — [VERIFICATION_REGISTER.md](VERIFICATION_REGISTER.md) *Owner action*: V-11 learning gates · V-19 one `/security-review` run · V-13 (deferred) · approve/run the Airflow 3 image build (W4.D22.1) · `v0.2.0` tag at the M2 review.
+- **Stack**: `core` + `sql` running at the W4.D21 close. Shared catalog: Bronze, DLQ, six Silver tables, `gold_staging` views, `gold_marts` (7 marts + `obt_customer_360`, `agg_rfm_segments`), `gold_tenant` views. Clickstream lineage rebuilt 2026-11-13 (5000 base events, project seed).
+- **Decisions to remember** (full list: [DECISION_LOG.md](DECISION_LOG.md)): earlier list plus D-073 … D-087 (Week 3), D-088 staging conventions, D-089 tenant-safe dbt tests, D-090, D-091 Spark-owned `silver.products`, D-092 `v0.1.0`, D-093 Gold also on Athena, D-094, D-095 Gold marts conventions, D-096 clickstream customer-id defect, D-097 clickstream rebuild + Customer 360/RFM conventions.
+- **Risks / blockers**: 7.6 GB Docker memory, 2 worker cores; coverage headroom ≈ 0.32 pt (V-24); full Gold build ≈ 10 min; Airflow image not built yet; Delta commit safety on S3 → W5.
 - **Way of working**: Claude implements everything; every pipeline step is mapped in [DATA_FLOW.md](DATA_FLOW.md) (D-046); per-session trace in [SESSION_LOG.md](SESSION_LOG.md).
-- **Next task ("Start today's task")**: **W4.D21** — W4.D21.0 generator clickstream ↔ customers (D-096) + data rebuild (owner yes), then `obt_customer_360`, `agg_rfm_segments`, docs. Day order unchanged (owner, 2026-11-13).
+- **Next task ("Start today's task")**: **W4.D22** — Airflow 3 image (owner approves the build), `lakehouse_pipeline` DAG, ADR-0010.
 - **Autonomous run**: not started (setup on `chore/autonomous-run`, D-041/D-042)
 
 ---
@@ -52,7 +52,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 
 ```
 M1 (D1–D12)   [████████████████████] 37 / 37
-M2 (D13–D24)  [████████████░░░░░░░░] 22 / 37
+M2 (D13–D24)  [██████████████░░░░░░] 26 / 37
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 36
 ```
 
@@ -291,10 +291,10 @@ Evidence:
 | W4.D20.0 | `silver.products` + `stg_products` (D-091) | Spark job: valid latest copy per `(brand_id, product_id)`, MERGE, rerun no-op; registered; staging view + tests | Spark tests + `dbt build --select stg_products` || ✅ |
 | W4.D20.1 | Dimensions | dim_customers, dim_customers_history, dim_products, dim_date; surrogate keys include `brand_id`; no raw PII | `dbt build --select tag:dims` || ✅ |
 | W4.D20.2 | Facts | fct_orders, fct_order_items, fct_sessions; composite relationship tests | `dbt build --select tag:facts` || ✅ |
-| W4.D21.0 | Clickstream ↔ customers link (D-096) | identified sessions reference same-brand CDC customers; shared data rebuilt; `fct_sessions` customer test `error` and green | `dbt build --select fct_sessions` | ⏳ |
-| W4.D21.1 | `obt_customer_360` | grain `(brand_id, customer_id)`; `as_of_date` var | `dbt build --select obt_customer_360` | ⏳ |
-| W4.D21.2 | `agg_rfm_segments` | NTILE per brand; dbt unit tests; no 0%/100% segment | distribution query | ⏳ |
-| W4.D21.3 | Docs + scoped Gold views | `dbt docs generate` complete descriptions | command output | ⏳ |
+| W4.D21.0 | Clickstream ↔ customers link (D-096) | identified sessions reference same-brand CDC customers; shared data rebuilt; `fct_sessions` customer test `error` and green | `dbt build --select fct_sessions` | ✅ `3e49b32` `6828076` |
+| W4.D21.1 | `obt_customer_360` | grain `(brand_id, customer_id)`; `as_of_date` var | `dbt build --select obt_customer_360` | ✅ `f3dd0b2` |
+| W4.D21.2 | `agg_rfm_segments` | NTILE per brand; dbt unit tests; no 0%/100% segment | distribution query | ✅ `f3dd0b2` |
+| W4.D21.3 | Docs + scoped Gold views | `dbt docs generate` complete descriptions | command output | ✅ `f3dd0b2` |
 | W4.D22.1 | Airflow 3 image | Python 3.11; providers pinned; `orchestration` profile | `airflow version` | ⏳ |
 | W4.D22.2 | `lakehouse_pipeline` DAG | mapped per brand; retries/timeouts; re-run same interval is a no-op | `airflow dags test lakehouse_pipeline <date>` | ⏳ |
 | W4.D22.3 | ADR-0010 | orchestration ↔ compute interface | file review | ⏳ |
@@ -312,6 +312,9 @@ Evidence:
 - W4.D19.2 ✅: `7397428` — `relationships_by_brand`, `cross_tenant_key_matches` + `assert_no_cross_tenant_joins` (D-089). `pytest tests/integration/test_dbt_tenant_tests.py -q` → **5 passed** (leaky fixture: plain `relationships` 1 failure, `relationships_by_brand` 2, cross-tenant macro 1; fixtures selected only with the var; 3 consecutive runs green after seeds → views). CI [run 43427736811](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/43427736811): `dbt parse` (both var states, fixture gating check), unit, gitleaks → success.
 - W4.D20.0 ✅: `ff84b4b` — Spark `silver_products` (D-094): Spark `tests/spark/test_tables.py` + `test_silver_products.py` → 11 + 53 passed; shared catalog run 1 → bronze_rows 120 = accepted 120, inserted 120; reruns (also after the review fix) → inserted 0, updated 0; `silver.products` registered. `dbt build --select stg_products+` PASS=13.
 - W4.D20.1 ✅ / W4.D20.2 ✅: `ff84b4b` — `dbt build --select staging marts --profiles-dir profiles` (superset of `tag:dims` / `tag:facts`) → **PASS=117 WARN=1 ERROR=0** (2026-11-13, Thrift session UTC). Per brand alpha/beta/gamma: dim_customers 537/269/91, dim_customers_history 1566/778/260, dim_products 40/40/40, fct_orders 75/75/75 (net 58183.78/64424.53/51920.85), fct_order_items 168/165/155, fct_sessions 3866/1929/646; dim_date 1095 days. `assert_marts_reconcile_to_staging` PASS (counts and net sums per brand). WARN = `fct_sessions.customer_id` relationship, 3879 identified sessions with generator-random customer ids (D-096, V-26 → W4.D21.0); error-level cross-tenant check on sessions PASS. Contracts enforced on `dim_date`, `fct_orders` (data types, D-095). Negative check: `assert_dim_date_calendar` fails with a shifted `dim_date_start`.
+- W4.D21.0 ✅: `3e49b32` (generator pools, D-097) + `6828076` (`reset_clickstream`). Owner yes 2026-11-13 → `reset_clickstream` dry run then `--apply --confirm clickstream`: 3 tables (31/19/7 files), 2 checkpoints, 1 metrics row removed; topic `clickstream_events` recreated; `produce --only clickstream --events 5000 --cdc-events 1000` → delivered 5200 (alpha 3124 / beta 1557 / gamma 519); `bronze_stream` → `silver_clickstream`: rows_read 5200 = accepted 4925 + DLQ 50 + duplicates 200 + parse 25. 26 sessions hit customers missing from Silver (shared CDC from an older generator version) → `produce --only cdc` additively: 905 duplicates, 34 stale no-op, 11 accepted; customers 897 → 903; then **0 orphans** of 1706/913/279 identified sessions. `relationships_by_brand_fct_sessions_customer_id` at severity error → PASS.
+- W4.D21.1 ✅ / W4.D21.2 ✅ / W4.D21.3 ✅: `f3dd0b2` — `dbt build --select staging marts` → **PASS=146 WARN=0 ERROR=0** (before the contract column rename); after the rename `dbt build --select obt_customer_360+` → **PASS=29 ERROR=0** incl. 3 dbt unit tests (per-brand NTILE, tie-break + exclusions, every segment rule) and `assert_rfm_segments_non_degenerate`. obt_customer_360 903 rows (alpha 542 / beta 269 / gamma 92; customers with any order 45/35/17 (RFM scores the 43/32/17 with ≥ 1 valid order); with sessions 183/90/27). RFM 92 customers; segments per brand (at_risk/champions/hibernating/loyal/promising): alpha 10/6/11/8/8, beta 4/4/12/7/5, gamma 3/3/7/3/1 (min 5.9 %, max 41.2 %). Reproducibility: checksum `sum(hash(...))` of `agg_rfm_segments` = 21783813268 on two builds with `as_of_date` 2026-01-02 (and after the rename), c360 −16521825472 both times; `as_of_date` 2026-01-01 → c360 −9070750642. After the review fix (truncated hours, `whole_hours_between`): `dbt build --select obt_customer_360+` → **PASS=30** (4 unit tests incl. `obt_customer_360_cut_tenancy_and_revenue_rules`; negative check: with `dbt.datediff` the OBT unit test fails, `recency_hours` 0 → 1); segment counts unchanged; checksum rfm 5059524923 / c360 −14436000144 identical on two builds. `dbt docs generate` + `python scripts/check_dbt_docs.py` → 15 models, 0 missing descriptions. Views `gold_tenant.{obt_customer_360,agg_rfm_segments}__brand_{alpha,beta,gamma}` (6), `__brand_beta` returns only `brand_beta`.
+- W4.D21 gates: ruff/format/mypy clean, lint-imports 2 kept; unit **1660 passed, 1 skipped, coverage ≈ 80.25 %** (887 of 4491 missed); after the review fixes (HEAD `1256eef`, `pytest tests/unit`) **1661 passed, 1 skipped**, 884 missed ≈ 80.32 %; mypy clean, lint-imports 2 kept. Found: `reconcile` `batch_sum_vs_data` mismatch on `raw_orders` (V-28, orders untouched today).
 - W4.D20 gates: ruff/format/mypy clean; unit **1646 passed, 1 skipped, coverage 80.41 %**; review APPROVE WITH NITS, all should-fix applied.
 - Gates (W4.D19): ruff/format/mypy clean; unit **1634 passed, 1 skipped, coverage 80.91 %** (no `src/` change). V-15 closed (Spark job + dbt overlap, D-090). Review: code review **APPROVE WITH NITS**, should-fix 1–3 applied before the commit.
 
