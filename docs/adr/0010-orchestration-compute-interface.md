@@ -1,6 +1,6 @@
 # ADR-0010: Orchestration ↔ compute interface (Airflow triggers, Spark owns state)
 
-- **Status:** Proposed (W4.D22, code written, not yet run: the Airflow image has not been built)
+- **Status:** Accepted (owner delegated, 2026-11-14): image `crm/airflow:3.0.6` built; `lakehouse_pipeline` ran green end to end incl. `dbt_build` twice (`airflow dags test`, runs `manual__2026-11-14T12:37:44` and `manual__2026-11-14T13:31:39`); failure isolation 3 passed; code review APPROVE WITH NITS. Retry semantics: D-106.
 - **Date:** 2026-11-13
 
 ## Context
