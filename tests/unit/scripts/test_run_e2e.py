@@ -81,3 +81,11 @@ def test_dlq_gate_names_all_four_bronze_tables() -> None:
 
 def test_skip_land_keeps_produce() -> None:
     assert _names(skip_land=True)[:2] == ["produce", mod.SPARK_JOBS[0]]
+
+
+def test_jobs_and_dlq_gate_args_match_the_airflow_dag_plan() -> None:
+    """One sequence for both runners: a drift here caused V-28 (dlq_gate skipped the file tables)."""
+    from lakehouse.orchestration.plan import DLQ_GATE_JOB, pipeline_job_names
+
+    assert pipeline_job_names() == mod.SPARK_JOBS
+    assert mod.JOB_ARGS["dlq_gate"] == DLQ_GATE_JOB.args

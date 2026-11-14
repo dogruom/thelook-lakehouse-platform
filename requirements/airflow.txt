@@ -1,13 +1,8 @@
-# Airflow and providers
-# Install via: pip install -r requirements/airflow.txt
-# Or use the custom Airflow Docker image: docker/airflow/Dockerfile
+# Airflow 3 reference pins (W4.D22, D-098). Airflow runs ONLY in the `orchestration` compose
+# profile (docker/airflow/Dockerfile); a host install is unsupported on Windows and not needed -
+# the DAG logic lives in lakehouse.orchestration, which is unit-tested without Airflow.
+# The image installs Airflow under the official constraints file for this version; the pins below
+# document what the image is built from (docker/airflow/requirements-airflow.txt holds the extras).
 -r base.txt
 
-apache-airflow==2.9.3
-apache-airflow-providers-amazon==8.22.0
-apache-airflow-providers-apache-spark==4.9.0
-apache-airflow-providers-postgres==5.11.1
-apache-airflow-providers-common-sql==1.14.1
-
-# Airflow extras (installed via constraints)
-# celery, postgres, amazon, apache.spark
+apache-airflow==3.0.6

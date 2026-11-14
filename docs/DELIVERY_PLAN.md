@@ -1,7 +1,7 @@
 # Delivery Plan: Six Weeks, Three Demonstrable Milestones
 
-> **Document Version**: 8.2
-> **Last Updated**: 2026-11-13 (v8.2: Gold on Athena W5.D28.4, D-093; W4.D20.0 `silver.products`, D-091); 2026-11-05 (v8.1: AWS Glue 5.0 replaces EMR Serverless — [ADR-0011](adr/0011-aws-glue-instead-of-emr-serverless.md); bounded Databricks Free Edition track in W6 — [ADR-0012](adr/0012-databricks-free-edition-track.md); tutor learning gate and portfolio notes in every checkpoint)
+> **Document Version**: 8.3
+> **Last Updated**: 2026-11-14 (v8.3: M1/M2 acceptance wording narrowed to the evidence — PII scope, failure-isolation scope; D-109); 2026-11-13 (v8.2: Gold on Athena W5.D28.4, D-093; W4.D20.0 `silver.products`, D-091); 2026-11-05 (v8.1: AWS Glue 5.0 replaces EMR Serverless — [ADR-0011](adr/0011-aws-glue-instead-of-emr-serverless.md); bounded Databricks Free Edition track in W6 — [ADR-0012](adr/0012-databricks-free-edition-track.md); tutor learning gate and portfolio notes in every checkpoint)
 > **Budget**: 6 weeks × 6 days × ~6 focused hours ≈ 216 h (owner + Claude Code, Sonnet) · cloud spend ≤ **USD 50** total (target < USD 15), AWS Free Tier credits first
 > **Relationship to other documents**: scope and invariants → [PROJECT_CHARTER.md](PROJECT_CHARTER.md); task-level acceptance criteria, statuses and evidence → [PROGRESS.md](PROGRESS.md) (task IDs `W<week>.D<day>.<n>`). This plan decides **sequencing, daily goals, checkpoints and milestone gates**.
 
@@ -250,7 +250,7 @@ Branching: one short-lived branch per day or task group (`feat/w1-contracts`, `f
 **Week 3 summary**
 - **Expected output**: complete, idempotent, tenant-isolated Silver with SCD2, DLQ replay and reconciliation metrics.
 - **Integration tests**: CDC suite, SCD2, orders/replay, reconciliation, idempotent re-run, tenant isolation. **Regression set**: all M1 suites + the above.
-- **Acceptance**: 🔺 CDC and tenant-isolation suites green · reconciliation equation holds per batch · content hash identical on re-run · no raw PII in Silver.
+- **Acceptance**: 🔺 CDC and tenant-isolation suites green · reconciliation equation holds per batch · content hash identical on re-run · no raw email/phone in Silver (first/last name are kept in Silver and never selected into staging or Gold).
 - **Demo**: inject the six CDC scenarios → query Silver/SCD2 → run the leaky fixture and show the failing assertion → reconciliation report.
 
 ### Week 4 — Gold and orchestration
@@ -284,7 +284,7 @@ Branching: one short-lived branch per day or task group (`feat/w1-contracts`, `f
 | | |
 |---|---|
 | Objective | One parametrised, re-runnable pipeline |
-| Work | W4.D22.1 Airflow 3.x image (Python 3.11, Java 17, Spark client) in the `orchestration` profile · W4.D22.2 DAG `lakehouse_pipeline`: per-brand landing check (`.expand`) → bronze → silver jobs → reconcile gate → `dbt build`; retries, timeouts, `max_active_runs=1` · W4.D22.3 ADR-0010 (orchestration ↔ compute interface: SparkSubmit locally, EMR Serverless operator on AWS) |
+| Work | W4.D22.1 Airflow 3.x image (Python 3.11, Java 17, Spark client) in the `orchestration` profile · W4.D22.2 DAG `lakehouse_pipeline`: per-brand landing check (`.expand`) → bronze → silver jobs → reconcile gate → `dbt build`; retries, timeouts, `max_active_runs=1` · W4.D22.3 ADR-0010 (orchestration ↔ compute interface: SparkSubmit locally, AWS Glue job operator on AWS; ADR-0011 supersedes EMR Serverless; Airflow pins and memory: D-098) |
 | Learn | Airflow 3 task SDK, dynamic task mapping, idempotent tasks |
 | Verify | `airflow dags test lakehouse_pipeline <date>` · UI run green |
 | Depends / blockers | Memory: `core` + `orchestration` together on 7.6 GB Docker — stop the `sql` profile while Airflow runs |
@@ -308,7 +308,7 @@ Branching: one short-lived branch per day or task group (`feat/w1-contracts`, `f
 - **Integration tests**: dbt build, DAG run, failure isolation, backfill idempotency. **Regression set**: all suites + `run_e2e.py`.
 
 ### M2 milestone review and demo
-- **Acceptance**: 🔺 CDC (6 scenarios) and tenant isolation (incl. negative) green · SCD2 order-independent · reconciliation per batch matches manifest · re-run hash identical · `dbt build` 100% tests incl. composite relationships and cross-tenant test · RFM non-degenerate per brand · no raw PII in Silver/Gold · DAG run + failure isolation + gate + alert evidenced · ADR-0003/0004/0005/0010 written.
+- **Acceptance**: 🔺 CDC (6 scenarios) and tenant isolation (incl. negative) green · SCD2 order-independent · reconciliation per batch matches manifest · re-run hash identical · `dbt build` 100% tests incl. composite relationships and cross-tenant test · RFM non-degenerate per brand · no raw email/phone in Silver (HMAC token / last-4 mask; first/last name stay in Silver, never selected downstream) and no raw PII column in staging or Gold (`assert_no_raw_pii_columns`) · DAG run + landing-check failure isolation + DLQ-rate gate + alert evidenced (Bronze/Silver jobs are shared across brands, not isolated) · ADR-0003/0004/0005/0010 written.
 - **Demo** (`m2-correctness-demo.md`, ≤ 20 min): `run_e2e.py` → CDC scenarios → SCD2 history → leaky-join negative test → dbt docs lineage → Customer 360/RFM per brand → Airflow run with one failing brand.
 - **Claimable**: sequence-ordered CDC and order-independent SCD2, proven by tests; tested tenant isolation; reproducible marts. **Not claimable**: legal GDPR compliance, performance at scale, cloud.
 

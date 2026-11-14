@@ -19,7 +19,7 @@
 | 1 | Docker'a daha fazla bellek ver, yeniden başlat | 5 dk | **önce bu** |
 | 2 | `.env`'e eksik anahtarları ekle, Airflow'u yeniden başlat | 5 dk | 1'den hemen sonra |
 | 3 | ~~Bana "Docker hazır" yaz~~ ✅ yapıldı (backfill 1 passed) | — | — |
-| 4 | Uçtan uca pipeline'ı `land` dahil koş (**M2 için zorunlu**) | 30 dk | ben "Adım 4'e geç" dediğimde |
+| 4 | Uçtan uca pipeline'ı `land` dahil koş (**M2 için zorunlu**) | 30 dk | **şimdi** (stack açık) |
 | 4b | Öğrenme kapıları W1–W4 (**M2 için zorunlu**) | 4 × 20 dk | istediğin zaman, 5'ten önce |
 | 5 | `v0.2.0` etiketi (**M2'nin son adımı**) | 2 dk | ben "M2 hazır, etiketle" dediğimde |
 | 6 | AWS 1. gün: hesap + araçlar + bootstrap | 45 dk | istediğin zaman |
@@ -85,12 +85,12 @@ koşullar sağlanırsa merge ederim. Bu sırada Docker'a dokunma (bilgisayarı k
 
 ## Adım 4 — Uçtan uca pipeline (`land` dahil)
 
-**Ne zaman**: ben "backfill bitti" dediğimde. **Neden**: `land` adımı yerel S3 (SeaweedFS) şifresini
+**Ne zaman**: şimdi yapılabilir (backfill ve DAG testleri bitti). **Neden**: `land` adımı yerel S3 (SeaweedFS) şifresini
 istiyor; ben `.env` okuyamam, bu yüzden senin terminalinde koşmalı.
 
 ```powershell
-# 4a) run_e2e.py bu dalda:
-git switch feat/w5-aws-foundation
+# 4a) M2'nin son dalı (PR #19):
+git switch feat/w4-d24-e2e-contracts
 .\.venv\Scripts\Activate.ps1
 docker compose --profile core --profile sql up -d
 

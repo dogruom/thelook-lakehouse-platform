@@ -15,7 +15,7 @@
 
 - **Updated**: 2026-11-14 late (W4.D22 + W4.D23 closed and merged; M2 release in progress) · **Branches**: `main` @ `ec0fa66` (PR #21 merged, D-032) → `feat/w4-d24-e2e-contracts` (`7c516d4`, PR #19, `main` merged in) → `feat/w5-aws-foundation` (this file, PR #20) · `feat/w5-glue-dag` (`2653536`)
 - **Last delivered**: W4.D22.1–.3 ✅, W4.D23.1–.4 ✅ (backfill 1 passed; isolation + gate ITs 7 passed @ `8e5172d`; live threshold alerts with brand); fixes `edf1b95` (retries), `cbf780e` (alert reason, D-107), `8e5172d` (dbt env without secrets, D-108); D24: Gold PII guard `fb51ddf` (PASS, negative FAIL 5), run_e2e/DAG parity `7c516d4`, M2 wording D-109. Reviews: code APPROVE WITH NITS; M2 milestone APPROVE WITH NITS (conditional, M-1/M-1b done, M-2 = evidence on the merged tree); security review: no findings; day-close audit D22/D23 PASS WITH NOTES.
-- **Unfinished (M2)**: full `dbt build` + unit on the merged D22→D24 tree (running); W4.D24.1 full e2e with `land` (**owner**, OWNER_ACTIONS step 4); PR #19 merge; M2 checkpoint (reviewer + auditor) → W4.D24.3; tutor gates W1–W4 (**owner**, step 4b); `v0.2.0` (**owner**, step 5).
+- **Unfinished (M2)**: W4.D24.1 full e2e with `land` (**owner**, OWNER_ACTIONS step 4); PR #19 merge; M2 checkpoint (reviewer + auditor) → W4.D24.3; tutor gates W1–W4 (**owner**, step 4b); `v0.2.0` (**owner**, step 5).
 - **Tests & results**: unit 1776 passed / 1 skipped, coverage 81.81 % (D22 @ `5dcd420`); orchestration unit 95 passed @ `8e5172d`; Spark 571 passed (`e8cb9b9`); integration CI 127 passed / 6 skipped; DAG ITs 1 + 7 passed (local).
 - **Owner action**: [OWNER_ACTIONS.md](OWNER_ACTIONS.md) steps 4, 4b, 5 for M2; 6–9 for the cloud weeks.
 - **Stack**: core + sql + orchestration up on a 10.4 GB Docker VM; Thrift Server restarted once (host connections were dropped with `TSocket read 0 bytes`).
@@ -50,7 +50,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 
 ```
 M1 (D1–D12)   [████████████████████] 37 / 37
-M2 (D13–D24)  [██████████████░░░░░░] 27 / 37
+M2 (D13–D24)  [███████████████████░] 35 / 37
 M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 36
 ```
 
@@ -301,7 +301,7 @@ Evidence:
 | W4.D23.3 | Alert payload | JSON webhook payload on failure/threshold | payload in logs | ✅ `cbf780e` — threshold: `ALERT_PAYLOAD {"brand_id":"brand_beta","kind":"threshold","reason":"dlq_rate_breach brand_id=brand_beta: …","task_id":"dlq_rate_gate",…}` for alpha/beta/gamma in run `manual__2026-11-14T16:56:05`; failure: `ALERT_PAYLOAD {"kind":"failure",…}` (2026-11-14). The first breach run alerted `kind=failure`, `brand_id=null`: Airflow 3.0.6 `dags test` omits `exception` from the callback context → `_fail()` records the reason in the task context (D-107); asserted by `test_dag_failure_isolation.py::test_the_failed_brand_raises_one_failure_alert` and `test_dag_dlq_gate.py::test_each_breach_emits_one_threshold_alert_with_its_brand` (7 passed @ `8e5172d`) |
 | W4.D23.4 | Idempotent backfill | past interval re-run → identical hashes | test output | ✅ `edf1b95` — `pytest tests/integration/test_backfill_idempotent.py -q` → **1 passed in 3922 s** (2026-11-14, D22 branch @ `5dcd420`, Docker VM 10.4 GB): run `manual__2026-11-14T16:03:16` executed twice for logical date 2026-01-03, both `success` with `bronze_stream`, `dlq_gate`, `silver_orders`, `reconcile`, `dbt_build` executed; `content_hash` of 6 Silver tables and row counts identical; max try_number 1 (no retry needed). Attempts 1–5 lost to Docker failures / the retry bug (D-106) |
 | W4.D24.1 | One-command e2e | `python scripts/run_e2e.py` green | output | 🔄 `80d62da` (processing chain green; full run incl. `land` = owner) |
-| W4.D24.2 | Full regression | all suites green | outputs + CI | 🔄 unit ✅ (1776 passed / 1 skipped, cov 81.81 %, D22 @ `5dcd420`) · Spark ✅ `571 passed in 2936s` (`e8cb9b9`) · integration ✅ CI 43580122008 (127 passed / 6 skipped) · DAG ✅ backfill 1 passed + isolation/gate 7 passed · dbt PII guard PASS (`fb51ddf`) · pending: full `dbt build` and unit run on the merged D22 → D24 tree |
+| W4.D24.2 | Full regression | all suites green | outputs + CI | ✅ merged D22 → D24 tree (`7c516d4`, 2026-11-14): unit **1789 passed / 1 skipped**, coverage 81.82 %, mypy clean, import-linter 2 kept, ruff clean · `dbt build --select staging marts` → **PASS=149 WARN=0 ERROR=0** (9 tables, 6 views, 130 data tests incl. `assert_no_raw_pii_columns`, 4 unit tests) · Spark `571 passed in 2936s` (`e8cb9b9`) · integration CI 43580122008 (127 passed / 6 skipped) · DAG ITs backfill 1 passed + isolation/gate 7 passed @ `8e5172d` |
 | W4.D24.3 | M2 review + tag | runbook, reviewer APPROVE, auditor PASS, `v0.2.0` (owner) | `checkpoint milestone M2` | 🔄 runbook `16937d6` ([m2-correctness-demo.md](runbooks/m2-correctness-demo.md)); review + auditor wait for W4.D23.4 and the owner's full e2e (W4.D24.1); `v0.2.0` = owner |
 | W4.D24.4 | dbt contracts | enforced where the adapter supports it, else documented alternative | `dbt build` | ✅ `790b2cc` |
 
