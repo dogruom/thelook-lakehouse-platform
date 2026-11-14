@@ -77,6 +77,9 @@ state. This is an "idempotent outcome" of at-least-once ingestion, not exactly-o
 - Switching to Glue changes one adapter (how a job is started and how its result is read), not the
   DAG structure, the gates or the alert contract.
 
+## Cloud variant (W5.D30)
+`dags/lakehouse_glue.py` (DAG `lakehouse_glue`, manual only, no schedule) is the AWS row of the table above: one `GlueJobOperator` per job of `lakehouse.orchestration.cloud.CLOUD_JOBS`, started in sequence with `wait_for_completion=True`. It starts the *existing* Terraform-managed job `<glue_prefix>-<job>` and passes only `job_name` and `script_args` (`--lakehouse_args` = JSON list of strings), never `script_location` or an IAM role, so the operator does not create or update jobs. Credentials come from the `aws_default` connection supplied by the owner's environment (for example `AIRFLOW_CONN_AWS_DEFAULT` or short-lived env credentials), never from code. The chain has no `bronze_stream` (D-101), landing check or dbt build (D-104); a real run needs an applied environment and is not yet verified.
+
 ## Alternatives rejected
 - `SparkSubmitOperator` / `DockerOperator`: a provider plus an Airflow connection, or the Docker
   socket inside a container, for no gain over the existing job interface.
