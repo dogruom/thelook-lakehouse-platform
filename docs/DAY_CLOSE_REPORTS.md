@@ -1,11 +1,75 @@
 # Day Close Reports
 
 > **Document Version**: 1.0
-> **Last Updated**: 2026-11-13
+> **Last Updated**: 2026-11-18
 > **Purpose**: one readable report per planned day (newest first), written by the `checkpoint` skill.
 > Raw evidence lives in [PROGRESS.md](PROGRESS.md), the per-session file trace in
 > [SESSION_LOG.md](SESSION_LOG.md), the reasons in [DECISION_LOG.md](DECISION_LOG.md).
 > Days W1.D1–W1.D3 closed before this log existed; their evidence is in PROGRESS and SESSION_LOG.
+
+---
+
+## W5 · AWS foundation — week gate partial, 2026-11-18 (autonomous session, owner away)
+
+**Executive summary.** Everything in Week 5 that does not need AWS is implemented and verified locally or in CI (the rows still 🔄 in PROGRESS each name the AWS step they wait for): the cloud DAG is merged and runs its guards in the Airflow container, a security re-review of the whole cloud surface found three real issues that are now fixed and re-approved, and the Terraform modules carry offline tests that assert the security- and cost-relevant settings in CI. Nothing has run on AWS yet; the week's acceptance (cloud reconcile, tenant denial, deploy run, spend, teardown) waits for one owner cloud day ([OWNER_ACTIONS.md](OWNER_ACTIONS.md), table "Onay bekleyenler").
+
+- **Delivered**: W5.D26.2 ✅ (identity, security review APPROVE WITH NITS) · W5.D30.2 ✅ (runbook dry-runs) · progressed, still 🔄: W5.D25.2/.3, D26.1/.3 (offline `terraform test`), D27.1 (wheel built locally), D28.3 (row 5), D29.2 (workflow hardened), D30.1 (local run), D30.4 (container parse + negative runs). Unchanged ✅: W5.D25.4, W5.D29.1. Owner-only: W5.D25.1, D27.2, D27.3, D28.1, D28.2, D28.4, D30.3.
+- **Evidence**:
+  - Commits on `feat/w5-aws-foundation`: `e0b84c0` (merge of `feat/w5-glue-dag`), `c79a533` (Glue DAG alert reason), `223b8f2` (terraform tests), `bdc700d` (review fixes, D-110), `ad3e580` (nits, mocks).
+  - CI [44383228612](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/44383228612) @ `ad3e580`: all 5 jobs green; `terraform test` storage 7, catalog 3, identity 7, compute 2, bootstrap 3 passed (mocked AWS provider, `command = plan`); `terraform validate` ×2, tflint, trivy HIGH/CRITICAL clean.
+  - Unit: `pytest tests/unit` 1997 passed / 1 skipped, coverage 82.27 % (local @ `bdc700d`); 2001 passed, 82.25 % in CI @ `ad3e580`; orchestration + scripts 357 passed (`ad3e580`); ruff, mypy (82 files), import-linter 2 kept.
+  - Airflow container: DagBag 0 import errors (`lakehouse_glue` 12 tasks, `lakehouse_pipeline` 15). `airflow dags test lakehouse_glue` with bucket `Not_A_Valid_Bucket` and, separately, with the container's SeaweedFS `AWS_ENDPOINT_URL` → `validate_params` failed, 11 tasks `upstream_failed`, alert payload carries the real reason; no AWS call.
+  - `submit_job.py metrics_report --output-uri s3a://lakehouse/ops/reports` → `job.succeeded` in 91 s (12 rows, 4 batch tables, 0 reconcile mismatches).
+  - Wheel: `build_artifacts.py --no-upload` → `dist/cloud/ad3e58070c9b/` (1 wheel, 82 modules + 4 contract JSON, no tests, SHA-256 manifest); installs and imports in a clean Python 3.11 venv.
+- **Runbook dry-run notes (W5.D30.2)**:
+  - *Replay* (local, steps 1–4): before = per brand 2 retryable + 3 non-retryable `PENDING`; `replay --table orders --brand brand_alpha` → candidates 2, recovered 0, `FAILED_AGAIN` 2; all brands → candidates 6, `FAILED_AGAIN` 6; `reconcile` `job.succeeded`; after = retryable rows `FAILED_AGAIN` (alpha count 2, beta/gamma 1), non-retryable untouched. Recovered 0 because the synthetic orphans' parents never arrive; the recovery path is covered by the Spark replay tests.
+  - *Checkpoint recovery* (Steps B, isolated namespace `rbdry_20261118`): lineage 1 → 6936 / 10400 rows; new `--checkpoint-namespace rbdry_20261118_recovery` → 13872 / 20800 rows, `distinct_source_refs` unchanged (6936 / 10400), `distinct_lineages` 2, every partition gap-free — exactly the runbook's expectation.
+  - *Incident triage* (local sections): `dlq_report --list-refs` ok (476 customer DLQ rows by code/brand); `kafka-get-offsets` end offsets 2587/2277/2072 = Bronze max offset + 1 per partition; no stray driver. *Teardown*: AWS commands not executed; job list, `force_destroy_data`, `run_job.py` flags and `gold_*` schema names cross-checked against Terraform and code; `WAITING` added to the active states.
+- **Reviews / audit**: security re-review (reviewer, `security` + `data`) CHANGES REQUIRED — MAJOR 1 `pip wheel` with build isolation ran after the deploy role was assumed; MAJOR 2 single writer was only per Glue job although several jobs write `ops.pipeline_metrics`; MAJOR 3 the Airflow scheduler's SeaweedFS endpoint would capture Glue calls → fixed in `bdc700d` → diff re-check **APPROVE WITH NITS** → 5 nits applied in `ad3e580`. Week evidence audit (evidence-auditor): **PASS WITH NOTES** — no unsupported ✅; missing commit hashes on W5.D25.4/D30.2 and the summary wording fixed; DagBag/negative runs, dry-run counts and the review verdict accepted on the report's word (not re-run by the auditor).
+- **Decisions**: D-110 (single-writer check, build before credentials, endpoint guard, bucket rule, root principal accepted, offline terraform tests).
+- **Found during the week close**:
+  - `docker compose --profile sql stop` (in the replay and triage runbooks) also stopped Postgres, SeaweedFS, Spark and Airflow; the runbooks now name the service (`stop spark-thrift`).
+  - The Glue DAG repeated the D-107 bug (alert without reason under `dags test`); fixed with the same `_fail()` pattern and pinned by AST tests.
+  - A strict `owner_principal_arn` (no `:root`) would block the documented root + MFA `aws login` path; root accepted, STS ARNs converted in OWNER_ACTIONS 7a (D-110).
+  - Terraform mock providers: overrides need `override_during = plan`; `aws_iam_policy_document.json` needs a valid mocked JSON, or IAM resources reject the plan.
+- **Not verified / limitations**: nothing ran on AWS — no `terraform plan`/`apply`, Glue run, Athena query, IAM denial, deploy workflow, spend or teardown. Offline tests check configuration, not AWS behaviour. The active-run check is not a lock (gap between DAG tasks). The wheel's runtime dependencies are installed unpinned on Glue (accepted residual risk). Week regression: Spark suite `docker compose --profile tools run --rm spark-test pytest tests/spark -q` → **571 passed in 2141 s** (tree @ `29fee89`/`4ae365f`, 2026-11-18).
+- **Carry-overs**: owner cloud day (OWNER_ACTIONS 6–8) → then W5.D25.1–D30.4 evidence and the W5 gate; M2 items unchanged (OWNER_ACTIONS 4, 4b, 5).
+- **Learning queued**: `terraform test` with mock providers and plan-time unknowns; OIDC trust `sub` for environments; why third-party build code must not run with cloud credentials; Delta on S3 without put-if-absent (single writer by convention + check); botocore `AWS_ENDPOINT_URL*` precedence.
+- **Merge status**: PR #20 not merged — W5 days are not closed without cloud evidence (D-032 condition). Branch pushed; CI `ci` green at `ad3e580`.
+
+---
+
+## W4.D23 · Failure isolation, quality gates, alerting, backfill — closed 2026-11-14
+
+**Executive summary.** The Airflow pipeline now proves its operational behaviour on a running Airflow 3.0.6: one failing brand does not block the others, a DLQ-rate breach stops Gold from being built, both failure and threshold alerts carry their brand, and re-running a past interval leaves Silver byte-identical. Two real defects were found by these runs and fixed.
+
+- **Delivered**: W4.D23.1 ✅ (failure isolation) · W4.D23.2 ✅ (DLQ-rate gate halts `dbt_build`) · W4.D23.3 ✅ (failure + threshold alert payloads) · W4.D23.4 ✅ (idempotent backfill)
+- **Evidence**:
+  - `test_backfill_idempotent.py` → 1 passed in 3922 s (run `manual__2026-11-14T16:03:16` executed twice for 2026-01-03; `content_hash` of 6 Silver tables and row counts identical; max try 1).
+  - `test_dag_failure_isolation.py` + new `test_dag_dlq_gate.py` → 7 passed in 2561 s @ `8e5172d`.
+  - Live breach runs (`max_dlq_rate = 0`): all three gates failed, `dbt_build` upstream_failed, run red; `ALERT_PAYLOAD {"kind":"threshold","brand_id":"brand_alpha|beta|gamma",...}`.
+- **Reviews / audit**: code review APPROVE WITH NITS (no must-fix); M2 milestone review APPROVE WITH NITS (conditional) — its D22/D23 should-fix items applied (`8e5172d`); security review: no findings; day-close audit: see merge status.
+- **Decisions**: D-106 (Spark retries effective; gates never retried), D-107 (failure reason recorded in the task context), D-108 (dbt gets no secrets; cumulative DLQ rate; timeout trade-off; gate/alert ITs).
+- **Found during the day**:
+  - `spark_job` raised `AirflowFailException`, which skips retries → `SPARK_RETRIES = 1` never applied; a stalled executor failed the whole backfill run (`edf1b95`).
+  - Airflow 3.0.6 `dags test` omits `exception` from the failure-callback context → threshold alerts came out as `kind=failure`, `brand_id=null` (probed in the container; `cbf780e`).
+  - The dbt subprocess inherited `PII_HMAC_KEY` and the S3 keys (`8e5172d`).
+  - Docker Desktop on a 7.6 GB VM failed four times; the owner raised it to 10.4 GB, after which every long run passed.
+- **Not verified / limitations**: a retry has never been observed executing (AST-pinned only); isolation covers the landing check and the gate — Bronze/Silver jobs are shared across brands; DLQ rate is cumulative, threshold uncalibrated (D-099); DAG evidence is local and manual (CI skips the Airflow tests).
+- **Learning queued**: `AirflowFailException` vs `AirflowException`, trigger rules `all_done` / `one_failed`, why retries need idempotent tasks, cumulative vs per-batch quality rates.
+- **Merge status**: merged 2026-11-14 as `ec0fa66` (PR #21; CI 6/6 green, code review APPROVE WITH NITS, day-close audit PASS WITH NOTES, D-032).
+
+---
+
+## W4.D22 · Airflow 3 pipeline — closed 2026-11-14
+
+**Executive summary.** Airflow 3.0.6 runs the whole local pipeline as one parametrised DAG: per-brand landing checks, the Spark Bronze → DLQ → Silver → reconcile chain, per-brand quality gates and `dbt build`. It ran green end to end three times.
+
+- **Delivered**: W4.D22.1 ✅ (image `crm/airflow:3.0.6`) · W4.D22.2 ✅ (`lakehouse_pipeline`) · W4.D22.3 ✅ (ADR-0010 Accepted)
+- **Evidence**: Airflow 3.0.6, Python 3.11.13, Java 17.0.21, spark-submit 3.5.9, dbt 1.12.6; `dags list-import-errors` → none; runs `manual__2026-11-14T12:37:44`, `…T13:31:39`, `…T16:03:16` green incl. `dbt_build`; unit 1776 passed / 1 skipped, coverage 81.81 %; mypy clean; import-linter 2 kept; CI of PR #21 green.
+- **Decisions**: D-098, D-099 (earlier), D-106.
+- **Not verified / limitations**: the cloud variant (Glue operators) is on `feat/w5-glue-dag`, not run; memory limits per service are estimates.
+- **Next day**: W4.D23 (same session).
 
 ---
 
@@ -33,7 +97,7 @@
 - **Risks**: coverage headroom ≈ 0.32 pt (V-24).
 - **Learning queued**: OBT vs star schema, reproducible metrics (`as_of_date`), NTILE and ties, dbt unit tests vs data tests.
 - **Next day**: W4.D22 — Airflow 3 image (owner approves the build), `lakehouse_pipeline` DAG, ADR-0010.
-- **Merge status**: pending (PR, CI, merge recorded after the merge).
+- **Merge status**: merged 2026-11-13 as `dbb1b8e` (PR #18; CI 6/6 green, review APPROVE WITH NITS with fixes, audit PASS after 2 fixes, D-032).
 
 ---
 

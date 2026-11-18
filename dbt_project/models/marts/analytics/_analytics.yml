@@ -1,7 +1,8 @@
 version: 2
 
 # Gold analytics products (dbt-owned, Delta tables in gold_marts; tenant views in gold_tenant).
-# Both are reproducible for a given var('as_of_date') (D-097).
+# Both are reproducible for a given var('as_of_date') (D-097). Model contracts (names + types)
+# enforced on both (W4.D24.4); NOT NULL stays a data test on Delta (ADR-0004 C7, V-14).
 models:
   - name: obt_customer_360
     description: >
@@ -9,18 +10,24 @@ models:
       customer attributes (privacy columns only) plus order and session metrics up to the end of
       var('as_of_date'). Valid orders = completed + pending; cancelled and returned orders are
       counted but excluded from revenue. Same as_of_date and inputs give identical output.
+    config:
+      contract:
+        enforced: true
     data_tests:
       - unique_combination_of_columns:
           arguments:
             columns: [brand_id, customer_id]
     columns:
       - name: customer_sk
+        data_type: string
         description: Surrogate key = hash(brand_id, customer_id); equals dim_customers.customer_sk.
         data_tests: [unique, not_null]
       - name: brand_id
+        data_type: string
         description: Tenant id.
         data_tests: [not_null]
       - name: customer_id
+        data_type: string
         description: Customer id, unique only within a brand.
         data_tests:
           - not_null
@@ -29,53 +36,76 @@ models:
                 to: ref('dim_customers')
                 field: customer_id
       - name: email_token
+        data_type: string
         description: HMAC-SHA256 pseudonym of the email (no raw email in Gold).
       - name: city
+        data_type: string
         description: City (current state).
       - name: country
+        data_type: string
         description: Country (current state).
       - name: loyalty_tier
+        data_type: string
         description: Loyalty tier (current state).
       - name: signup_date
+        data_type: date
         description: Signup date.
       - name: is_deleted
+        data_type: boolean
         description: True for tombstoned customers (PII already nulled in Silver).
       - name: tenure_days
+        data_type: int
         description: Days from signup_date to as_of_date; negative if the signup is after as_of_date (not clamped).
       - name: order_count
+        data_type: int
         description: All orders up to as_of_date, any status.
         data_tests: [not_null]
       - name: frequency_orders
+        data_type: int
         description: Valid orders (completed + pending) up to as_of_date.
         data_tests: [not_null]
       - name: cancelled_order_count
+        data_type: int
         description: Cancelled orders up to as_of_date.
       - name: returned_order_count
+        data_type: int
         description: Returned orders up to as_of_date.
       - name: monetary_total_spend
+        data_type: decimal(12,2)
         description: Sum of net_amount over valid orders, decimal(12,2).
         data_tests: [not_null]
       - name: avg_order_value
+        data_type: decimal(10,2)
         description: monetary_total_spend / frequency_orders, decimal(10,2); null without valid orders.
       - name: first_order_ts
+        data_type: timestamp
         description: First order of any status (UTC).
       - name: last_order_ts
+        data_type: timestamp
         description: Last valid order (UTC), the recency anchor; null without valid orders.
       - name: recency_days
+        data_type: int
         description: Days from the date of last_order_ts to as_of_date; null without valid orders.
       - name: recency_hours
+        data_type: bigint
         description: Whole hours (truncated, macro whole_hours_between) from last_order_ts to the end of as_of_date; the RFM recency input.
       - name: session_count
+        data_type: int
         description: Identified sessions of the customer up to as_of_date.
       - name: converted_session_count
+        data_type: int
         description: Identified sessions with at least one purchase event.
       - name: total_page_views
+        data_type: int
         description: Page views over identified sessions.
       - name: total_cart_additions
+        data_type: int
         description: add_to_cart events over identified sessions (high-intent interactions).
       - name: last_session_at
+        data_type: timestamp
         description: Start of the latest identified session (UTC).
       - name: as_of_date
+        data_type: date
         description: The var('as_of_date') the row was computed for.
         data_tests: [not_null]
 
@@ -85,18 +115,24 @@ models:
       least one valid order. Recency (hours), frequency (valid orders) and monetary (net revenue)
       are scored 1..5 with NTILE(5) PER BRAND, ties broken by customer_id; the segment comes from
       the rfm_segment macro. Reproducible for a given as_of_date.
+    config:
+      contract:
+        enforced: true
     data_tests:
       - unique_combination_of_columns:
           arguments:
             columns: [brand_id, customer_id]
     columns:
       - name: customer_sk
+        data_type: string
         description: Surrogate key = hash(brand_id, customer_id).
         data_tests: [unique, not_null]
       - name: brand_id
+        data_type: string
         description: Tenant id; the NTILE partition.
         data_tests: [not_null]
       - name: customer_id
+        data_type: string
         description: Customer id.
         data_tests:
           - not_null
@@ -105,13 +141,17 @@ models:
                 to: ref('obt_customer_360')
                 field: customer_id
       - name: recency_hours
+        data_type: bigint
         description: Hours since the last valid order (lower = more recent).
         data_tests: [not_null]
       - name: frequency
+        data_type: int
         description: Valid orders.
       - name: monetary
+        data_type: decimal(12,2)
         description: Net revenue of valid orders.
       - name: r_score
+        data_type: int
         description: Recency quintile per brand (5 = most recent).
         data_tests:
           - accepted_values:
@@ -119,6 +159,7 @@ models:
                 values: [1, 2, 3, 4, 5]
                 quote: false
       - name: f_score
+        data_type: int
         description: Frequency quintile per brand (5 = most orders).
         data_tests:
           - accepted_values:
@@ -126,6 +167,7 @@ models:
                 values: [1, 2, 3, 4, 5]
                 quote: false
       - name: m_score
+        data_type: int
         description: Monetary quintile per brand (5 = highest revenue).
         data_tests:
           - accepted_values:
@@ -133,9 +175,11 @@ models:
                 values: [1, 2, 3, 4, 5]
                 quote: false
       - name: rfm_score
+        data_type: string
         description: Composite 'r-f-m', e.g. '5-5-4'.
         data_tests: [not_null]
       - name: rfm_segment
+        data_type: string
         description: champions, loyal, promising, at_risk or hibernating (rfm_segment macro).
         data_tests:
           - not_null
@@ -143,6 +187,7 @@ models:
               arguments:
                 values: [champions, loyal, promising, at_risk, hibernating]
       - name: as_of_date
+        data_type: date
         description: The var('as_of_date') the row was computed for.
 
 unit_tests:

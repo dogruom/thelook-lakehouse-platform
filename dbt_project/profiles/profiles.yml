@@ -12,3 +12,19 @@ crm_lakehouse:
       threads: 1
       connect_retries: 3
       connect_timeout: 30
+    # AWS Athena (engine v3) target for the same Gold marts (D-093, W5.D28.4). No credentials here:
+    # boto3's default chain (owner SSO/MFA login locally, GitHub OIDC role in CI). The staging dir is
+    # required on purpose (no default) so a run can never write to an unintended bucket; `dbt parse`
+    # only needs the variable to render, it never connects. Silver is read from the Athena-native
+    # Delta registrations in `athena_silver` (D-104; macro register_athena_silver).
+    athena:
+      type: athena
+      s3_staging_dir: "{{ env_var('DBT_ATHENA_S3_STAGING_DIR') }}"
+      # Gold tables live under gold/ (no lifecycle rule); athena-results/ expires after 7 days.
+      s3_data_dir: "{{ env_var('DBT_ATHENA_S3_DATA_DIR') }}"
+      s3_data_naming: schema_table
+      region_name: "{{ env_var('DBT_ATHENA_REGION', 'eu-central-1') }}"
+      work_group: "{{ env_var('DBT_ATHENA_WORKGROUP', 'crm-lakehouse-dev') }}"
+      database: awsdatacatalog
+      schema: gold
+      threads: 2

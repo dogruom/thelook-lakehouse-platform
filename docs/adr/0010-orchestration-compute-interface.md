@@ -29,7 +29,7 @@ component `lakehouse.orchestration`, which imports only `contracts` (enforced by
 | Environment | How a job is started | Status |
 |---|---|---|
 | Local | `spark-submit --deploy-mode client` from the Airflow scheduler container to `spark://spark-master:7077`; code shipped as the content-addressed `lakehouse_app-<sha12>.zip` (same digest as `scripts/submit_job.py`); exit code and JSON log read from the process | code written, unverified |
-| AWS (W5) | `GlueJobOperator` (Amazon provider) starts the same job name with the same arguments; Glue run state replaces the exit code, the CloudWatch log replaces stdout | planned, not built |
+| AWS (W5) | `GlueJobOperator` (Amazon provider) starts the same job name with the same arguments; Glue run state replaces the exit code, the CloudWatch log replaces stdout | built (`lakehouse_glue`, see "Cloud variant" below); not yet run on AWS |
 
 Only the local row is implemented in W4. The AWS row is the intended adapter behind the same
 function boundary, not a claim that the DAG already runs on Glue.
@@ -76,6 +76,9 @@ state. This is an "idempotent outcome" of at-least-once ingestion, not exactly-o
   are the checks; they skip when the Airflow container is not running.
 - Switching to Glue changes one adapter (how a job is started and how its result is read), not the
   DAG structure, the gates or the alert contract.
+
+## Cloud variant (W5.D30)
+`dags/lakehouse_glue.py` (DAG `lakehouse_glue`, manual only, no schedule) is the AWS row of the table above: one `GlueJobOperator` per job of `lakehouse.orchestration.cloud.CLOUD_JOBS`, started in sequence with `wait_for_completion=True`. It starts the *existing* Terraform-managed job `<glue_prefix>-<job>` and passes only `job_name` and `script_args` (`--lakehouse_args` = JSON list of strings), never `script_location` or an IAM role, so the operator does not create or update jobs. Credentials come from the `aws_default` connection supplied by the owner's environment (for example `AIRFLOW_CONN_AWS_DEFAULT` or short-lived env credentials), never from code. The chain has no `bronze_stream` (D-101), landing check or dbt build (D-104); a real run needs an applied environment and is not yet verified.
 
 ## Alternatives rejected
 - `SparkSubmitOperator` / `DockerOperator`: a provider plus an Airflow connection, or the Docker

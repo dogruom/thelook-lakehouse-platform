@@ -11,5 +11,5 @@ select
     discount_amount,
     net_amount,
     sales_channel,
-    _updated_at as silver_updated_at
+    {{ adapter.quote('_updated_at') }} as silver_updated_at
 from {{ source('silver', 'orders') }}

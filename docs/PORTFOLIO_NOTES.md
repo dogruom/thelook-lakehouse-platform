@@ -50,6 +50,9 @@ Competency tags: **DE** = Senior Data Engineer · **ARCH** = Data Architect.
 | Multi-tenant referential tests | FK tests anti-join on `(brand_id, key)`, never on the key alone; negative fixtures as `VALUES` views behind a var | a custom test to maintain vs a built-in test that passes when an order points at another tenant's customer; seeds rejected because dbt-spark seeds leave S3 locations behind on drop | D-089; `test_dbt_tenant_tests.py` |
 | Gold keys and portability | surrogate keys hashed from `(brand_id, natural key)` instead of looked up from dimensions; engine-specific SQL only behind `adapter.dispatch` | facts build in any order and keys never collide across tenants vs hash keys whose text form is engine-specific (Athena branch untested until W5.D28.4) | D-095, `assert_marts_reconcile_to_staging` |
 | Cloud cost | serverless, ephemeral, budget-tracked | always-on convenience vs cost; measured spend per run | ADR-0008, ADR-0011 |
+| CI credentials hygiene | build and install before assuming the OIDC role; only a hash-checked upload and the Glue calls run with the 1-hour credentials | two workflow steps and a manifest vs PyPI build dependencies running with cloud credentials (found in review) | D-110; `bdc700d` (cloud run pending) |
+| Delta on S3 without put-if-absent | serial by convention + a start-time check over all job runs (several jobs write one metrics table); no DynamoDB LogStore | a non-atomic check vs an extra paid service; per-job concurrency 1 alone was not enough | D-103 → D-110 |
+| IaC tests without a cloud account | `terraform test` with a mocked AWS provider asserts IAM conditions, S3 hardening, Glue limits and budgets in CI | proves configuration, not AWS behaviour; plan-time unknowns need `override_during = plan` | CI 44383228612 (22 passed) |
 
 ## 3. Drafts (not yet verified — never copy to README before evidence exists)
 

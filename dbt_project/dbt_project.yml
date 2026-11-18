@@ -26,11 +26,23 @@ vars:
   as_of_date: "2026-01-02"
   # Tenants that get gold_tenant.<model>__<brand> views (macro tenant_scoped_views, W4.D21.3).
   tenant_brands: [brand_alpha, brand_beta, brand_gamma]
+  # Athena target only (D-104): S3 root of the Silver Delta tables, e.g.
+  # s3://crm-lakehouse-dev-<account_id>/silver. Used by `dbt run-operation register_athena_silver`;
+  # the macro refuses to run while it is unset. Pass with --vars '{athena_silver_root: s3://...}'.
+  athena_silver_root: ""
 
 models:
   crm_lakehouse:
+    # Storage format is per target (D-093, W5.D28.4). Spark: Delta (ADR-0004). Athena: Hive-style
+    # external tables with Parquet files (dbt-athena's default table_type) - the fewest moving
+    # parts: no Iceberg metadata, no merge/optimize housekeeping, every Gold mart is a full-refresh
+    # `table`. `file_format` is read only by dbt-spark; `table_type` / `format` only by dbt-athena.
     +file_format: delta
+    +table_type: hive
+    +format: parquet
     spike:
+      # The W2.D11 capability spike (Delta merge, Thrift contract probes) is Spark-only.
+      +enabled: "{{ target.type == 'spark' }}"
       +schema: spike
       +persist_docs:
         relation: true
