@@ -4,7 +4,7 @@
 > **Last Updated**: 2026-11-14 (W4.D22/D23 retry fix, PR #21; 2026-11-13 W4.D20 closed; v9.0 2026-11-05: rebuilt to match [DELIVERY_PLAN.md](DELIVERY_PLAN.md) v8 — the v8 day structure contradicted the milestone sequence; checkpoint audit added)
 > **Status Conventions**: ✅ Verified (commit hash + verification output or CI link) · 🔄 In progress / implemented without evidence · ⏳ Not started · ❌ Blocked
 > **Tiers**: 🟩 Core · 🟦 Extended · 🟨 Stretch — see [PROJECT_CHARTER.md §1](PROJECT_CHARTER.md)
-> **Active**: **W5** code complete (cloud runs need the owner); **W4.D22–D24** partly verified (backfill, full e2e, M2 review open) · M1: 37/37 ✅ (`v0.1.0` tagged)
+> **Active**: **W5** week gate partial 2026-11-18 (all non-AWS work verified; cloud runs need the owner); **W4.D22–D24** partly verified (backfill, full e2e, M2 review open) · M1: 37/37 ✅ (`v0.1.0` tagged)
 
 > [!IMPORTANT]
 > **Evidence rule**: ✅ only when the Evidence line names a commit hash **and** the output of the task's verification command (or a CI run link). Files existing is not evidence. Checkpoints are run with the `checkpoint` skill (day / week / milestone) — protocol in DELIVERY_PLAN §1.
@@ -13,16 +13,16 @@
 
 ## Current State
 
-- **Updated**: 2026-11-14 late (W4.D22 + W4.D23 closed and merged; M2 release in progress) · **Branches**: `main` @ `ec0fa66` (PR #21 merged, D-032) → `feat/w4-d24-e2e-contracts` (`7c516d4`, PR #19, `main` merged in) → `feat/w5-aws-foundation` (this file, PR #20) · `feat/w5-glue-dag` (`2653536`)
-- **Last delivered**: W4.D22.1–.3 ✅, W4.D23.1–.4 ✅ (backfill 1 passed; isolation + gate ITs 7 passed @ `8e5172d`; live threshold alerts with brand); fixes `edf1b95` (retries), `cbf780e` (alert reason, D-107), `8e5172d` (dbt env without secrets, D-108); D24: Gold PII guard `fb51ddf` (PASS, negative FAIL 5), run_e2e/DAG parity `7c516d4`, M2 wording D-109. Reviews: code APPROVE WITH NITS; M2 milestone APPROVE WITH NITS (conditional, M-1/M-1b done, M-2 = evidence on the merged tree); security review: no findings; day-close audit D22/D23 PASS WITH NOTES.
-- **Unfinished (M2)**: W4.D24.1 full e2e with `land` (**owner**, OWNER_ACTIONS step 4); PR #19 merge; M2 checkpoint (reviewer + auditor) → W4.D24.3; tutor gates W1–W4 (**owner**, step 4b); `v0.2.0` (**owner**, step 5).
-- **Tests & results**: unit 1776 passed / 1 skipped, coverage 81.81 % (D22 @ `5dcd420`); orchestration unit 95 passed @ `8e5172d`; Spark 571 passed (`e8cb9b9`); integration CI 127 passed / 6 skipped; DAG ITs 1 + 7 passed (local).
-- **Owner action**: [OWNER_ACTIONS.md](OWNER_ACTIONS.md) steps 4, 4b, 5 for M2; 6–9 for the cloud weeks.
-- **Stack**: core + sql + orchestration up on a 10.4 GB Docker VM; Thrift Server restarted once (host connections were dropped with `TSocket read 0 bytes`).
-- **Decisions to remember**: earlier list plus D-097 … D-109.
-- **Risks / blockers**: DAG evidence is local and manual (CI skips Airflow ITs); a Spark retry has never been observed executing; coverage headroom ≈ 1.8 pt.
+- **Updated**: 2026-11-18 (autonomous W5 week close, owner away) · **Branches**: `main` @ `ec0fa66` → `feat/w4-d24-e2e-contracts` (`e252ca2`, PR #19, M2) → `feat/w5-aws-foundation` (`ad3e580`+, PR #20, `feat/w5-glue-dag` merged in)
+- **Last delivered**: W5 week gate **partial** — W5.D26.2 ✅ (security re-review APPROVE WITH NITS after fixes, D-110), W5.D30.2 ✅ (runbook dry-runs); Glue DAG merged and guarded (container parse + negative runs); offline `terraform test` 22 passed in CI 44383228612; local `metrics_report` green; wheel built locally. Report: [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md) "W5".
+- **Unfinished**: W5 cloud evidence (plan/apply, Glue runs, Athena Gold, tenant denial, deploy run, spend, teardown) = owner cloud day; M2: W4.D24.1 e2e with `land`, M2 checkpoint, tutor gates W1–W5, `v0.2.0`.
+- **Tests & results**: unit 1997 passed / 1 skipped, coverage 82.27 % (`bdc700d`); orchestration + scripts 357 passed (`ad3e580`); terraform test 22 passed; Spark suite: see W5 report; integration CI 127 passed / 6 skipped (43580122008).
+- **Owner action**: [OWNER_ACTIONS.md](OWNER_ACTIONS.md) table "Onay bekleyenler" (A–E): AWS cloud day (steps 6–8), D-110 review, M2 steps 4, 4b, 5.
+- **Stack**: core + orchestration up (10.4 GB Docker VM); Thrift Server stopped (start with `--profile sql up -d spark-thrift`). Stop only Thrift with `docker compose --profile sql stop spark-thrift` — without the service name its dependencies stop too.
+- **Decisions to remember**: earlier list plus D-097 … D-110 (D-110: single-writer start check, build before credentials, endpoint guard, root principal accepted).
+- **Risks / blockers**: every W5 cloud claim is unverified until the owner's AWS session; active-run check is not a lock; DAG evidence is local and manual; coverage headroom ≈ 2.3 pt.
 - **Way of working**: Claude implements everything; every pipeline step is mapped in [DATA_FLOW.md](DATA_FLOW.md) (D-046); per-session trace in [SESSION_LOG.md](SESSION_LOG.md).
-- **Next task ("Start today's task")**: owner step 4 (e2e with `land`) → Claude: W4.D24.1 evidence, PR #19 merge, M2 checkpoint → owner 4b + 5.
+- **Next task ("Start today's task")**: owner cloud day (OWNER_ACTIONS 6 → 7 → 8) → Claude records W5 cloud evidence, closes W5, merges PR #20; in parallel owner step 4 → M2 checkpoint → 4b + 5. W6.D31 (erasure) can start locally without the owner.
 - **Autonomous run**: not started (setup on `chore/autonomous-run`, D-041/D-042)
 ---
 
@@ -51,7 +51,7 @@ Result: every day in v9 has a deliverable, a verification command and a Done-whe
 ```
 M1 (D1–D12)   [████████████████████] 37 / 37
 M2 (D13–D24)  [███████████████████░] 35 / 37
-M3 (D25–D36)  [░░░░░░░░░░░░░░░░░░░░]  0 / 36
+M3 (D25–D36)  [██░░░░░░░░░░░░░░░░░░]  4 / 36
 ```
 
 ## Pre-M1 (completed before this plan)
@@ -330,27 +330,29 @@ Evidence:
 | ID | Task | Acceptance | Verify | Status |
 |---|---|---|---|---|
 | W5.D25.1 | Account readiness (owner) | Free plan confirmed (ends ≈ 2027-03-22, USD 100 credits); root MFA; short-lived CLI access; tools installed | `aws sts get-caller-identity` (owner) | ⏳ owner |
-| W5.D25.2 | Terraform bootstrap | state bucket: versioning, SSE, public-access block, native lockfile | `terraform plan` | 🔄 code `8aaf927`; validate ✅ CI; apply (owner) pending |
-| W5.D25.3 | Budgets | 5/20/40 USD actual + forecast alerts | console (owner) | 🔄 code `8aaf927` (credits excluded); apply (owner) pending |
+| W5.D25.2 | Terraform bootstrap | state bucket: versioning, SSE, public-access block, native lockfile | `terraform plan` | 🔄 code `8aaf927`; validate ✅ CI; offline `terraform test` 3 passed (`ad3e580`, mock provider); plan/apply (owner) pending |
+| W5.D25.3 | Budgets | 5/20/40 USD actual + forecast alerts | console (owner) | 🔄 code `8aaf927` (credits excluded; thresholds asserted offline `ad3e580`); apply (owner) pending |
 | W5.D25.4 | IaC CI | fmt, validate, tflint, trivy config | CI link | ✅ |
-| W5.D26.1 | Storage + catalog | lifecycle, SSE-S3, `artifacts/` prefix, Glue DBs | `terraform plan` | 🔄 code `8aaf927`; validate + trivy ✅ CI; plan needs AWS credentials (owner) |
-| W5.D26.2 | Identity | Glue job role prefix-scoped; tenant demo policy; OIDC role limited to repo/branch/env | reviewer APPROVE (`security`) | 🔄 code `8aaf927`; reviewer CHANGES REQUIRED → fixes applied, re-review pending |
-| W5.D26.3 | Glue job definitions | Glue 5.0, G.1X × 2, timeout, max concurrency 1, Delta enabled | `terraform plan` | 🔄 code `8aaf927`; validate ✅ CI; plan (owner) pending |
-| W5.D27.1 | Wheel artefact | built and uploaded; `aws` adapter via job arguments | upload listing | 🔄 code `4360271` (unit-tested, never uploaded) |
+| W5.D26.1 | Storage + catalog | lifecycle, SSE-S3, `artifacts/` prefix, Glue DBs | `terraform plan` | 🔄 code `8aaf927`; validate + trivy ✅ CI; offline `terraform test` storage 7 + catalog 3 passed (`ad3e580`); real plan needs AWS credentials (owner) |
+| W5.D26.2 | Identity | Glue job role prefix-scoped; tenant demo policy; OIDC role limited to repo/branch/env | reviewer APPROVE (`security`) | ✅ `bdc700d` + `ad3e580`: re-review CHANGES REQUIRED (3 MAJOR) → fixed (D-110) → diff re-check **APPROVE WITH NITS**, nits applied; offline `terraform test` identity 7 passed, CI [44383228612](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/44383228612). IAM behaviour on AWS = W5.D28.2 |
+| W5.D26.3 | Glue job definitions | Glue 5.0, G.1X × 2, timeout, max concurrency 1, Delta enabled | `terraform plan` | 🔄 code `8aaf927`; validate ✅ CI; offline `terraform test` compute 2 passed (`ad3e580`); plan (owner) pending |
+| W5.D27.1 | Wheel artefact | built and uploaded; `aws` adapter via job arguments | upload listing | 🔄 built locally 2026-11-18 (`build_artifacts.py --no-upload` @ `ad3e580`: 1 wheel, 82 modules + 4 contract JSON, SHA-256 manifest; installs and imports in a clean 3.11 venv); upload needs AWS (owner) |
 | W5.D27.2 | Apply (owner) | resources created | `terraform output` | ⏳ owner |
 | W5.D27.3 | Bronze on Glue | run SUCCEEDED; Glue tables; Athena query; counts = local; spend; teardown | `scripts/cloud/run_job.py bronze_batch` | 🔄 code `4360271` (`land --target aws`, `seed_bronze.py`); needs apply |
 | W5.D28.1 | Silver + reconcile on Glue | reconcile = local | job output | 🔄 runner sequence `4360271`; needs apply |
 | W5.D28.2 | Tenant prefix denial | AccessDenied for `brand_alpha` role on `brand_beta/` | CLI evidence | 🔄 policy `8aaf927`; CLI evidence needs apply |
-| W5.D28.3 | LOCAL_VS_CLOUD.md | every observed difference with evidence | file review | 🔄 rows 7–12 expected, unobserved (`4cf4b6f`) |
+| W5.D28.3 | LOCAL_VS_CLOUD.md | every observed difference with evidence | file review | 🔄 rows 7–12 expected, unobserved (`4cf4b6f`); row 5 (Delta commit safety on S3) corrected by D-110 |
 | W5.D28.4 | Gold on Athena (D-093) | `dbt-athena` target builds the same marts from Glue-catalog Silver; row counts = local | `dbt build --target athena --select marts` | 🔄 `8c706e1` (`dbt parse --target athena` ✅ CI); Athena run needs apply |
 | W5.D29.1 | CI job 2 | `core`-profile integration suites on PRs to `main` + manual | CI link | ✅ run [43580122008](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/43580122008) on PR #20 @ `7522477`: `127 passed, 6 skipped in 8587s` (skips: 5 dbt tenant tests without `.venv-dbt`, broker chaos opt-in); fixes on the way: `dist/` ownership `4ca3b96`, Linux file permissions `7522477` |
-| W5.D29.2 | Deploy-and-run workflow | OIDC only; environment approval; Glue run asserted | workflow run link | 🔄 workflow `f1ef562`; needs apply + environment `aws-dev` (owner) |
-| W5.D30.1 | Metrics report | counts, DLQ rate, late/stale, freshness, lag | command output | 🔄 `40ec177` (host tests ✅; Spark tests ✅ within the 571; no real run yet) |
-| W5.D30.2 | Runbooks | replay, checkpoint recovery, teardown, incident | dry-run notes | 🔄 runbooks `4cf4b6f` (not dry-run) |
+| W5.D29.2 | Deploy-and-run workflow | OIDC only; environment approval; Glue run asserted | workflow run link | 🔄 workflow `f1ef562`, hardened `bdc700d` (build before credentials, hashed upload-only, no error text in summary; D-110); needs apply + environment `aws-dev` (owner) |
+| W5.D30.1 | Metrics report | counts, DLQ rate, late/stale, freshness, lag | command output | 🔄 local ✅ 2026-11-18: `submit_job.py metrics_report --output-uri s3a://lakehouse/ops/reports` → `job.succeeded` (12 rows, 4 batch tables, 0 reconcile mismatches, 91 s); cloud run (Glue) = owner |
+| W5.D30.2 | Runbooks | replay, checkpoint recovery, teardown, incident | dry-run notes | ✅ dry-run 2026-11-18 (notes in DAY_CLOSE_REPORTS W5): replay local steps 1–4 (alpha then all: 6 candidates → `FAILED_AGAIN`, non-retryable untouched, reconcile ok); checkpoint recovery Steps B in namespace `rbdry_20261118` (rows ×2, distinct refs equal, lineages 2, no gap); incident triage local commands; teardown static (names/flags cross-checked against Terraform and `run_job.py`, AWS commands not executed). Fixes `bdc700d`/`ad3e580`: Thrift stop command, WAITING state |
 | W5.D30.3 | Cost report + teardown proof | spend per day and per run; nothing running | billing figures (owner) | 🔄 per-run cost estimate + `docs/cloud_runs.csv` `4360271`; billing figures (owner) |
-| W5.D30.4 | Airflow → Glue | cloud DAG variant triggers Glue jobs once | DAG run log | 🔄 `2653536` on `feat/w5-glue-dag` (stacked on `feat/w4-d22-airflow`): manual DAG `lakehouse_glue`, 10 `GlueJobOperator`s, 130 orchestration unit tests passed; container import + Glue run not verified |
+| W5.D30.4 | Airflow → Glue | cloud DAG variant triggers Glue jobs once | DAG run log | 🔄 merged into this branch (`e0b84c0`); container parse 0 import errors (12 tasks); negative runs in the container: invalid bucket and the local `AWS_ENDPOINT_URL` both stop at `validate_params`, all Glue tasks `upstream_failed`, alert carries the reason (`c79a533`, D-107 pattern); single-writer pre-check `check_no_active_runs` (D-110). Glue run = owner |
 
-**Evidence** (2026-11-14, branch `feat/w5-aws-foundation`, draft PR #20): commits `8aaf927` infra, `4360271` cloud scripts, `40ec177` metrics report, `8c706e1` dbt-athena, `f1ef562` + `e8cb9b9` CI, `4cf4b6f` docs. W5.D25.4: CI run [43530360289](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/43530360289) — `terraform fmt -check` ok, `terraform validate` "The configuration is valid" for `bootstrap` and `envs/dev` (hashicorp/aws v6.73.0), tflint ok, trivy config HIGH/CRITICAL: 0 misconfigurations (one reviewed exception, AWS-0132 SSE-S3 instead of KMS, D-102). Unit: `pytest tests/unit` 1773 passed / 1 skipped, coverage 80.50 %. Nothing has run on AWS; no `terraform plan` (needs the owner's credentials). · **Week 5 checkpoint**: _not run_
+**Evidence** (2026-11-14, branch `feat/w5-aws-foundation`, draft PR #20): commits `8aaf927` infra, `4360271` cloud scripts, `40ec177` metrics report, `8c706e1` dbt-athena, `f1ef562` + `e8cb9b9` CI, `4cf4b6f` docs. W5.D25.4: CI run [43530360289](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/43530360289) — `terraform fmt -check` ok, `terraform validate` "The configuration is valid" for `bootstrap` and `envs/dev` (hashicorp/aws v6.73.0), tflint ok, trivy config HIGH/CRITICAL: 0 misconfigurations (one reviewed exception, AWS-0132 SSE-S3 instead of KMS, D-102). Unit: `pytest tests/unit` 1773 passed / 1 skipped, coverage 80.50 %. Nothing has run on AWS; no `terraform plan` (needs the owner's credentials).
+
+**Evidence** (2026-11-18, autonomous session, branch `feat/w5-aws-foundation` @ `ad3e580`, PR #20): Glue DAG branch merged (`e0b84c0`). Security re-review of the cloud surface → CHANGES REQUIRED (MAJOR: build after credentials, per-job-only single writer, local endpoint in Airflow) → fixed `bdc700d` (D-110) → diff re-check APPROVE WITH NITS → nits `ad3e580`. Offline `terraform test` (mocked AWS provider, plan-time assertions) 22 passed in CI [44383228612](https://github.com/dogruom/thelook-lakehouse-platform/actions/runs/44383228612) with fmt/validate/tflint/trivy green. Unit `pytest tests/unit` 1997 passed / 1 skipped, coverage 82.27 % (`bdc700d`); orchestration + scripts 357 passed (`ad3e580`); ruff, mypy (82 files), import-linter 2 kept. Airflow container: DagBag 0 import errors; `airflow dags test lakehouse_glue` with an invalid bucket and with the local endpoint → `validate_params` failed, 11 `upstream_failed`, no AWS call. Local `metrics_report` `job.succeeded` (0 mismatches). Runbook dry-runs: see W5.D30.2. Wheel built locally (`ad3e58070c9b`). Not verified: anything on AWS (plan, apply, Glue runs, Athena, IAM denial, deploy workflow, spend). · **Week 5 checkpoint** (2026-11-18): **partial** — local regression and reviews done; the Week 5 acceptance (cloud reconcile, tenant denial, deploy run, spend, teardown) needs the owner's AWS session ([OWNER_ACTIONS.md](OWNER_ACTIONS.md) steps 6–8); tutor gate W5 queued for the owner.
 
 ### Week 6
 | ID | Task | Acceptance | Verify | Status |

@@ -13,7 +13,7 @@ Classes: **Closed** (verified, evidence linked) · **Planned** (has a task and a
 
 | # | Item | Class | Owner day / task | Risk if ignored |
 |---|---|---|---|---|
-| V-03 | Delta commit safety on AWS S3 / Glue (local SeaweedFS has no put-if-absent; single writer assumed) | Planned | W5 (Glue run) | Concurrent writers on S3 could corrupt the log; ADR-0006 results must not be carried over untested |
+| V-03 | Delta commit safety on AWS S3 / Glue (local SeaweedFS has no put-if-absent; single writer assumed; 2026-11-18: start-time active-run check in `run_job.py` and the cloud DAG, D-110 — not a lock) | Planned | W5 (Glue run) | Concurrent writers on S3 could corrupt the log; ADR-0006 results must not be carried over untested |
 | V-04 | AWS profile / short-lived credentials on the owner's machine | Planned | W5.D1 | First cloud day blocked |
 | V-05 | Two writers on one Bronze table at the same time | Known limit | ADR-0006 §single writer; `submit_job.py` refuses an identical running driver (best effort) | A second scheduler could double-write; no lock exists locally |
 | V-06 | Spark worker dies in the middle of a batch (task retry path) | Known limit | Not covered: S3 kills the driver, not a worker | Low: Spark retries the task, the batch commit is unchanged |

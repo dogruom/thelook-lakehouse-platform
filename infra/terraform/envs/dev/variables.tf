@@ -9,8 +9,10 @@ variable "owner_principal_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:(user|role)/[^ ]+$", var.owner_principal_arn))
-    error_message = "owner_principal_arn must be an IAM user or role ARN such as arn:aws:iam::123456789012:user/name (the account root is not accepted)."
+    # The account root is accepted on purpose (D-110): a new single-owner account signs in as root
+    # with MFA (`aws login`). An STS assumed-role ARN is not an IAM principal: pass the role ARN.
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:(root|(user|role)/[^ ]+)$", var.owner_principal_arn))
+    error_message = "owner_principal_arn must be an IAM ARN: arn:aws:iam::<account>:root, :user/<name> or :role/<name> (convert an sts assumed-role ARN to its role ARN)."
   }
 }
 

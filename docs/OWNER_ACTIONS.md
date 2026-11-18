@@ -1,6 +1,6 @@
 # Owner Actions — senin yapacakların (adım adım)
 
-> **Document Version**: 1.2 (2026-11-14, M2 release adımları) — Türkçe, komut listesi biçiminde (sahibin isteği)
+> **Document Version**: 1.3 (2026-11-18, W5 otonom oturumu: onay bekleyenler listesi, bulut adımları güncellendi; 1.2 2026-11-14 M2 release adımları) — Türkçe, komut listesi biçiminde (sahibin isteği)
 > **Nerede çalıştırılır**: Windows **PowerShell**, depo kök klasöründe:
 > `cd C:\Users\admin\Desktop\WS-Projects\thelook-lakehouse-platform\thelook-lakehouse-platform`
 > **Dal değişince bu dosya kaybolursa**: GitHub'daki kopyası →
@@ -12,12 +12,25 @@
   `terraform.tfstate` yapıştırma (hesap numarası ve ARN gizli değildir, onlar sorun değil).
 - Bir komut hata verirse dur, hatanın son 20 satırını bana gönder.
 
+## Onay bekleyenler (2026-11-18 otonom oturumundan)
+
+W5'te AWS'siz yapılabilecek her şey bitti (ayrıntı: [DAY_CLOSE_REPORTS.md](DAY_CLOSE_REPORTS.md) "W5"). Kalanlar senin
+kararın veya kimlik bilgin olmadan yapılamaz:
+
+| # | Ne | Neden sen | Nerede |
+|---|---|---|---|
+| A | AWS bulut günü (W5.D25.1–D28.4, D29.2, D30.1/.3/.4 kanıtları) | AWS girişi, `plan` onayı, `apply`/`destroy`, harcama | Adım 6 → 7 → 8 |
+| B | `owner_principal_arn`: hesap kökü (`:root`) kabul edildi (D-110) — istersen ayrı bir IAM admin rolü kullanırız | güvenlik tercihi | Adım 7a notu |
+| C | D-110: bulutta "tek yazar" = sıralı çalışma + başlangıç kontrolü (kilit değil); DynamoDB LogStore reddedildi (maliyet) | mimari karar, itiraz hakkın | [DECISION_LOG.md](DECISION_LOG.md) D-110 |
+| D | PR #20 (W5) merge **edilmedi**: W5 günleri bulut kanıtı olmadan kapanmıyor (D-032 şartı). Bulut gününden sonra ben merge ederim | standing approval şartı | — |
+| E | M2: Adım 4 (e2e `land` dahil), 4b (öğrenme kapıları W1–W5), 5 (`v0.2.0`) | yerel S3 anahtarı senin terminalinde, senin cevapların, etiket | Adım 4, 4b, 5 |
+
 **Özet sıra**
 
 | # | Ne | Süre | Ne zaman |
 |---|---|---|---|
-| 1 | Docker'a daha fazla bellek ver, yeniden başlat | 5 dk | **önce bu** |
-| 2 | `.env`'e eksik anahtarları ekle, Airflow'u yeniden başlat | 5 dk | 1'den hemen sonra |
+| 1 | ~~Docker'a daha fazla bellek ver~~ ✅ yapıldı (10,4 GB) | — | — |
+| 2 | ~~Eksik anahtarlar + Airflow~~ ✅ yapıldı (Airflow çalışıyor) | — | — |
 | 3 | ~~Bana "Docker hazır" yaz~~ ✅ yapıldı (backfill 1 passed) | — | — |
 | 4 | Uçtan uca pipeline'ı `land` dahil koş (**M2 için zorunlu**) | 30 dk | **şimdi** (stack açık) |
 | 4b | Öğrenme kapıları W1–W4 (**M2 için zorunlu**) | 4 × 20 dk | istediğin zaman, 5'ten önce |
@@ -206,7 +219,10 @@ $env:AWS_PROFILE = "crm"
 $state = terraform -chdir=infra/terraform/bootstrap output -raw state_bucket
 "bucket = `"$state`"" | Set-Content -Encoding utf8 infra/terraform/envs/dev/backend.hcl
 terraform -chdir=infra/terraform/envs/dev init -backend-config=backend.hcl
-$env:TF_VAR_owner_principal_arn = (aws sts get-caller-identity --query Arn --output text)
+$arn = aws sts get-caller-identity --query Arn --output text
+# rol üstlenerek giriş yaptıysan (sts ... assumed-role) Terraform'a rolün kendi ARN'ı gider:
+if ($arn -match '^arn:aws:sts::(\d{12}):assumed-role/([^/]+)/') { $arn = "arn:aws:iam::$($Matches[1]):role/$($Matches[2])" }
+$env:TF_VAR_owner_principal_arn = $arn
 terraform -chdir=infra/terraform/envs/dev plan -no-color -out dev.plan > dev-plan.txt
 Get-Content dev-plan.txt -Tail 5
 ```
@@ -221,7 +237,8 @@ $env:LAKEHOUSE_AWS_BUCKET = (terraform -chdir=infra/terraform/envs/dev output -r
 
 **7c) Kodu ve veriyi yükle, Glue işlerini koş**:
 ```powershell
-python scripts/cloud/build_artifacts.py
+python scripts/cloud/build_artifacts.py --no-upload     # önce derle (AWS'ye dokunmaz)
+python scripts/cloud/build_artifacts.py --upload-only   # sonra sadece yükle (hash kontrollü, D-110)
 python -m lakehouse.generator land --target aws
 docker compose --profile core up -d
 python scripts/cloud/seed_bronze.py                 # önce kuru deneme: ne kopyalanacak
@@ -231,6 +248,9 @@ python scripts/cloud/run_job.py --sequence cloud --record
 ```
 İzle: [Glue jobs](https://eu-central-1.console.aws.amazon.com/gluestudio/home?region=eu-central-1#/jobs).
 **Bana gönder**: son iki komutun çıktısı (iş adı, SUCCEEDED/FAILED, DPU-saniye).
+Başka bir Glue işi koşarken `run_job.py` başlamayı reddeder (tek yazar kontrolü, D-110) — bu bir hata değil, bekle.
+Airflow ile bir kez (W5.D30.4): [aws-owner-setup.md §4 "Cloud DAG once"](runbooks/aws-owner-setup.md) — kimlik bilgisi
+geçici bir env dosyasıyla tek sürece verilir, sonra dosya silinir.
 `seed_bronze.py` S3 anahtarı isterse önce Adım 4b'yi bu terminalde çalıştır.
 
 **7d) Kiracı (tenant) izolasyonu kanıtı** — `brand_alpha` rolü `brand_beta` klasörünü okuyamamalı:
@@ -278,7 +298,12 @@ Ertesi gün harcamayı [Bills](https://console.aws.amazon.com/billing/home#/bill
    terraform -chdir=infra/terraform/envs/dev output -raw data_bucket
    ```
    `AWS_REGION` = `eu-central-1` · `AWS_DEPLOY_ROLE_ARN` = ilk çıktı · `LAKEHOUSE_AWS_BUCKET` = ikinci çıktı
-3. [Actions](https://github.com/dogruom/thelook-lakehouse-platform/actions) → `deploy-and-run` → **Run workflow** → onay isteğini **Approve**.
+3. Ortamı doğrula (beklenen: reviewer = sen, branch politikası sadece `main`):
+   ```powershell
+   gh api repos/dogruom/thelook-lakehouse-platform/environments/aws-dev --jq "{reviewers: [.protection_rules[].reviewers[]?.reviewer.login], branch_policy: .deployment_branch_policy}"
+   gh api repos/dogruom/thelook-lakehouse-platform/environments/aws-dev/deployment-branch-policies --jq "[.branch_policies[].name]"
+   ```
+4. [Actions](https://github.com/dogruom/thelook-lakehouse-platform/actions) → `deploy-and-run` → **Run workflow** → onay isteğini **Approve**.
 **Bana gönder**: workflow çalışmasının linki. Sonra **7f (sil)**.
 
 ## Adım 9 — Databricks Free Edition (W6'dan önce, bir kez)
