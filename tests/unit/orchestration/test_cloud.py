@@ -144,6 +144,12 @@ def test_local_endpoint_variable_is_refused(name: str) -> None:
     assert "env -u AWS_ENDPOINT_URL" in str(err.value)
 
 
+def test_any_service_specific_endpoint_is_refused() -> None:
+    # not in LOCAL_ENDPOINT_ENV_VARS: the guard matches the prefix, not a fixed list
+    with pytest.raises(ValueError, match="AWS_ENDPOINT_URL_ATHENA"):
+        cloud.validate_cloud_environment({"AWS_ENDPOINT_URL_ATHENA": "http://localhost:1"})
+
+
 @pytest.mark.parametrize("env", [{}, {"AWS_ENDPOINT_URL": ""}, {"AWS_ENDPOINT_URL": "  "}])
 def test_unset_or_empty_endpoint_is_fine(env: dict[str, str]) -> None:
     cloud.validate_cloud_environment({**env, "AWS_REGION": "eu-central-1"})

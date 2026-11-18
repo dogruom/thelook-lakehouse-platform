@@ -32,10 +32,10 @@ state bucket `crm-lakehouse-tfstate-<account_id>`.
    `register_tables`, `metrics_report`):
    ```powershell
    foreach ($j in 'bronze_batch','dlq_gate','silver_customers','silver_customers_history','silver_orders','silver_products','silver_clickstream','reconcile','register_tables','metrics_report') {
-     aws glue get-job-runs --job-name "crm-lakehouse-dev-$j" --max-results 3 --region eu-central-1 --query "JobRuns[?JobRunState=='RUNNING' || JobRunState=='STARTING' || JobRunState=='STOPPING'].[JobName,Id,JobRunState]" --output text
+     aws glue get-job-runs --job-name "crm-lakehouse-dev-$j" --max-results 3 --region eu-central-1 --query "JobRuns[?JobRunState=='RUNNING' || JobRunState=='STARTING' || JobRunState=='STOPPING' || JobRunState=='WAITING'].[JobName,Id,JobRunState]" --output text
    }
    ```
-   Expected: no output. A running job: wait, or stop it deliberately
+   Expected: no output (the same states `run_job.py` and the DAG refuse to start over, D-110). A running job: wait, or stop it deliberately
    (`aws glue batch-stop-job-run --job-name <name> --job-run-ids <id>`) and note it in the report.
 2. **Review the destroy plan** (read-only):
    ```powershell

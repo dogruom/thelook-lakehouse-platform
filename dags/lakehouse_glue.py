@@ -13,18 +13,19 @@ Credentials are never in code: the ``aws_default`` connection comes from the own
 for example ``AIRFLOW_CONN_AWS_DEFAULT`` or short-lived ``AWS_ACCESS_KEY_ID`` /
 ``AWS_SECRET_ACCESS_KEY`` / ``AWS_SESSION_TOKEN`` (default chain). The local scheduler container
 sets ``AWS_ENDPOINT_URL`` and the SeaweedFS keys, which would send every Glue call to the local
-object store: ``validate_params`` fails when ``AWS_ENDPOINT_URL``, ``AWS_ENDPOINT_URL_GLUE`` or
-``AWS_ENDPOINT_URL_STS`` is set. Run the DAG with those variables removed and the short-lived owner
-credentials passed to that one command only (not stored in the container or in a file)::
+object store: ``validate_params`` fails when any ``AWS_ENDPOINT_URL*`` variable is set. Run the DAG
+with the endpoint removed and the short-lived owner credentials passed to that one process from a
+temporary env file written by the owner's AWS CLI (deleted right after the run), never typed on the
+command line where shell history keeps them (steps: docs/runbooks/aws-owner-setup.md)::
 
-    docker compose exec airflow-scheduler env -u AWS_ENDPOINT_URL -u AWS_ACCESS_KEY_ID \
-      -u AWS_SECRET_ACCESS_KEY AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... \
-      AWS_SESSION_TOKEN=... airflow dags test lakehouse_glue --conf '{"bucket": "..."}'
+    docker exec --env-file <temp file> crm_airflow_scheduler env -u AWS_ENDPOINT_URL \
+      airflow dags test lakehouse_glue --conf '{"bucket": "..."}'
 
 One run at a time: ``check_no_active_runs`` refuses to continue while any Glue job of the pipeline
 is STARTING / RUNNING / STOPPING / WAITING (several jobs write ``ops.pipeline_metrics``, and the
-CLI ``scripts/cloud/run_job.py`` and the deploy workflow start the same jobs). The check is not
-atomic with the starts; it stops accidental overlap, not a deliberate race.
+CLI ``scripts/cloud/run_job.py`` and the deploy workflow start the same jobs). The check runs once,
+before the first Glue task: a CLI start in the gap between two DAG tasks is not caught. It stops
+accidental overlap at start time; it is not a lock.
 
 Flow::
 

@@ -39,6 +39,8 @@ LOCAL_ENDPOINT_ENV_VARS: Final = (
     "AWS_ENDPOINT_URL",
     "AWS_ENDPOINT_URL_GLUE",
     "AWS_ENDPOINT_URL_STS",
+    "AWS_ENDPOINT_URL_S3",
+    "AWS_ENDPOINT_URL_LOGS",
 )
 _GET_JOB_RUNS_PAGE: Final = 200
 
@@ -136,14 +138,19 @@ def validate_cloud_environment(env: Mapping[str, str]) -> None:
     SeaweedFS; boto3 honours it for every service, so a Glue call would never reach AWS.
     ``ValueError`` names the variables, never their values.
     """
-    set_vars = [name for name in LOCAL_ENDPOINT_ENV_VARS if (env.get(name) or "").strip()]
+    # Any service-specific override counts (boto3 reads ``AWS_ENDPOINT_URL_<SERVICE>``).
+    set_vars = sorted(
+        name
+        for name, value in env.items()
+        if name.startswith("AWS_ENDPOINT_URL") and (value or "").strip()
+    )
     if set_vars:
         raise ValueError(
             f"{', '.join(set_vars)} is set (local object-store endpoint): AWS calls would not "
             "reach AWS. Run the cloud command with these variables removed and with short-lived "
-            "owner credentials passed to that one command only, e.g. "
-            "`env -u AWS_ENDPOINT_URL -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY "
-            "AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_SESSION_TOKEN=... <command>`"
+            "owner credentials passed to that one command only (from an env file, never typed "
+            "on the command line), e.g. `env -u AWS_ENDPOINT_URL -u AWS_ACCESS_KEY_ID "
+            "-u AWS_SECRET_ACCESS_KEY <command>` inside `docker exec --env-file <file>`"
         )
 
 

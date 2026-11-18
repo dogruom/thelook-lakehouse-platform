@@ -27,10 +27,8 @@ run "glue_databases" {
     error_message = "The Athena-native Silver registration database must be athena_silver (D-104)."
   }
 
-  assert {
-    condition     = alltrue([for k, db in aws_glue_catalog_database.athena : db.location_uri == null])
-    error_message = "athena_silver must not set a location_uri."
-  }
+  # location_uri of athena_silver is not set in config; it is provider-computed, so it is unknown
+  # at plan time and cannot be asserted offline.
 }
 
 run "athena_workgroup_guardrails" {

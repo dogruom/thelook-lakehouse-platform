@@ -102,12 +102,33 @@ $creds = aws sts assume-role --role-arn (terraform -chdir=infra/terraform/envs/d
 #   aws s3 ls s3://$env:LAKEHOUSE_AWS_BUCKET/landing/brand_beta/
 ```
 
+Cloud DAG once (W5.D30.4, after the sequence above or instead of it; no other Glue run may be
+active — `check_no_active_runs` refuses otherwise, D-110). The Airflow scheduler carries the local
+SeaweedFS endpoint and keys, so the short-lived credentials go to this one process through a
+temporary env file and the endpoint is removed (`validate_params` fails otherwise):
+```powershell
+docker compose --profile core --profile orchestration up -d
+$f = New-TemporaryFile
+aws configure export-credentials --profile crm --format env-no-export | Set-Content -Encoding ascii $f
+docker exec --env-file $f crm_airflow_scheduler env -u AWS_ENDPOINT_URL airflow dags test lakehouse_glue --conf '{\"bucket\": \"<terraform output data_bucket>\"}'
+Remove-Item $f                            # the file holds 1-hour credentials: delete it right away
+```
+Expected: `validate_params`, `check_no_active_runs` and ten Glue tasks `success`; send the last
+~20 lines. Never paste the env file.
+
 ## 5. GitHub deploy (W5.D29.2, once)
 
 Repository → Settings → Environments → New `aws-dev`: required reviewer = you; deployment
 branches = `main` only. Settings → Secrets and variables → Actions → **Variables** (not secrets):
 `AWS_REGION = eu-central-1`, `AWS_DEPLOY_ROLE_ARN = <terraform output github_deploy_role_arn>`,
-`LAKEHOUSE_AWS_BUCKET = <terraform output data_bucket>`. Run Actions → `deploy-and-run` → approve.
+`LAKEHOUSE_AWS_BUCKET = <terraform output data_bucket>`. Verify the environment before the first run:
+```powershell
+gh api repos/dogruom/thelook-lakehouse-platform/environments/aws-dev --jq "{reviewers: [.protection_rules[].reviewers[]?.reviewer.login], branch_policy: .deployment_branch_policy}"
+gh api repos/dogruom/thelook-lakehouse-platform/environments/aws-dev/deployment-branch-policies --jq "[.branch_policies[].name]"
+```
+Expected: your login as reviewer; `custom_branch_policies: true` and `["main"]`. Then Actions →
+`deploy-and-run` → approve. The workflow builds before it assumes the role; only the upload of the
+hashed build and the Glue calls run with credentials (D-110).
 
 ## 6. Teardown (end of every cloud day)
 

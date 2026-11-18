@@ -3,7 +3,16 @@
 # the documents are asserted. It asserts plan-time configuration only and does NOT replace a
 # real `terraform plan` against AWS (owner, before the first apply).
 
-mock_provider "aws" {}
+# The rendered policy JSON of aws_iam_policy_document is computed; the mock would return a random
+# string, which the IAM resources reject as invalid JSON. A minimal valid document keeps the plan
+# going; the assertions read the statement/condition inputs, not this JSON.
+mock_provider "aws" {
+  mock_data "aws_iam_policy_document" {
+    defaults = {
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+    }
+  }
+}
 
 # The existing-provider path (data source) gives the trust policy a known principal ARN.
 variables {

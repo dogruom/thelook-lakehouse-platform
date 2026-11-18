@@ -4,6 +4,8 @@
 Usage (repo root, clean git tree)::
 
     python scripts/cloud/build_artifacts.py [--allow-dirty]        # build + upload (local use)
+    # The one-step mode runs pip in the process that then uploads with your credentials;
+    # prefer the two steps below (the deploy workflow uses them, D-110).
     python scripts/cloud/build_artifacts.py --no-upload            # build only, no AWS access
     python scripts/cloud/build_artifacts.py --upload-only          # upload what --no-upload built
 
