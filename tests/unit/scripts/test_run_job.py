@@ -30,6 +30,10 @@ class FakeGlue:
     def __init__(self, runs: dict[str, list[dict[str, Any]]] | None = None) -> None:
         self.runs = runs or {}
         self.started: list[dict[str, Any]] = []
+        self.active: dict[str, list[dict[str, Any]]] = {}  # job runs already in flight
+
+    def get_job_runs(self, JobName: str, **_kw: Any) -> dict[str, Any]:
+        return {"JobRuns": self.active.get(JobName, [])}
 
     def start_job_run(self, **kwargs: Any) -> dict[str, str]:
         self.started.append(kwargs)
@@ -45,6 +49,8 @@ class FakeGlue:
 def _env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, rj: ModuleType) -> None:
     monkeypatch.setenv("LAKEHOUSE_AWS_BUCKET", "crm-lakehouse-dev-123456789012")
     monkeypatch.delenv("LAKEHOUSE_GLUE_PREFIX", raising=False)
+    for name in ("AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_GLUE", "AWS_ENDPOINT_URL_STS"):
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(rj, "CSV_PATH", tmp_path / "cloud_runs.csv")
 
 
@@ -240,3 +246,46 @@ def test_aws_error_exits_1(rj: ModuleType, capsys: pytest.CaptureFixture[str]) -
 
     assert run(rj, Broken(), "reconcile") == 1
     assert "ConcurrentRunsExceededException" in capsys.readouterr().err
+
+
+def test_active_run_of_any_pipeline_job_refuses_the_start(
+    rj: ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
+    glue = FakeGlue()
+    glue.active[f"{PREFIX}bronze_batch"] = [{"Id": "jr_busy", "JobRunState": "RUNNING"}]
+    assert run(rj, glue, "reconcile") == 1  # another job, same Delta tables
+    assert glue.started == []
+    assert "bronze_batch run jr_busy (RUNNING)" in capsys.readouterr().err
+
+
+def test_sequence_checks_before_every_start(rj: ModuleType) -> None:
+    glue = FakeGlue()
+    seen: list[int] = []
+    original = glue.get_job_runs
+
+    def spy(JobName: str, **kw: Any) -> dict[str, Any]:
+        seen.append(len(glue.started))
+        return original(JobName, **kw)
+
+    glue.get_job_runs = spy  # type: ignore[method-assign]
+    assert run(rj, glue, "--sequence", "cloud") == 0
+    assert sorted(set(seen)) == list(range(len(glue.started)))  # a check before each start
+
+
+def test_local_endpoint_variable_is_refused_before_any_client(
+    rj: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("AWS_ENDPOINT_URL", "http://seaweedfs:9000")
+    with pytest.raises(SystemExit) as exit_info:
+        rj.main(["reconcile"])  # no injected client: the guard runs before boto3 is touched
+    assert exit_info.value.code == 2
+    err = capsys.readouterr().err
+    assert "AWS_ENDPOINT_URL" in err
+    assert "seaweedfs" not in err
+
+
+def test_foreign_bucket_is_refused(rj: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LAKEHOUSE_AWS_BUCKET", "some-other-bucket")
+    with pytest.raises(SystemExit) as exit_info:
+        rj.main(["--sequence", "cloud"], glue=FakeGlue())
+    assert exit_info.value.code == 2

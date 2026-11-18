@@ -9,7 +9,9 @@ Usage (host venv, local stack up, AWS credentials from boto3's default chain)::
 AWS has no Kafka in this project (D-101): ``bronze/raw_customers/`` and ``bronze/raw_clickstream/``
 (complete Delta table directories, ``_delta_log`` included) are copied object by object from the
 local bucket (endpoint ``S3_ENDPOINT``, keys ``S3_ACCESS_KEY`` / ``S3_SECRET_KEY``, both required, never the default chain; bucket ``--local-bucket`` or ``LAKEHOUSE_BUCKET``, default ``lakehouse``)
-to ``s3://$LAKEHOUSE_AWS_BUCKET/bronze/<table>/``. The AWS side uses boto3's default chain only.
+to ``s3://$LAKEHOUSE_AWS_BUCKET/bronze/<table>/`` (a ``crm-lakehouse-*`` bucket). The AWS side uses
+boto3's default chain only, in ``--region`` (default ``$AWS_REGION`` or eu-central-1), and the run
+is refused when ``AWS_ENDPOINT_URL*`` is set (the "AWS" side would be the local store).
 The source ``S3_ENDPOINT`` must be the host-reachable local endpoint; empty or unset is refused
 (that would address AWS itself).
 
@@ -39,6 +41,9 @@ import os
 import re
 import sys
 from typing import TYPE_CHECKING, Any, NamedTuple
+
+from lakehouse.common.aws import is_data_bucket
+from lakehouse.orchestration.cloud import DEFAULT_REGION, validate_cloud_environment
 
 
 if TYPE_CHECKING:
@@ -169,45 +174,61 @@ def _local_client(endpoint: str) -> Any:
     return s3_client_from_env(endpoint)
 
 
-def _aws_client() -> Any:
+def _aws_client(region: str) -> Any:
     import boto3
 
-    return boto3.client("s3")  # default credential chain only; never an endpoint or keys
+    return boto3.client(
+        "s3", region_name=region
+    )  # default credential chain only; never an endpoint or keys
 
 
 def _tables(values: Sequence[str] | None) -> list[str]:
     return list(dict.fromkeys(values or SEED_TABLES))
 
 
+def _config_error(ns: argparse.Namespace, aws_bucket: str, *, local: bool, aws: bool) -> str | None:
+    """First configuration problem (message without prefix), else ``None``.
+
+    ``local`` / ``aws`` say that the script builds that client itself, from the environment.
+    """
+    if not is_data_bucket(aws_bucket):
+        return "set LAKEHOUSE_AWS_BUCKET to the crm-lakehouse-* AWS data bucket name"
+    if not BUCKET_PATTERN.match(ns.local_bucket):
+        return "invalid --local-bucket"
+    if aws:
+        try:
+            validate_cloud_environment(os.environ)
+        except ValueError as exc:
+            return str(exc)
+    if local and not (os.environ.get("S3_ENDPOINT") or "").strip():
+        return "set S3_ENDPOINT to the local object store endpoint"
+    if local and not (os.environ.get("S3_ACCESS_KEY") and os.environ.get("S3_SECRET_KEY")):
+        # Never fall back to boto3's default chain: that would read the local bucket with AWS keys.
+        return "set S3_ACCESS_KEY and S3_SECRET_KEY (local object store)"
+    return None
+
+
 def main(argv: Sequence[str] | None = None, *, src: Any = None, dst: Any = None) -> int:
     parser = argparse.ArgumentParser(description="Copy the local Kafka-sourced Bronze to AWS S3.")
     parser.add_argument("--table", action="append", choices=SEED_TABLES, help="default: both")
     parser.add_argument("--local-bucket", default=os.environ.get("LAKEHOUSE_BUCKET") or "lakehouse")
+    parser.add_argument(
+        "--region", default=os.environ.get("AWS_REGION") or DEFAULT_REGION, help="AWS region"
+    )
     parser.add_argument("--apply", action="store_true", help="copy (default: dry run)")
     parser.add_argument("--replace", action="store_true", help="overwrite a non-empty target")
     ns = parser.parse_args(argv)
 
     aws_bucket = os.environ.get("LAKEHOUSE_AWS_BUCKET", "")
-    if not BUCKET_PATTERN.match(aws_bucket):
-        print("seed_bronze: set LAKEHOUSE_AWS_BUCKET to the AWS data bucket name", file=sys.stderr)
-        return _EXIT_USAGE
-    if not BUCKET_PATTERN.match(ns.local_bucket):
-        print("seed_bronze: invalid --local-bucket", file=sys.stderr)
+    problem = _config_error(ns, aws_bucket, local=src is None, aws=dst is None)
+    if problem:
+        print(f"seed_bronze: {problem}", file=sys.stderr)
         return _EXIT_USAGE
     endpoint = (os.environ.get("S3_ENDPOINT") or "").strip()
-    if src is None and not endpoint:
-        print("seed_bronze: set S3_ENDPOINT to the local object store endpoint", file=sys.stderr)
-        return _EXIT_USAGE
-    if src is None and not (os.environ.get("S3_ACCESS_KEY") and os.environ.get("S3_SECRET_KEY")):
-        # Never fall back to boto3's default chain: that would read the local bucket with AWS keys.
-        print(
-            "seed_bronze: set S3_ACCESS_KEY and S3_SECRET_KEY (local object store)", file=sys.stderr
-        )
-        return _EXIT_USAGE
     try:
         return seed(
             src if src is not None else _local_client(endpoint),
-            dst if dst is not None else _aws_client(),
+            dst if dst is not None else _aws_client(ns.region),
             src_bucket=ns.local_bucket,
             dst_bucket=aws_bucket,
             tables=_tables(ns.table),

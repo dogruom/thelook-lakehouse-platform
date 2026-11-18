@@ -180,3 +180,46 @@ def test_delete_objects_errors_fail_the_replace(
     assert seed.main(["--apply", "--replace"], src=buckets, dst=DenyingDst(buckets)) == 1
     assert "AccessDenied" in capsys.readouterr().err
     assert keys(buckets, AWS) == ["bronze/raw_customers/old.parquet"]  # nothing copied
+
+
+@pytest.mark.parametrize("bucket", ["some-other-bucket", "lakehouse", "crm-lakehouse-"])
+def test_non_data_bucket_is_refused(
+    seed: ModuleType,
+    buckets: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    bucket: str,
+) -> None:
+    monkeypatch.setenv("LAKEHOUSE_AWS_BUCKET", bucket)
+    assert seed.main(["--apply"], src=buckets, dst=buckets) == 2
+    assert "crm-lakehouse-" in capsys.readouterr().err
+    assert keys(buckets, AWS) == []
+
+
+def test_local_endpoint_variable_is_refused_for_the_aws_side(
+    seed: ModuleType,
+    buckets: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("AWS_ENDPOINT_URL", "http://seaweedfs:9000")
+    monkeypatch.setattr(seed, "_aws_client", lambda _r: pytest.fail("no AWS client"))
+    assert seed.main([], src=buckets) == 2
+    assert "AWS_ENDPOINT_URL" in capsys.readouterr().err
+
+
+def test_aws_client_gets_the_region(
+    seed: ModuleType, buckets: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("AWS_ENDPOINT_URL", raising=False)
+    monkeypatch.delenv("AWS_REGION", raising=False)
+    regions: list[str] = []
+
+    def fake_client(region: str) -> Any:
+        regions.append(region)
+        return buckets
+
+    monkeypatch.setattr(seed, "_aws_client", fake_client)
+    assert seed.main(["--region", "eu-west-1"], src=buckets) == 0
+    assert seed.main([], src=buckets) == 0
+    assert regions == ["eu-west-1", "eu-central-1"]

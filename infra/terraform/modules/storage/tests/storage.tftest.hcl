@@ -6,8 +6,9 @@ mock_provider "aws" {}
 
 # Computed attributes that other resources and the policy document derive from.
 override_resource {
-  target = aws_s3_bucket.data
-  values = { id = "crm-lakehouse-dev-123456789012", arn = "arn:aws:s3:::crm-lakehouse-dev-123456789012" }
+  target          = aws_s3_bucket.data
+  override_during = plan
+  values          = { id = "crm-lakehouse-dev-123456789012", arn = "arn:aws:s3:::crm-lakehouse-dev-123456789012" }
 }
 
 variables {

@@ -180,11 +180,13 @@ jobs:
       - name: terraform test (mock provider, offline), per root
         run: |
           set -euo pipefail
+          failed=()
           for root in infra/terraform/modules/storage infra/terraform/modules/catalog infra/terraform/modules/identity infra/terraform/modules/compute infra/terraform/bootstrap; do
             echo "== ${root}"
             terraform -chdir="${root}" init -backend=false -input=false
-            terraform -chdir="${root}" test
+            terraform -chdir="${root}" test || failed+=("${root}")
           done
+          if (( ${#failed[@]} )); then echo "terraform test failed in: ${failed[*]}"; exit 1; fi
 
       - name: tflint (recursive)
         env:

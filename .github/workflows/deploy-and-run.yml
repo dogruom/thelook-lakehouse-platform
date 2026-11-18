@@ -61,12 +61,19 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Dependencies are installed before the AWS role is assumed, so no package install runs
-      # with cloud credentials in the environment. boto3 is pinned like requirements/base.txt.
+      # Everything that installs or builds (pip, build isolation, PyPI build dependencies) runs
+      # BEFORE the AWS role is assumed, so no third-party code ever runs with cloud credentials.
+      # boto3 is pinned like requirements/base.txt.
       - name: Install
         run: |
           python -m pip install --upgrade pip
           pip install -e . boto3==1.34.127
+
+      - name: Build artifacts (no AWS access)
+        run: |
+          python scripts/cloud/build_artifacts.py --no-upload
+          # Artifact folder name = first 12 characters of the commit (contract, D-103).
+          echo "ARTIFACT_SHA=$(git rev-parse HEAD | cut -c1-12)" >> "${GITHUB_ENV}"
 
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
@@ -74,11 +81,10 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: gha-deploy-${{ github.run_id }}
 
-      - name: Build and upload artifacts
-        run: |
-          python scripts/cloud/build_artifacts.py
-          # Artifact folder name = first 12 characters of the commit (contract, D-103).
-          echo "ARTIFACT_SHA=$(git rev-parse HEAD | cut -c1-12)" >> "${GITHUB_ENV}"
+      # Upload only: no pip, no build. The script refuses when the built files are missing or
+      # their SHA-256 differs from the manifest written by the build step.
+      - name: Upload artifacts
+        run: python scripts/cloud/build_artifacts.py --upload-only
 
       - name: Run Glue job(s)
         run: |
@@ -102,11 +108,13 @@ jobs:
             echo "- region: \`${AWS_REGION}\`"
             echo "- run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             echo
+            # Only job, run id, state and duration; error text stays in CloudWatch (log group
+            # /aws-glue/jobs/ and the Glue console), never in the step summary.
             if [ -f run_job.log ]; then
-              echo '```text'
-              tail -n 60 run_job.log
-              echo '```'
+              sed -nE 's/^([a-z0-9_]+): run_id=([^ ]+) state=([^ ]+) execution=([0-9]+s).*/- `\1` run `\2`: \3, duration \4/p' run_job.log
             else
               echo "_run_job.py did not start._"
             fi
+            echo
+            echo "Details: CloudWatch log group \`/aws-glue/jobs/\` and the Glue console (run ids above)."
           } >> "${GITHUB_STEP_SUMMARY}"

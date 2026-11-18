@@ -9,7 +9,10 @@ Usage (AWS credentials from boto3's default chain)::
     python scripts/cloud/run_job.py --sequence cloud [--artifact-sha SHA] [--record]
 
 The Glue job is ``$LAKEHOUSE_GLUE_PREFIX-<job>`` (default prefix ``crm-lakehouse-dev``) in
-``$AWS_REGION`` (default ``eu-central-1``). ``--artifact-sha`` points the run at
+``$AWS_REGION`` (default ``eu-central-1``). Before every start the pipeline's Glue jobs are checked:
+the run is refused (exit 1, naming the active run) while any of them is STARTING / RUNNING /
+STOPPING / WAITING, because several jobs write the same Delta tables; there is no override. The
+run is also refused when ``AWS_ENDPOINT_URL*`` is set (a local object-store endpoint). ``--artifact-sha`` points the run at
 ``s3://$LAKEHOUSE_AWS_BUCKET/artifacts/<sha>/<wheel>`` instead of ``artifacts/current/``;
 the job's own arguments (its ``--lakehouse_args``) come from repeatable ``--arg=VALUE`` (one list
 element each, PowerShell-safe: ``--arg=--table --arg=raw_orders``; write ``--arg=`` with ``=``
@@ -42,6 +45,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+from lakehouse.common.aws import is_data_bucket
+from lakehouse.orchestration.cloud import (
+    ActiveRunsError,
+    assert_no_active_runs,
+    cloud_job_names,
+    validate_cloud_environment,
+)
+
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -70,7 +81,6 @@ DEFAULT_WAIT_SECONDS = 3600.0
 TERMINAL_STATES = frozenset({"SUCCEEDED", "FAILED", "STOPPED", "TIMEOUT", "ERROR", "EXPIRED"})
 JOB_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,62}\Z")
 SHA_PATTERN = re.compile(r"^[0-9a-f]{7,40}\Z")
-BUCKET_PATTERN = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]\Z")
 DLQ_TABLES = ("raw_customers", "raw_clickstream", "raw_orders", "raw_products")
 _SEQUENCE_JOBS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("register_tables", ()),
@@ -251,8 +261,10 @@ def _validate(
     except ValueError as exc:
         parser.error(str(exc))
     bucket = os.environ.get("LAKEHOUSE_AWS_BUCKET", "")
-    if (ns.artifact_sha or ns.sequence) and not BUCKET_PATTERN.match(bucket):
-        parser.error("--artifact-sha and --sequence need LAKEHOUSE_AWS_BUCKET (data bucket name)")
+    if (ns.artifact_sha or ns.sequence) and not is_data_bucket(bucket):
+        parser.error(
+            "--artifact-sha and --sequence need LAKEHOUSE_AWS_BUCKET (a crm-lakehouse-* bucket)"
+        )
     return job_args, bucket
 
 
@@ -285,12 +297,19 @@ def main(
     plan = cloud_sequence(bucket) if ns.sequence else [(ns.job, tuple(job_args or ()))]
     sha_label = ns.artifact_sha or "current"
     total = 0.0
+    if glue is None:  # a real client will be built from the environment
+        try:
+            validate_cloud_environment(os.environ)
+        except ValueError as exc:
+            parser.error(str(exc))  # exit 2
+    guarded = [*cloud_job_names(), *(job for job, _ in plan)]
     try:
         if glue is None:
             import boto3
 
             glue = boto3.client("glue", region_name=os.environ.get("AWS_REGION") or DEFAULT_REGION)
         for job, args in plan:
+            assert_no_active_runs(glue, prefix, guarded)  # before every start; no override
             result = run_one(
                 glue,
                 glue_job=f"{prefix}-{job}",
@@ -312,6 +331,9 @@ def main(
                 append_record(CSV_PATH, result, sha_label, today=today)
             if result.state != "SUCCEEDED":
                 return _EXIT_FAILED
+    except ActiveRunsError as exc:
+        print(f"run_job: {exc}", file=sys.stderr)
+        return _EXIT_FAILED
     except Exception as exc:  # AWS/credential errors: type and message, never the credentials
         print(f"run_job: {type(exc).__name__}: {exc}", file=sys.stderr)
         return _EXIT_FAILED

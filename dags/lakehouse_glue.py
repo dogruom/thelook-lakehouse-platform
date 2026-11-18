@@ -1,4 +1,4 @@
-"""DAG ``lakehouse_glue``: the cloud variant of the pipeline - one AWS Glue job per step (W5.D30).
+r"""DAG ``lakehouse_glue``: the cloud variant of the pipeline - one AWS Glue job per step (W5.D30).
 
 Airflow triggers, Glue runs (ADR-0010, ADR-0011): each task starts the *existing* Glue job
 ``<glue_prefix>-<job>`` with the same job name and arguments as the local pipeline and waits for
@@ -11,13 +11,26 @@ with ``bucket`` (the data bucket name, required) and, if different, ``glue_prefi
 
 Credentials are never in code: the ``aws_default`` connection comes from the owner's environment,
 for example ``AIRFLOW_CONN_AWS_DEFAULT`` or short-lived ``AWS_ACCESS_KEY_ID`` /
-``AWS_SECRET_ACCESS_KEY`` / ``AWS_SESSION_TOKEN`` in the scheduler's environment (default chain).
+``AWS_SECRET_ACCESS_KEY`` / ``AWS_SESSION_TOKEN`` (default chain). The local scheduler container
+sets ``AWS_ENDPOINT_URL`` and the SeaweedFS keys, which would send every Glue call to the local
+object store: ``validate_params`` fails when ``AWS_ENDPOINT_URL``, ``AWS_ENDPOINT_URL_GLUE`` or
+``AWS_ENDPOINT_URL_STS`` is set. Run the DAG with those variables removed and the short-lived owner
+credentials passed to that one command only (not stored in the container or in a file)::
+
+    docker compose exec airflow-scheduler env -u AWS_ENDPOINT_URL -u AWS_ACCESS_KEY_ID \
+      -u AWS_SECRET_ACCESS_KEY AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... \
+      AWS_SESSION_TOKEN=... airflow dags test lakehouse_glue --conf '{"bucket": "..."}'
+
+One run at a time: ``check_no_active_runs`` refuses to continue while any Glue job of the pipeline
+is STARTING / RUNNING / STOPPING / WAITING (several jobs write ``ops.pipeline_metrics``, and the
+CLI ``scripts/cloud/run_job.py`` and the deploy workflow start the same jobs). The check is not
+atomic with the starts; it stops accidental overlap, not a deliberate race.
 
 Flow::
 
-    validate_params -> register_tables -> bronze_batch -> dlq_gate -> silver_customers
-      -> silver_customers_history -> silver_orders -> silver_products -> silver_clickstream
-      -> reconcile -> metrics_report
+    validate_params -> check_no_active_runs -> register_tables -> bronze_batch -> dlq_gate
+      -> silver_customers -> silver_customers_history -> silver_orders -> silver_products
+      -> silver_clickstream -> reconcile -> metrics_report
 
 Not in the cloud chain: ``bronze_stream`` (Bronze is seeded from a local Delta copy, D-101), the
 per-brand landing check and the dbt build (Gold runs through dbt-athena, D-104). The job list lives
@@ -29,6 +42,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from airflow.providers.amazon.aws.hooks.base_aws import AwsBaseHook
 from airflow.providers.amazon.aws.operators.glue import GlueJobOperator
 from airflow.sdk import Param, dag, get_current_context, task
 
@@ -45,8 +59,12 @@ from lakehouse.orchestration.cloud import (
     DAG_ID,
     DEFAULT_GLUE_PREFIX,
     DEFAULT_REGION,
+    ActiveRunsError,
+    assert_no_active_runs,
+    cloud_job_names,
     glue_script_args,
     validate_bucket,
+    validate_cloud_environment,
     validate_glue_prefix,
     validate_region,
 )
@@ -125,16 +143,34 @@ def alert_on_failure(context: dict[str, Any]) -> None:
 def lakehouse_glue() -> None:
     @task(retries=0)
     def validate_params(params: dict[str, Any] | None = None) -> None:
-        """Fail fast on a malformed prefix, bucket or region (before any Glue run starts)."""
+        """Fail fast on a malformed prefix, bucket or region or a local AWS endpoint override."""
         p = params or {}
         try:
+            validate_cloud_environment(os.environ)
             validate_glue_prefix(p.get("glue_prefix"))
             validate_bucket(p.get("bucket"))
             validate_region(p.get("region"))
         except ValueError as exc:
             raise _fail(AirflowFailException(str(exc))) from None
 
-    previous: Any = validate_params()
+    @task(retries=0)
+    def check_no_active_runs(params: dict[str, Any] | None = None) -> None:
+        """Fail when another Glue run of the pipeline is still active (one writer per table)."""
+        p = params or {}
+        try:
+            glue = AwsBaseHook(
+                aws_conn_id="aws_default", client_type="glue", region_name=p.get("region")
+            ).get_conn()
+            assert_no_active_runs(glue, str(p.get("glue_prefix")), cloud_job_names())
+        except ActiveRunsError as exc:
+            raise _fail(AirflowFailException(str(exc))) from None
+        except Exception as exc:  # fail closed: an unverifiable check must not let the run go on
+            msg = f"could not check for active Glue runs: {type(exc).__name__}: {exc}"
+            raise _fail(AirflowFailException(msg)) from None
+
+    validated = validate_params()
+    previous: Any = check_no_active_runs()
+    validated >> previous
     for job, args in CLOUD_JOBS:
         current = GlueJobOperator(
             task_id=job,

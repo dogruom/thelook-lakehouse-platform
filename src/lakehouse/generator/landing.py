@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import re
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -27,6 +26,7 @@ import structlog
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
+from lakehouse.common.aws import AWS_BUCKET_RE
 from lakehouse.generator.io import canonical_json
 
 
@@ -44,7 +44,6 @@ JSON_CONTENT_TYPE = "application/json"
 PUT_ATTEMPTS = 3  # application-level retries on top of the botocore "standard" retry mode
 RETRY_BACKOFF_S = 0.2
 DEFAULT_AWS_REGION = "eu-central-1"
-AWS_BUCKET_RE = re.compile(r"crm-lakehouse-[a-z0-9-]+")
 
 
 @dataclass(frozen=True)

@@ -92,7 +92,7 @@ def test_bucket_can_be_a_jinja_expression() -> None:
     assert "s3://{{ params.bucket }}/ops/reports" in out["--lakehouse_args"]
 
 
-@pytest.mark.parametrize("bucket", ["crm-lakehouse-dev-123456789012", "abc", "a1b"])
+@pytest.mark.parametrize("bucket", ["crm-lakehouse-dev-123456789012", "crm-lakehouse-x"])
 def test_valid_bucket(bucket: str) -> None:
     assert cloud.validate_bucket(bucket) == bucket
 
@@ -110,6 +110,10 @@ def test_valid_bucket(bucket: str) -> None:
         "a--b",
         "10-0-0-1",
         "x" * 64,
+        "abc",  # valid S3 name, but not a crm-lakehouse-* data bucket (D-102)
+        "my-data-bucket",
+        "crm-lakehouse-",
+        "other-crm-lakehouse-dev",
         None,
         5,
     ],
@@ -117,6 +121,127 @@ def test_valid_bucket(bucket: str) -> None:
 def test_bad_bucket_is_rejected(bucket: object) -> None:
     with pytest.raises(ValueError, match="bucket"):
         cloud.validate_bucket(bucket)
+
+
+def test_bucket_rule_is_the_shared_aws_rule() -> None:
+    from lakehouse.common import aws
+    from lakehouse.generator import landing
+
+    assert landing.AWS_BUCKET_RE is aws.AWS_BUCKET_RE
+    assert aws.is_data_bucket("crm-lakehouse-dev-1")
+    assert not aws.is_data_bucket("lakehouse")
+    assert not aws.is_data_bucket(None)
+
+
+# ---- local-endpoint guard and active-run check (no AWS: dict env, fake and stubbed clients) -----
+
+
+@pytest.mark.parametrize("name", cloud.LOCAL_ENDPOINT_ENV_VARS)
+def test_local_endpoint_variable_is_refused(name: str) -> None:
+    with pytest.raises(ValueError, match=name) as err:
+        cloud.validate_cloud_environment({name: "http://seaweedfs:9000"})
+    assert "seaweedfs" not in str(err.value)  # names the variable, never its value
+    assert "env -u AWS_ENDPOINT_URL" in str(err.value)
+
+
+@pytest.mark.parametrize("env", [{}, {"AWS_ENDPOINT_URL": ""}, {"AWS_ENDPOINT_URL": "  "}])
+def test_unset_or_empty_endpoint_is_fine(env: dict[str, str]) -> None:
+    cloud.validate_cloud_environment({**env, "AWS_REGION": "eu-central-1"})
+
+
+class FakeGlue:
+    """``get_job_runs`` over ``{glue job: [pages]}``; records every call."""
+
+    def __init__(self, pages: dict[str, list[list[dict[str, str]]]] | None = None) -> None:
+        self.pages = pages or {}
+        self.calls: list[dict[str, object]] = []
+
+    def get_job_runs(self, **kwargs: object) -> dict[str, object]:
+        self.calls.append(kwargs)
+        pages = self.pages.get(str(kwargs["JobName"]), [[]])
+        index = int(str(kwargs.get("NextToken", "0")))
+        out: dict[str, object] = {"JobRuns": pages[index]}
+        if index + 1 < len(pages):
+            out["NextToken"] = str(index + 1)
+        return out
+
+
+PREFIX = "crm-lakehouse-dev"
+
+
+def test_no_runs_means_no_active_runs() -> None:
+    glue = FakeGlue()
+    assert cloud.active_job_runs(glue, PREFIX, cloud.cloud_job_names()) == []
+    assert len(glue.calls) == len(cloud.cloud_job_names())
+    cloud.assert_no_active_runs(glue, PREFIX, cloud.cloud_job_names())
+
+
+def test_only_active_states_count_and_all_pages_are_read() -> None:
+    runs = {
+        f"{PREFIX}-silver_orders": [
+            [{"Id": "jr_old", "JobRunState": "SUCCEEDED"}],
+            [{"Id": "jr_new", "JobRunState": "RUNNING"}],
+        ],
+        f"{PREFIX}-reconcile": [
+            [
+                {"Id": "jr_f", "JobRunState": "FAILED"},
+                {"Id": "jr_t", "JobRunState": "TIMEOUT"},
+                {"Id": "jr_s", "JobRunState": "STOPPING"},
+                {"Id": "jr_w", "JobRunState": "WAITING"},
+                {"Id": "jr_b", "JobRunState": "STARTING"},
+            ]
+        ],
+    }
+    active = cloud.active_job_runs(FakeGlue(runs), PREFIX, ["silver_orders", "reconcile"])
+    assert active == [
+        ("silver_orders", "jr_new", "RUNNING"),
+        ("reconcile", "jr_s", "STOPPING"),
+        ("reconcile", "jr_w", "WAITING"),
+        ("reconcile", "jr_b", "STARTING"),
+    ]
+
+
+def test_assert_no_active_runs_names_job_run_and_state() -> None:
+    glue = FakeGlue({f"{PREFIX}-bronze_batch": [[{"Id": "jr_1", "JobRunState": "RUNNING"}]]})
+    with pytest.raises(cloud.ActiveRunsError, match=r"bronze_batch run jr_1 \(RUNNING\)") as err:
+        cloud.assert_no_active_runs(glue, PREFIX, cloud.cloud_job_names())
+    assert err.value.runs == [("bronze_batch", "jr_1", "RUNNING")]
+
+
+def test_duplicate_jobs_are_checked_once_and_bad_prefix_is_refused() -> None:
+    glue = FakeGlue()
+    cloud.active_job_runs(glue, PREFIX, ["reconcile", "reconcile"])
+    assert len(glue.calls) == 1
+    with pytest.raises(ValueError, match="glue_prefix"):
+        cloud.active_job_runs(glue, "Bad Prefix", ["reconcile"])
+
+
+def test_aws_errors_are_not_swallowed() -> None:
+    class Broken:
+        def get_job_runs(self, **_kw: object) -> None:
+            raise RuntimeError("no credentials")
+
+    with pytest.raises(RuntimeError, match="no credentials"):
+        cloud.assert_no_active_runs(Broken(), PREFIX, ["reconcile"])
+
+
+def test_call_shape_matches_the_glue_api_without_touching_aws() -> None:
+    boto3 = pytest.importorskip("boto3")
+    from botocore.stub import Stubber
+
+    client = boto3.client(
+        "glue", region_name="eu-central-1", aws_access_key_id="x", aws_secret_access_key="x"
+    )
+    with Stubber(client) as stub:
+        stub.add_response(
+            "get_job_runs",
+            {"JobRuns": [{"Id": "jr_9", "JobRunState": "RUNNING"}]},
+            {"JobName": f"{PREFIX}-reconcile", "MaxResults": 200},
+        )
+        assert cloud.active_job_runs(client, PREFIX, ["reconcile"]) == [
+            ("reconcile", "jr_9", "RUNNING")
+        ]
+        stub.assert_no_pending_responses()
 
 
 def test_region_validation() -> None:

@@ -9,8 +9,8 @@ variable "owner_principal_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:", var.owner_principal_arn))
-    error_message = "owner_principal_arn must be an IAM ARN such as arn:aws:iam::123456789012:user/name."
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:(user|role)/[^ ]+$", var.owner_principal_arn))
+    error_message = "owner_principal_arn must be an IAM user or role ARN such as arn:aws:iam::123456789012:user/name (the account root is not accepted)."
   }
 }
 

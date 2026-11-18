@@ -28,7 +28,9 @@ Background: [replay.py](../../src/lakehouse/quality/jobs/replay.py),
    docker exec crm_spark_thrift /opt/spark/bin/beeline -u jdbc:hive2://localhost:10000 --silent=true -e "SELECT brand_id, _replay_status, _retryable, count(*) AS n FROM dead_letter.dlq_orders GROUP BY 1,2,3 ORDER BY 1,2"
    ```
    Note the `PENDING` / `FAILED_AGAIN` counts per brand. Stop the Thrift Server afterwards (it holds
-   a worker core): `docker compose --profile sql stop`.
+   a worker core): `docker compose --profile sql stop spark-thrift` — name the service: without it the
+   command also stops the services Thrift depends on (Postgres, SeaweedFS, Spark) and Airflow
+   (observed 2026-11-18).
 2. **One tenant first** (the job has no dry-run flag; `--brand` limits the blast radius)
    ```powershell
    python scripts/submit_job.py --skip-build replay --table orders --brand brand_alpha

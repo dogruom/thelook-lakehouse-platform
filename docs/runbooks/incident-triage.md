@@ -72,7 +72,7 @@ Do not: run a join without `brand_id`, or "fix" a tenant by copying another tena
 ## Stuck stream (local)
 1. Is a driver running and where: `docker exec crm_spark_master ps -eo pid,args`; Spark master UI
    `http://localhost:8181` (free cores: the Thrift Server holds one, stop it with
-   `docker compose --profile sql stop`).
+   `docker compose --profile sql stop spark-thrift`; without the service name the dependencies stop too).
 2. `scripts/submit_job.py` exit codes: 3 no worker capacity, 4 identical driver already running, 124
    timeout (driver stop confirmed), 125 timeout with an unconfirmed stop: check `ps` before any new run.
 3. Is Kafka healthy: `docker compose ps`; topic end offsets vs Bronze:
@@ -85,7 +85,8 @@ Do not start a second driver on the same job, kill with `docker rm`, or delete c
 1. `run_job.py` prints state and Glue's `ErrorMessage`; exit code is non-zero unless `SUCCEEDED`.
 2. Logs: CloudWatch groups `/aws-glue/jobs/error` and `/aws-glue/jobs/output`, run id as stream prefix.
 3. Common causes: wrong artifact (`--artifact-sha`), `register_tables` not run before `dlq_gate`,
-   empty or missing Bronze copy (`seed_bronze.py` dry run), single-writer conflict (max concurrency is 1).
+   empty or missing Bronze copy (`seed_bronze.py` dry run), single-writer conflict: `run_job.py` and the DAG task `check_no_active_runs` refuse to start while any
+   `crm-lakehouse-dev-*` run is STARTING/RUNNING/STOPPING/WAITING (D-110); wait for it or stop it in the console.
 4. Rerun the one job, not the sequence, once fixed; record it with `--record`. Max retries are 0 by
    design: a rerun is a decision, not an automatic retry.
 

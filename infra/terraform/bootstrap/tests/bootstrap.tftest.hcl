@@ -5,13 +5,15 @@
 mock_provider "aws" {}
 
 override_data {
-  target = data.aws_caller_identity.current
-  values = { account_id = "123456789012" }
+  target          = data.aws_caller_identity.current
+  override_during = plan
+  values          = { account_id = "123456789012" }
 }
 
 override_resource {
-  target = aws_s3_bucket.state
-  values = { id = "crm-lakehouse-tfstate-123456789012", arn = "arn:aws:s3:::crm-lakehouse-tfstate-123456789012" }
+  target          = aws_s3_bucket.state
+  override_during = plan
+  values          = { id = "crm-lakehouse-tfstate-123456789012", arn = "arn:aws:s3:::crm-lakehouse-tfstate-123456789012" }
 }
 
 variables {
