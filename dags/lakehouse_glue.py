@@ -30,7 +30,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from airflow.providers.amazon.aws.operators.glue import GlueJobOperator
-from airflow.sdk import Param, dag, task
+from airflow.sdk import Param, dag, get_current_context, task
 
 from lakehouse.orchestration.alert import (
     build_alert_payload,
@@ -63,6 +63,19 @@ log = logging.getLogger(__name__)
 GLUE_TASK_TIMEOUT = timedelta(minutes=45)
 GLUE_POLL_INTERVAL_S = 15
 
+#: Same key as ``lakehouse_pipeline`` (D-107): ``airflow dags test`` calls the failure callback
+#: without ``context["exception"]``, so the task records its reason in its own context first.
+FAILURE_REASON_KEY = "lakehouse_failure_reason"
+
+
+def _fail(exc: Exception) -> Exception:
+    """Record ``exc``'s text for :func:`alert_on_failure` and return it: ``raise _fail(...)``."""
+    try:
+        get_current_context()[FAILURE_REASON_KEY] = str(exc)  # type: ignore[index]
+    except Exception:  # outside a task run: no context; the raise still happens
+        log.debug("no task context to record the failure reason in")
+    return exc
+
 
 def alert_on_failure(context: dict[str, Any]) -> None:
     """``on_failure_callback``: same alert contract as ``lakehouse_pipeline`` (never raises)."""
@@ -71,7 +84,9 @@ def alert_on_failure(context: dict[str, Any]) -> None:
         if not is_alertable_task(ti.task_id):
             return
         reason = failure_text(
-            context.get("exception"), context.get("reason"), getattr(ti, "state", None)
+            context.get("exception") or context.get(FAILURE_REASON_KEY),
+            context.get("reason"),
+            getattr(ti, "state", None),
         )
         payload = build_alert_payload(
             dag_id=ti.dag_id,
@@ -117,7 +132,7 @@ def lakehouse_glue() -> None:
             validate_bucket(p.get("bucket"))
             validate_region(p.get("region"))
         except ValueError as exc:
-            raise AirflowFailException(str(exc)) from None
+            raise _fail(AirflowFailException(str(exc))) from None
 
     previous: Any = validate_params()
     for job, args in CLOUD_JOBS:
