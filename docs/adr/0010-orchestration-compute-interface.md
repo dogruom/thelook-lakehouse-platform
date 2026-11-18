@@ -29,7 +29,7 @@ component `lakehouse.orchestration`, which imports only `contracts` (enforced by
 | Environment | How a job is started | Status |
 |---|---|---|
 | Local | `spark-submit --deploy-mode client` from the Airflow scheduler container to `spark://spark-master:7077`; code shipped as the content-addressed `lakehouse_app-<sha12>.zip` (same digest as `scripts/submit_job.py`); exit code and JSON log read from the process | code written, unverified |
-| AWS (W5) | `GlueJobOperator` (Amazon provider) starts the same job name with the same arguments; Glue run state replaces the exit code, the CloudWatch log replaces stdout | planned, not built |
+| AWS (W5) | `GlueJobOperator` (Amazon provider) starts the same job name with the same arguments; Glue run state replaces the exit code, the CloudWatch log replaces stdout | built (`lakehouse_glue`, see "Cloud variant" below); not yet run on AWS |
 
 Only the local row is implemented in W4. The AWS row is the intended adapter behind the same
 function boundary, not a claim that the DAG already runs on Glue.

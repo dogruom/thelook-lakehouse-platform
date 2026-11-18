@@ -333,7 +333,7 @@ Cloud days follow one pattern: `terraform apply` (owner-approved) → run → ve
 #### D26 · Terraform core modules
 | | |
 |---|---|
-| Work | W5.D26.1 storage (lakehouse bucket incl. `artifacts/` prefix, lifecycle, SSE-S3, public-access block) and catalog (Glue databases) · W5.D26.2 identity: Glue job role (prefix-scoped), tenant demo policy (`brand_alpha` only), GitHub OIDC provider + role restricted to this repo/`main`/environment · W5.D26.3 compute: Glue 5.0 job definitions (`G.1X`, 2 workers, timeout, max concurrency 1, `--datalake-formats delta`) · `reviewer` (code, `security`) |
+| Work | W5.D26.1 storage (lakehouse bucket incl. `artifacts/` prefix, lifecycle, SSE-S3, public-access block) and catalog (Glue databases) · W5.D26.2 identity: Glue job role (prefix-scoped), tenant demo policy (`brand_alpha` only), GitHub OIDC provider + role restricted to this repo and environment `aws-dev` (`main`-only via the environment's branch rule and a workflow check, D-105) · W5.D26.3 compute: Glue 5.0 job definitions (`G.1X`, 2 workers, timeout, max concurrency 1, `--datalake-formats delta`) · `reviewer` (code, `security`) |
 | Learn | Least-privilege IAM, OIDC trust policies, Glue job model, S3 lifecycle economics |
 | Verify | `terraform plan` · `trivy config infra/terraform` · reviewer verdict |
 | Done when | Plan reviewed and approved; zero high/critical IaC findings |
